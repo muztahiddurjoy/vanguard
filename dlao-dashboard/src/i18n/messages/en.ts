@@ -250,6 +250,106 @@ export const en = {
     reset: "Reset to default settings",
     resetDone: "Settings are back to their defaults",
   },
+  help: {
+    title: "Help and guidelines",
+    description: "Short answers to common questions, and what the words in this system mean.",
+    startTitle: "Getting started",
+    steps: [
+      {
+        title: "Start on Home",
+        body: "It shows the few cases that need you most, in order, and what is coming up.",
+      },
+      {
+        title: "Work through your queue",
+        body: "Every case has one button for its next step. Read the reason, then press it.",
+      },
+      {
+        title: "Every decision is recorded",
+        body: "Accepting, changing or confirming anything is saved in the case history with your name.",
+      },
+    ],
+    faqTitle: "Common questions",
+    faq: [
+      {
+        q: "What does the AI suggestion do?",
+        a: "The system reads each application and looks for warning signs, such as violence, children at risk, or someone else reporting for the applicant. It suggests how urgent the case is. It never decides: you accept the suggestion or change it.",
+      },
+      {
+        q: "When should I override the priority?",
+        a: "When you know something the application did not say. For example, the person who reported the case called again about a new threat. Write what you learned; your reason is saved with your name.",
+      },
+      {
+        q: "What does “Do not call now” mean?",
+        a: "Some applicants' phones are watched by the person harming them. Only call inside the safe time shown on the case. The Call button stays locked outside it. Never send an SMS or leave a voicemail.",
+      },
+      {
+        q: "Why can't I merge two records that look the same?",
+        a: "Families often share one phone and live in the same village, so two applications can look alike. If the National ID numbers are different, they are different people, and the system blocks merging to protect both.",
+      },
+      {
+        q: "What should I do when a lawyer stops reporting?",
+        a: "Panel lawyers send a progress update every two weeks. After two missed updates the case shows an alert. Send a reminder first; if nothing changes, assign another lawyer.",
+      },
+      {
+        q: "Why must some cases be transferred?",
+        a: "A district office can only act on cases inside its area. If the accused lives elsewhere, or the case needs a special court, it is sent to the right office through the national legal aid organisation. You keep supporting the applicant.",
+      },
+    ],
+    priorityTitle: "What the priority levels mean",
+    priorityExample: {
+      critical: "A threat to life was reported.",
+      high: "Ongoing violence, or someone who cannot safely contact us.",
+      medium: "A deadline or money problem, with no danger.",
+      low: "Both sides agree to talk; no urgency.",
+    },
+    glossaryTitle: "Words used in this system",
+    glossary: [
+      {
+        term: "DLAO",
+        meaning: "District Legal Aid Officer — the officer who runs legal aid in the district.",
+      },
+      {
+        term: "Panel lawyer",
+        meaning: "A private lawyer the district pays to take legal aid cases.",
+      },
+      {
+        term: "Proxy report",
+        meaning:
+          "When someone else, like a neighbour, tells us about a person who cannot contact us safely.",
+      },
+      {
+        term: "Safe contact window",
+        meaning: "The only time it is safe to call an applicant whose phone is watched.",
+      },
+      {
+        term: "AI triage",
+        meaning: "The system's suggestion of how urgent a new case is, with the reasons it found.",
+      },
+      {
+        term: "Fuzzy match",
+        meaning:
+          "How similar two records look, even with spelling differences. It is a hint, not proof.",
+      },
+      {
+        term: "Mediation",
+        meaning:
+          "A meeting run by this office where both sides try to settle without going to court.",
+      },
+      {
+        term: "Jurisdiction",
+        meaning: "The area or court that is allowed to handle a case.",
+      },
+    ],
+    contactTitle: "Need more help?",
+    contacts: {
+      helpline: "National legal aid helpline",
+      helplineHint: "Free to call, for applicants and officers",
+      desk: "District office helpdesk",
+      deskHint: "Sunday to Thursday, 9:00 to 17:00",
+      support: "System support",
+      supportHint: "For problems with this dashboard",
+    },
+  },
   hearings: {
     title: "Hearings",
     description:

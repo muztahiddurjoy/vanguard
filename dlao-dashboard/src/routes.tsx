@@ -4,6 +4,7 @@ import { RequireAuth } from "@/auth/require-auth"
 import { AppLayout } from "@/components/layout/app-layout"
 import { CasesPage } from "@/pages/cases-page"
 import { HearingsPage } from "@/pages/hearings-page"
+import { HelpPage } from "@/pages/help-page"
 import { HomePage } from "@/pages/home-page"
 import { LawyersPage } from "@/pages/lawyers-page"
 import { LoginPage } from "@/pages/login-page"
@@ -31,6 +32,7 @@ export const routes: RouteObject[] = [
       { path: "reports", element: <ReportsPage /> },
       { path: "profile", element: <ProfilePage /> },
       { path: "settings", element: <SettingsPage /> },
+      { path: "help", element: <HelpPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

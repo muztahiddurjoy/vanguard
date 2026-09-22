@@ -146,3 +146,13 @@ describe("Settings", () => {
     ).toBe(false)
   })
 })
+
+describe("Help", () => {
+  it("answers common questions and explains the words used", async () => {
+    const { user } = renderApp({ path: "/help" })
+    await user.click(screen.getByRole("button", { name: "What does “Do not call now” mean?" }))
+    expect(screen.getByText(/The Call button stays locked outside it/)).toBeVisible()
+    expect(screen.getByText("Proxy report")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "16430" })).toHaveAttribute("href", "tel:16430")
+  })
+})
