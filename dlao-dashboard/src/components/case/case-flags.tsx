@@ -4,7 +4,13 @@ import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 
 /** A case's flags, with case-specific wording where it adds context. */
-export function CaseFlags({ legalCase: c, className }: { legalCase: LegalCase; className?: string }) {
+export function CaseFlags({
+  legalCase: c,
+  className,
+}: {
+  legalCase: LegalCase
+  className?: string
+}) {
   const { t, f, pick } = useI18n()
   if (c.flags.length === 0) return null
 

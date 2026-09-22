@@ -29,13 +29,9 @@ export type CaseAction =
 export function isValidOverride(
   current: Priority,
   to: Priority | null | undefined,
-  justification: string
+  justification: string,
 ): boolean {
-  return (
-    !!to &&
-    to !== current &&
-    justification.trim().length >= MIN_JUSTIFICATION_LENGTH
-  )
+  return !!to && to !== current && justification.trim().length >= MIN_JUSTIFICATION_LENGTH
 }
 
 function without<T>(list: readonly T[], ...items: T[]): T[] {
@@ -54,7 +50,7 @@ function complete(
   c: LegalCase,
   action: NextAction,
   queues: QueueKey[] = [],
-  flags: CaseFlag[] = []
+  flags: CaseFlag[] = [],
 ): LegalCase {
   const actions = without(c.actions, action)
   const drop: QueueKey[] = actions.length === 0 ? [...queues, "actionToday"] : queues
@@ -66,11 +62,7 @@ function complete(
   }
 }
 
-function update(
-  cases: LegalCase[],
-  id: string,
-  fn: (c: LegalCase) => LegalCase
-): LegalCase[] {
+function update(cases: LegalCase[], id: string, fn: (c: LegalCase) => LegalCase): LegalCase[] {
   return cases.map((c) => (c.id === id ? fn(c) : c))
 }
 
@@ -118,10 +110,11 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
             ...c,
             duplicate: { ...target.duplicate!, resolution: "distinct" },
           }
-          return log(
-            complete(resolved, "reviewDuplicate", ["duplicates"], ["possibleDuplicate"]),
-            { type: "duplicateDistinct", at: action.at, otherId }
-          )
+          return log(complete(resolved, "reviewDuplicate", ["duplicates"], ["possibleDuplicate"]), {
+            type: "duplicateDistinct",
+            at: action.at,
+            otherId,
+          })
         }
         if (c.id === otherId) {
           return log(c, { type: "duplicateDistinct", at: action.at, otherId: action.id })
@@ -135,7 +128,7 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
         log(complete(c, "followUpLawyer", ["alerts"]), {
           type: "lawyerReminder",
           at: action.at,
-        })
+        }),
       )
 
     case "escalateJurisdiction":
@@ -143,7 +136,7 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
         const done = complete(c, "escalateJurisdiction", ["alerts"], ["jurisdictionEscalation"])
         return log(
           { ...done, flags: [...done.flags, "escalated"] },
-          { type: "escalated", at: action.at }
+          { type: "escalated", at: action.at },
         )
       })
 
@@ -151,8 +144,8 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
       return update(cases, action.id, (c) =>
         log(
           { ...complete(c, "resolveOverdue", ["alerts"], ["overdue"]), dueAt: undefined },
-          { type: "overdueResolved", at: action.at }
-        )
+          { type: "overdueResolved", at: action.at },
+        ),
       )
 
     case "assignLawyer":
@@ -162,8 +155,8 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
             ...complete(c, "assignLawyer"),
             lawyer: { id: action.lawyerId, missedUpdates: 0, lastUpdateAt: action.at },
           },
-          { type: "lawyerAssigned", at: action.at, lawyerId: action.lawyerId }
-        )
+          { type: "lawyerAssigned", at: action.at, lawyerId: action.lawyerId },
+        ),
       )
 
     case "scheduleSafeCall":
@@ -172,7 +165,7 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
           type: "safeCallScheduled",
           at: action.at,
           scheduledFor: action.scheduledFor,
-        })
+        }),
       )
   }
 }

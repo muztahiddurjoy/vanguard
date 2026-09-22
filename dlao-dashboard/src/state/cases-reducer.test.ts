@@ -61,7 +61,11 @@ describe("casesReducer", () => {
   })
 
   it("confirming distinct individuals clears the duplicate on both records", () => {
-    const next = casesReducer(INITIAL_CASES, { type: "confirmDistinct", id: "APP-2026-023", at: AT })
+    const next = casesReducer(INITIAL_CASES, {
+      type: "confirmDistinct",
+      id: "APP-2026-023",
+      at: AT,
+    })
     const flagged = byId(next, "APP-2026-023")
     expect(flagged.duplicate?.resolution).toBe("distinct")
     expect(flagged.queues).toEqual([])
@@ -73,14 +77,22 @@ describe("casesReducer", () => {
   })
 
   it("escalation swaps the jurisdiction flag for an escalated flag", () => {
-    const next = casesReducer(INITIAL_CASES, { type: "escalateJurisdiction", id: "APP-2026-012", at: AT })
+    const next = casesReducer(INITIAL_CASES, {
+      type: "escalateJurisdiction",
+      id: "APP-2026-012",
+      at: AT,
+    })
     const nabila = byId(next, "APP-2026-012")
     expect(nabila.flags).toEqual(["sensitive", "escalated"])
     expect(nabila.queues).toEqual([])
   })
 
   it("resolving an overdue task clears the due date and alert", () => {
-    const next = casesReducer(INITIAL_CASES, { type: "resolveOverdue", id: "DLAS-2026-039", at: AT })
+    const next = casesReducer(INITIAL_CASES, {
+      type: "resolveOverdue",
+      id: "DLAS-2026-039",
+      at: AT,
+    })
     const c = byId(next, "DLAS-2026-039")
     expect(c.dueAt).toBeUndefined()
     expect(c.flags).not.toContain("overdue")

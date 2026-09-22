@@ -210,8 +210,7 @@ export const en = {
     justification: "Justification for override",
     justificationHelp: (n: string) =>
       `Required. At least ${n} characters — explain what the AI assessment missed.`,
-    placeholder:
-      "e.g. Proxy called again: the husband threatened her with a knife last night.",
+    placeholder: "e.g. Proxy called again: the husband threatened her with a knife last night.",
     counter: (n: string, min: string) => `${n} / ${min} characters minimum`,
     errors: {
       priorityRequired: "Choose a new priority.",

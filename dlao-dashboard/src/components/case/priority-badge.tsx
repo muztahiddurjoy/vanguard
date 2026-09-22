@@ -47,7 +47,7 @@ export function PriorityBadge({
         className={cn(
           "font-semibold tracking-wide uppercase",
           size === "lg" ? "h-8 gap-1.5 px-3 text-sm [&>svg]:size-4!" : "h-6 px-2.5",
-          tone
+          tone,
         )}
       >
         <Icon aria-hidden data-icon="inline-start" />

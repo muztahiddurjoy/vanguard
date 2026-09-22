@@ -49,7 +49,7 @@ export function I18nProvider({
       f: createFormatters(lang),
       pick: (v: Localized) => v[lang],
     }),
-    [lang, setLang]
+    [lang, setLang],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

@@ -19,20 +19,20 @@ describe("isWithinSafeWindow", () => {
 describe("nextSafeWindowStart", () => {
   it("returns the coming Tuesday 14:00", () => {
     expect(nextSafeWindowStart(at("2026-09-23T09:00:00"), TUE_2_TO_4)).toEqual(
-      at("2026-09-29T14:00:00")
+      at("2026-09-29T14:00:00"),
     )
   })
   it("returns today's window if it has not ended", () => {
     expect(nextSafeWindowStart(at("2026-09-22T10:00:00"), TUE_2_TO_4)).toEqual(
-      at("2026-09-22T14:00:00")
+      at("2026-09-22T14:00:00"),
     )
     expect(nextSafeWindowStart(at("2026-09-22T15:00:00"), TUE_2_TO_4)).toEqual(
-      at("2026-09-22T14:00:00")
+      at("2026-09-22T14:00:00"),
     )
   })
   it("rolls over a week once today's window has closed", () => {
     expect(nextSafeWindowStart(at("2026-09-22T16:30:00"), TUE_2_TO_4)).toEqual(
-      at("2026-09-29T14:00:00")
+      at("2026-09-29T14:00:00"),
     )
   })
 })

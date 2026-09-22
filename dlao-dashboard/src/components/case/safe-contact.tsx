@@ -11,7 +11,13 @@ import { cn } from "@/lib/utils"
 import { isWithinSafeWindow, nextSafeWindowStart } from "@/lib/safe-contact"
 
 /** Compact status for queue rows. */
-export function SafeContactPill({ window: w, className }: { window: SafeContactWindow; className?: string }) {
+export function SafeContactPill({
+  window: w,
+  className,
+}: {
+  window: SafeContactWindow
+  className?: string
+}) {
   const { t, f } = useI18n()
   const safe = isWithinSafeWindow(useNow(), w)
 
@@ -22,7 +28,7 @@ export function SafeContactPill({ window: w, className }: { window: SafeContactW
         safe
           ? "border-success/40 bg-success-surface text-success-foreground"
           : "border-danger/50 bg-danger-surface text-danger-foreground",
-        className
+        className,
       )}
     >
       {safe ? (
@@ -30,7 +36,9 @@ export function SafeContactPill({ window: w, className }: { window: SafeContactW
       ) : (
         <PhoneOff aria-hidden className="size-3.5 shrink-0" />
       )}
-      <strong className="font-bold uppercase">{safe ? t.safety.safeNow : t.safety.doNotCallShort}</strong>
+      <strong className="font-bold uppercase">
+        {safe ? t.safety.safeNow : t.safety.doNotCallShort}
+      </strong>
       <span aria-hidden>·</span>
       <span>{f.safeWindow(w)}</span>
     </p>
@@ -38,7 +46,13 @@ export function SafeContactPill({ window: w, className }: { window: SafeContactW
 }
 
 /** Full guardrail banner for the case view: blocks calling outside the window. */
-export function SafeContactAlert({ window: w, className }: { window: SafeContactWindow; className?: string }) {
+export function SafeContactAlert({
+  window: w,
+  className,
+}: {
+  window: SafeContactWindow
+  className?: string
+}) {
   const { t, f } = useI18n()
   const now = useNow()
   const safe = isWithinSafeWindow(now, w)
@@ -54,7 +68,7 @@ export function SafeContactAlert({ window: w, className }: { window: SafeContact
         safe
           ? "border-success bg-success-surface text-success-foreground"
           : "border-danger bg-danger-surface text-danger-foreground",
-        className
+        className,
       )}
     >
       {safe ? <Phone aria-hidden /> : <PhoneOff aria-hidden />}

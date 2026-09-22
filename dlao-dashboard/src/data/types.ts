@@ -122,15 +122,7 @@ export interface DuplicateMatch {
 }
 
 export type DuplicateField =
-  | "name"
-  | "phone"
-  | "village"
-  | "guardian"
-  | "nid"
-  | "age"
-  | "category"
-  | "receivedAt"
-  | "channel"
+  "name" | "phone" | "village" | "guardian" | "nid" | "age" | "category" | "receivedAt" | "channel"
 
 export type ActivityEvent =
   | { type: "received"; at: string; channel: IntakeChannel }
