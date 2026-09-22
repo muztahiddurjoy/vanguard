@@ -231,9 +231,10 @@ export const en = {
       "Shared household phones are common in rural areas — a phone match alone does not prove it is the same person.",
     existing: "Existing record",
     incoming: "New application",
-    fieldsLabel: (id: string) => `Fields of ${id}`,
+    caption: "Side-by-side comparison of the two records",
+    field: "Field",
     match: "Match",
-    noMatch: "Differs",
+    conflict: "Conflict — blocks merge",
     merge: "Merge records",
     mergeNotAllowed: "Not allowed",
     mergeBlocked:

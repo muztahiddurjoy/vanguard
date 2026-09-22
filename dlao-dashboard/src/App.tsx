@@ -1,6 +1,7 @@
 import { useMemo, useReducer, useState } from "react"
 
 import { CaseDetailDialog, type CaseTab } from "@/components/case-detail/case-detail-dialog"
+import { DuplicateReviewDialog } from "@/components/duplicate/duplicate-review-dialog"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { SiteHeader } from "@/components/layout/site-header"
 import { OperationalQueue } from "@/components/queue/operational-queue"
@@ -11,10 +12,9 @@ import { useI18n } from "@/i18n/use-i18n"
 import { countByQueue, type QueueFilter } from "@/lib/queue"
 import { casesReducer } from "@/state/cases-reducer"
 
-type DialogState = {
-  kind: "case"
-  id: string
-  tab: CaseTab
+type DialogState = (
+  { kind: "case"; id: string; tab: CaseTab } | { kind: "duplicate"; id: string }
+) & {
   open: boolean
   /** Bumped on every open so the dialog remounts with fresh local state. */
   seq: number
@@ -30,17 +30,23 @@ export default function App() {
   const openCase = (c: LegalCase, tab: CaseTab) =>
     setDialog((d) => ({ kind: "case", id: c.id, tab, open: true, seq: (d?.seq ?? 0) + 1 }))
 
+  const openDuplicate = (c: LegalCase) =>
+    setDialog((d) => ({ kind: "duplicate", id: c.id, open: true, seq: (d?.seq ?? 0) + 1 }))
+
   // Cases awaiting a triage decision open straight on the AI recommendation.
   const handleOpen = (c: LegalCase) =>
     openCase(c, c.triage?.status === "pending" ? "triage" : "details")
 
-  const handleAction = (c: LegalCase, action: NextAction) =>
+  const handleAction = (c: LegalCase, action: NextAction) => {
+    if (action === "reviewDuplicate") return openDuplicate(c)
     openCase(c, action === "reviewTriage" ? "triage" : "details")
+  }
 
   // Keep the id while closing so content doesn't vanish mid-animation.
   const close = () => setDialog((d) => d && { ...d, open: false })
 
   const current = dialog && cases.find((c) => c.id === dialog.id)
+  const duplicateOf = current?.duplicate && cases.find((c) => c.id === current.duplicate!.otherId)
 
   return (
     <SidebarProvider>
@@ -72,7 +78,21 @@ export default function App() {
           initialTab={dialog.tab}
           onOpenChange={(open) => !open && close()}
           dispatch={dispatch}
-          onOpenDuplicate={(c) => openCase(c, "details")}
+          onOpenDuplicate={openDuplicate}
+        />
+      )}
+
+      {dialog?.kind === "duplicate" && current && duplicateOf && (
+        <DuplicateReviewDialog
+          key={dialog.seq}
+          incoming={current}
+          existing={duplicateOf}
+          open={dialog.open}
+          onOpenChange={(open) => !open && close()}
+          onConfirmDistinct={() => {
+            dispatch({ type: "confirmDistinct", id: current.id, at: new Date().toISOString() })
+            close()
+          }}
         />
       )}
     </SidebarProvider>
