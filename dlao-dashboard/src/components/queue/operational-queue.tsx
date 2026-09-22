@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { Inbox, Info, Search } from "lucide-react"
 
+import { PageHeader } from "@/components/layout/page-header"
 import { CaseRow } from "@/components/queue/case-row"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -47,12 +48,7 @@ export function OperationalQueue({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1.5">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-          {t.queue.title}
-        </h1>
-        <p className="max-w-2xl text-base text-muted-foreground">{t.queue.description}</p>
-      </header>
+      <PageHeader title={t.queue.title} description={t.queue.description} />
 
       <Tabs value={filter} onValueChange={(v) => onFilterChange(v as QueueFilter)}>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">

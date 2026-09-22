@@ -10,8 +10,9 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { NavLink, matchPath, useLocation } from "react-router"
 
+import { useOfficer } from "@/auth/use-auth"
 import {
   Sidebar,
   SidebarContent,
@@ -24,49 +25,59 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
-import { OFFICER } from "@/data/cases"
 import { useI18n } from "@/i18n/use-i18n"
+import { countByQueue } from "@/lib/queue"
+import { useCases } from "@/state/use-cases"
 
-type NavItem = { key: string; label: string; Icon: LucideIcon; badge?: number; current?: boolean }
+type NavItem = { to: string; label: string; Icon: LucideIcon; badge?: number }
 
-export function AppSidebar({ queueCount }: { queueCount: number }) {
+export function AppSidebar() {
   const { t, f, pick } = useI18n()
-  const notAvailable = () => toast.info(t.nav.notInPrototype)
+  const officer = useOfficer()
+  const { cases } = useCases()
+  const { pathname } = useLocation()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const today = countByQueue(cases).actionToday
 
   const main: NavItem[] = [
-    { key: "home", label: t.nav.home, Icon: House },
-    { key: "queue", label: t.nav.queue, Icon: ListChecks, badge: queueCount, current: true },
-    { key: "cases", label: t.nav.cases, Icon: FolderOpen },
-    { key: "lawyers", label: t.nav.lawyers, Icon: Gavel },
-    { key: "hearings", label: t.nav.hearings, Icon: CalendarDays },
-    { key: "reports", label: t.nav.reports, Icon: ChartColumn },
+    { to: "/", label: t.nav.home, Icon: House },
+    { to: "/queue", label: t.nav.queue, Icon: ListChecks, badge: today },
+    { to: "/cases", label: t.nav.cases, Icon: FolderOpen },
+    { to: "/lawyers", label: t.nav.lawyers, Icon: Gavel },
+    { to: "/hearings", label: t.nav.hearings, Icon: CalendarDays },
+    { to: "/reports", label: t.nav.reports, Icon: ChartColumn },
   ]
   const support: NavItem[] = [
-    { key: "help", label: t.nav.help, Icon: LifeBuoy },
-    { key: "settings", label: t.nav.settings, Icon: Settings },
+    { to: "/help", label: t.nav.help, Icon: LifeBuoy },
+    { to: "/settings", label: t.nav.settings, Icon: Settings },
   ]
 
-  const renderItem = ({ key, label, Icon, badge, current }: NavItem) => (
-    <SidebarMenuItem key={key}>
-      <SidebarMenuButton
-        size="lg"
-        isActive={current}
-        aria-current={current ? "page" : undefined}
-        tooltip={label}
-        onClick={current ? undefined : notAvailable}
-        className="h-10 text-[0.9375rem]"
-      >
-        <Icon aria-hidden />
-        <span>{label}</span>
-      </SidebarMenuButton>
-      {!!badge && (
-        <SidebarMenuBadge className="top-2.5 rounded-full bg-sidebar-primary px-2 font-semibold text-sidebar-primary-foreground! peer-data-active/menu-button:text-sidebar-primary-foreground!">
-          {f.num(badge)}
-        </SidebarMenuBadge>
-      )}
-    </SidebarMenuItem>
-  )
+  const renderItem = ({ to, label, Icon, badge }: NavItem) => {
+    const end = to === "/"
+    const active = !!matchPath({ path: to, end }, pathname)
+    return (
+      <SidebarMenuItem key={to}>
+        <SidebarMenuButton
+          size="lg"
+          isActive={active}
+          tooltip={label}
+          className="h-10 text-[0.9375rem]"
+          // NavLink sets aria-current="page" on the active item.
+          render={<NavLink to={to} end={end} onClick={() => isMobile && setOpenMobile(false)} />}
+        >
+          <Icon aria-hidden />
+          <span>{label}</span>
+        </SidebarMenuButton>
+        {!!badge && (
+          <SidebarMenuBadge className="top-2.5 rounded-full bg-sidebar-primary px-2 font-semibold text-sidebar-primary-foreground! peer-data-active/menu-button:text-sidebar-primary-foreground!">
+            {f.num(badge)}
+          </SidebarMenuBadge>
+        )}
+      </SidebarMenuItem>
+    )
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -78,7 +89,7 @@ export function AppSidebar({ queueCount }: { queueCount: number }) {
           <span className="grid min-w-0 leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate text-sm font-semibold">DLAS</span>
             <span className="truncate text-xs text-sidebar-foreground/75">
-              {t.app.district(pick(OFFICER.district))}
+              {t.app.district(pick(officer.district))}
             </span>
           </span>
         </div>

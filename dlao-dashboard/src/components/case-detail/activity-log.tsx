@@ -1,6 +1,7 @@
 import { Bot, Cog, UserRound, type LucideIcon } from "lucide-react"
 
-import { OFFICER, PANEL_LAWYERS } from "@/data/cases"
+import { useOfficer } from "@/auth/use-auth"
+import { PANEL_LAWYERS } from "@/data/cases"
 import type { ActivityEvent, LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 
@@ -25,6 +26,7 @@ const ACTOR_ICON: Record<Actor, LucideIcon> = { system: Cog, ai: Bot, officer: U
 
 export function ActivityLog({ legalCase: c }: { legalCase: LegalCase }) {
   const { t, f, pick } = useI18n()
+  const officer = useOfficer()
 
   const describe = (e: ActivityEvent): string => {
     switch (e.type) {
@@ -63,7 +65,7 @@ export function ActivityLog({ legalCase: c }: { legalCase: LegalCase }) {
   }
 
   const actorName = (actor: Actor) =>
-    actor === "officer" ? pick(OFFICER.name) : actor === "ai" ? t.activity.ai : t.activity.system
+    actor === "officer" ? pick(officer.name) : actor === "ai" ? t.activity.ai : t.activity.system
 
   const events = [...c.activity].reverse()
 

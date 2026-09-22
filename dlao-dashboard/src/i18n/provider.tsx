@@ -35,10 +35,9 @@ export function I18nProvider({
     }
   }, [])
 
-  // Screen readers pick pronunciation from <html lang>.
+  // Screen readers pick pronunciation from <html lang>. Pages set their own titles.
   useEffect(() => {
     document.documentElement.lang = lang
-    document.title = `${MESSAGES[lang].app.title} · DLAS`
   }, [lang])
 
   const value = useMemo<I18nValue>(

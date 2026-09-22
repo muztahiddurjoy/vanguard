@@ -1,22 +1,7 @@
-import { render, screen, waitFor, within } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
+import { screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import App from "@/App"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import { I18nProvider } from "@/i18n/provider"
-
-function renderApp() {
-  const user = userEvent.setup()
-  render(
-    <I18nProvider initialLang="en">
-      <TooltipProvider>
-        <App />
-      </TooltipProvider>
-    </I18nProvider>,
-  )
-  return user
-}
+import { renderApp } from "@/test/render-app"
 
 // The list's accessible name follows the UI language.
 const queueList = () =>
@@ -40,7 +25,7 @@ afterEach(() => {
 
 describe("language toggle", () => {
   it("switches the whole UI and <html lang> to Bengali", async () => {
-    const user = renderApp()
+    const { user } = renderApp()
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Work queue")
 
     await user.click(screen.getByRole("button", { name: "বাংলা" }))
@@ -54,7 +39,7 @@ describe("language toggle", () => {
 
 describe("Moyuri's case (T8 triage)", () => {
   it("shows the safe-contact guardrail and decomposed urgency factors", async () => {
-    const user = renderApp()
+    const { user } = renderApp()
     expect(within(rowFor("APP-2026-001")).getByText("Do not call now")).toBeInTheDocument()
 
     await user.click(within(rowFor("APP-2026-001")).getByRole("button", { name: "Moyuri Akter" }))
@@ -82,7 +67,7 @@ describe("Moyuri's case (T8 triage)", () => {
   })
 
   it("requires a justification before an override is saved, then updates the queue badge", async () => {
-    const user = renderApp()
+    const { user } = renderApp()
     const badge = () => within(rowFor("APP-2026-001")).getByLabelText(/^Priority:/)
     expect(badge()).toHaveAttribute("data-priority", "high")
 
@@ -126,7 +111,7 @@ describe("Moyuri's case (T8 triage)", () => {
 
 describe("duplicate review (T4)", () => {
   it("blocks merging but lets the officer confirm distinct individuals", async () => {
-    const user = renderApp()
+    const { user } = renderApp()
     await user.click(
       within(rowFor("APP-2026-023")).getByRole("button", {
         name: "Compare records: Rohima Begum",
@@ -159,7 +144,7 @@ describe("duplicate review (T4)", () => {
 
 describe("queue filters", () => {
   it("filters to the alerts queue, including Abdul Malek's lawyer inactivity", async () => {
-    const user = renderApp()
+    const { user } = renderApp()
     await user.click(screen.getByRole("tab", { name: /Overdue \/ Alerts/ }))
     expect(screen.getByRole("status")).toHaveTextContent("Showing 3 of 3")
     expect(

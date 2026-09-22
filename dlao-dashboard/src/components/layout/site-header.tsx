@@ -1,14 +1,15 @@
+import { useOfficer } from "@/auth/use-auth"
 import { LanguageToggle } from "@/components/layout/language-toggle"
 import { UserMenu } from "@/components/layout/user-menu"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { OFFICER } from "@/data/cases"
 import { bn } from "@/i18n/messages/bn"
 import { en } from "@/i18n/messages/en"
 import { useI18n } from "@/i18n/use-i18n"
 
 export function SiteHeader() {
   const { lang, t, pick } = useI18n()
+  const officer = useOfficer()
   // Show the office name in both languages, as on official signage.
   const other =
     lang === "en" ? { lang: "bn", title: bn.app.title } : { lang: "en", title: en.app.title }
@@ -24,7 +25,7 @@ export function SiteHeader() {
         <p className="hidden truncate text-xs text-muted-foreground sm:block">
           <span lang={other.lang}>{other.title}</span>
           <span aria-hidden> · </span>
-          {t.app.district(pick(OFFICER.district))}
+          {t.app.district(pick(officer.district))}
         </p>
       </div>
       <LanguageToggle />

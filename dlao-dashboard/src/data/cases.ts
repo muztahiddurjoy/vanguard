@@ -9,13 +9,6 @@ const daysAgo = (d: number) => new Date(now - d * DAY).toISOString()
 const hoursAgo = (h: number) => new Date(now - h * HOUR).toISOString()
 const daysFromNow = (d: number) => new Date(now + d * DAY).toISOString()
 
-export const OFFICER = {
-  name: { en: "Farhana Rahman", bn: "ফারহানা রহমান" },
-  role: { en: "District Legal Aid Officer", bn: "জেলা লিগ্যাল এইড অফিসার" },
-  district: { en: "Rangpur", bn: "রংপুর" },
-  initials: "FR",
-}
-
 export const PANEL_LAWYERS: PanelLawyer[] = [
   { id: "LAW-07", name: { en: "Adv. Shahidul Islam", bn: "অ্যাড. শহিদুল ইসলাম" } },
   { id: "LAW-12", name: { en: "Adv. Nasrin Jahan", bn: "অ্যাড. নাসরিন জাহান" } },

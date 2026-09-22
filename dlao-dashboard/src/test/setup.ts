@@ -31,3 +31,4 @@ globalThis.ResizeObserver ??= class {
 }
 
 Element.prototype.scrollIntoView ??= () => {}
+window.scrollTo = () => {}

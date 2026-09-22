@@ -108,6 +108,19 @@ export interface Applicant {
   age: number
 }
 
+export interface Officer {
+  /** Employee ID, used to sign in. */
+  id: string
+  name: Localized
+  role: Localized
+  district: Localized
+  office: Localized
+  email: string
+  phone: string
+  initials: string
+  joinedAt: string
+}
+
 export interface PanelLawyer {
   id: string
   name: Localized
