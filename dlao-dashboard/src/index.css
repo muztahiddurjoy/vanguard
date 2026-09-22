@@ -2,14 +2,18 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
-@import "@fontsource-variable/noto-sans-bengali";
+@import "@fontsource-variable/anek-bangla";
 
 @custom-variant dark (&:is(.dark *));
 
+/* Not inline: utilities reference var(--font-sans), so :lang(bn) can swap it at runtime. */
+@theme {
+    --font-sans: 'Inter Variable', 'Anek Bangla Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', 'Noto Sans Bengali Variable', ui-sans-serif, system-ui, sans-serif;
-    --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -190,4 +194,20 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+/* Bangla UI: Anek Bangla leads so Bengali and the Latin bits mixed into it
+   (case IDs, "EN") share one typeface. English keeps Inter. */
+/* Everything is sized in rem, so scaling the root scales the whole UI:
+   --text-scale comes from the officer's text-size setting,
+   --lang-scale compensates for Anek Bangla's smaller apparent size. */
+:root {
+    --text-scale: 1;
+    --lang-scale: 1;
+    font-size: calc(100% * var(--text-scale) * var(--lang-scale));
+}
+
+:root:lang(bn) {
+    --font-sans: 'Anek Bangla Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+    --lang-scale: 1.0625;
 }
