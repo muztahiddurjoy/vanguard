@@ -5,6 +5,9 @@ import type { LegalCase, PanelLawyer } from "@/data/types"
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
 const now = Date.now()
+
+/** When the sample data was created — anything later happened in this session. */
+export const SESSION_STARTED_AT = now
 const daysAgo = (d: number) => new Date(now - d * DAY).toISOString()
 const hoursAgo = (h: number) => new Date(now - h * HOUR).toISOString()
 const daysFromNow = (d: number) => new Date(now + d * DAY).toISOString()

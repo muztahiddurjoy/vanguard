@@ -8,8 +8,10 @@ import { HomePage } from "@/pages/home-page"
 import { LawyersPage } from "@/pages/lawyers-page"
 import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
+import { ProfilePage } from "@/pages/profile-page"
 import { QueuePage } from "@/pages/queue-page"
 import { ReportsPage } from "@/pages/reports-page"
+import { SettingsPage } from "@/pages/settings-page"
 
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -27,6 +29,8 @@ export const routes: RouteObject[] = [
       { path: "lawyers", element: <LawyersPage /> },
       { path: "hearings", element: <HearingsPage /> },
       { path: "reports", element: <ReportsPage /> },
+      { path: "profile", element: <ProfilePage /> },
+      { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

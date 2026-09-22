@@ -103,3 +103,46 @@ describe("Reports", () => {
     expect(within(perMonth as HTMLElement).getByRole("table")).toHaveTextContent("Apr31")
   })
 })
+
+describe("Profile", () => {
+  it("validates and saves contact details", async () => {
+    const { user } = renderApp({ path: "/profile" })
+    const phone = screen.getByLabelText("Mobile number")
+    await user.clear(phone)
+    await user.type(phone, "12345")
+    await user.click(screen.getByRole("button", { name: "Save changes" }))
+    expect(
+      screen.getByText("Enter an 11-digit mobile number that starts with 01."),
+    ).toBeInTheDocument()
+    expect(phone).toHaveFocus()
+
+    await user.clear(phone)
+    await user.type(phone, "01812-345678")
+    await user.click(screen.getByRole("button", { name: "Save changes" }))
+    expect(
+      screen.queryByText("Enter an 11-digit mobile number that starts with 01."),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe("Settings", () => {
+  it("makes all text bigger and switches language", async () => {
+    const { user } = renderApp({ path: "/settings" })
+    await user.click(screen.getByRole("radio", { name: "Extra large" }))
+    expect(document.documentElement.style.getPropertyValue("--text-scale")).toBe("1.25")
+
+    await user.click(screen.getByRole("radio", { name: "বাংলা" }))
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("সেটিংস")
+  })
+
+  it("remembers notification choices", async () => {
+    const { user } = renderApp({ path: "/settings" })
+    const sms = screen.getByRole("switch", { name: "SMS for critical cases" })
+    expect(sms).toBeChecked()
+    await user.click(sms)
+    expect(sms).not.toBeChecked()
+    expect(
+      JSON.parse(window.localStorage.getItem("dlas.preferences")!).notifications.urgentSms,
+    ).toBe(false)
+  })
+})

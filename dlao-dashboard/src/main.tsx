@@ -7,6 +7,7 @@ import { AuthProvider } from "@/auth/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { I18nProvider } from "@/i18n/provider"
+import { PreferencesProvider } from "@/preferences/preferences-provider"
 import { routes } from "@/routes"
 import "./index.css"
 
@@ -16,12 +17,14 @@ const router = createHashRouter(routes)
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      <AuthProvider>
-        <TooltipProvider>
-          <RouterProvider router={router} />
-          <Toaster theme="light" position="bottom-right" richColors closeButton />
-        </TooltipProvider>
-      </AuthProvider>
+      <PreferencesProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <RouterProvider router={router} />
+            <Toaster theme="light" position="bottom-right" richColors closeButton />
+          </TooltipProvider>
+        </AuthProvider>
+      </PreferencesProvider>
     </I18nProvider>
   </StrictMode>,
 )
