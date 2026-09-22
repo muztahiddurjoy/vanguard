@@ -1,0 +1,63 @@
+import type { Lang, SafeContactWindow } from "@/data/types"
+
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+
+export function localeOf(lang: Lang) {
+  // en-GB matches Bangladeshi English conventions (day-month order, 24h clock).
+  return lang === "bn" ? "bn-BD" : "en-GB"
+}
+
+export function createFormatters(lang: Lang) {
+  const locale = localeOf(lang)
+  const number = new Intl.NumberFormat(locale)
+  const percent = new Intl.NumberFormat(locale, { style: "percent" })
+  const date = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+  const dateTime = new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+  const weekday = new Intl.DateTimeFormat(locale, {
+    weekday: lang === "bn" ? "long" : "short",
+  })
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+
+  return {
+    num: (n: number) => number.format(n),
+    pct: (x: number) => percent.format(x),
+    date: (iso: string) => date.format(new Date(iso)),
+    dateTime: (d: string | Date) => dateTime.format(new Date(d)),
+    time: (d: Date) => time.format(d),
+    relative(iso: string, now = Date.now()) {
+      const diff = new Date(iso).getTime() - now
+      const abs = Math.abs(diff)
+      if (abs < HOUR) return rtf.format(Math.round(diff / MINUTE), "minute")
+      if (abs < DAY) return rtf.format(Math.round(diff / HOUR), "hour")
+      if (abs < 45 * DAY) return rtf.format(Math.round(diff / DAY), "day")
+      return rtf.format(Math.round(diff / (30 * DAY)), "month")
+    },
+    /** e.g. "Tue 14:00–16:00" / "মঙ্গলবার ১৪:০০–১৬:০০" */
+    safeWindow(w: SafeContactWindow) {
+      // 4 Jan 2026 is a Sunday, so 4 + day lands on the right weekday.
+      const start = new Date(2026, 0, 4 + w.day, w.startHour)
+      const end = new Date(2026, 0, 4 + w.day, w.endHour)
+      return `${weekday.format(start)} ${time.format(start)}–${time.format(end)}`
+    },
+  }
+}
+
+export type Formatters = ReturnType<typeof createFormatters>
