@@ -164,6 +164,7 @@ export const en = {
     none: "No hearings in the next two weeks.",
     openCase: "Open case",
     remind: "Send reminder",
+    reminded: "Reminder sent",
     remindHint: "Texts the lawyer and applicant the date, time and place.",
     remindedToast: (name: string) => `Reminder sent for ${name}'s hearing`,
     summary: (n: string) => `${n} hearings in the next two weeks`,

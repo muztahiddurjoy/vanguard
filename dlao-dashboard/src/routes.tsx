@@ -3,6 +3,7 @@ import type { RouteObject } from "react-router"
 import { RequireAuth } from "@/auth/require-auth"
 import { AppLayout } from "@/components/layout/app-layout"
 import { CasesPage } from "@/pages/cases-page"
+import { HearingsPage } from "@/pages/hearings-page"
 import { HomePage } from "@/pages/home-page"
 import { LawyersPage } from "@/pages/lawyers-page"
 import { LoginPage } from "@/pages/login-page"
@@ -23,6 +24,7 @@ export const routes: RouteObject[] = [
       { path: "queue", element: <QueuePage /> },
       { path: "cases", element: <CasesPage /> },
       { path: "lawyers", element: <LawyersPage /> },
+      { path: "hearings", element: <HearingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

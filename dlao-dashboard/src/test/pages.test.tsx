@@ -72,3 +72,14 @@ describe("Lawyers", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Reminders needed: 0")
   })
 })
+
+describe("Hearings", () => {
+  it("groups hearings by day and sends a reminder", async () => {
+    const { user } = renderApp({ path: "/hearings" })
+    expect(screen.getByRole("heading", { level: 2, name: "Today" })).toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent("5 hearings in the next two weeks")
+
+    await user.click(screen.getByRole("button", { name: "Send reminder: Rahima Begum" }))
+    expect(screen.getByRole("button", { name: "Reminder sent: Rahima Begum" })).toBeDisabled()
+  })
+})
