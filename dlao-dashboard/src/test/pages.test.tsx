@@ -83,3 +83,23 @@ describe("Hearings", () => {
     expect(screen.getByRole("button", { name: "Reminder sent: Rahima Begum" })).toBeDisabled()
   })
 })
+
+describe("Reports", () => {
+  it("gives every chart value in text, not only in colour or on hover", async () => {
+    const { user } = renderApp({ path: "/reports" })
+    // Columns are reachable by keyboard with their value in the accessible name.
+    expect(screen.getByRole("img", { name: "Sept: 47 new cases" })).toHaveAttribute("tabindex", "0")
+    // The outcomes legend states each value.
+    const legendItem = screen
+      .getAllByText("Settled by mediation")
+      .map((el) => el.closest("li"))
+      .find(Boolean)
+    expect(legendItem).toHaveTextContent("4133%")
+
+    const perMonth = screen
+      .getByRole("heading", { name: "New cases per month" })
+      .closest("[data-slot=card]")!
+    await user.click(within(perMonth as HTMLElement).getByText("Show the numbers as a table"))
+    expect(within(perMonth as HTMLElement).getByRole("table")).toHaveTextContent("Apr31")
+  })
+})

@@ -150,6 +150,47 @@ export const en = {
     callToast: (name: string) => `Calling ${name} is not part of the prototype.`,
     reminderToast: (name: string) => `Reminder sent to ${name}`,
   },
+  reports: {
+    title: "Reports",
+    description:
+      "How the office is doing: how many people asked for help, what kind of help, and how cases ended.",
+    sample: "These are sample figures for the prototype.",
+    download: "Download report",
+    kpi: {
+      newThisMonth: "New cases this month",
+      newDelta: (n: string) => `${n} compared with last month`,
+      closedYear: "Cases closed this year",
+      closedHint: "All types of case",
+      firstContact: "Average time to first contact",
+      days: (n: string) => `${n} days`,
+      firstContactDelta: (n: string) => `${n} days faster than last quarter`,
+      overrides: "AI priority changed by officers",
+      overridesHint: (n: string, total: string) => `${n} of ${total} AI suggestions this year`,
+    },
+    perMonth: {
+      title: "New cases per month",
+      hint: "Applications received each month, all types together.",
+      thisMonth: "this month so far",
+      tooltip: (n: string) => `${n} new cases`,
+    },
+    byType: {
+      title: "Cases by type",
+      hint: "All cases this year, the most common first.",
+    },
+    outcomes: {
+      title: "How closed cases ended",
+      hint: (n: string) =>
+        `${n} cases closed this year. Most were decided in court or settled in mediation.`,
+    },
+    showTable: "Show the numbers as a table",
+    table: {
+      month: "Month",
+      type: "Type of case",
+      outcome: "Outcome",
+      cases: "Cases",
+      share: "Share",
+    },
+  },
   hearings: {
     title: "Hearings",
     description:

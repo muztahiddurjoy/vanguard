@@ -9,6 +9,7 @@ import { LawyersPage } from "@/pages/lawyers-page"
 import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
 import { QueuePage } from "@/pages/queue-page"
+import { ReportsPage } from "@/pages/reports-page"
 
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: "cases", element: <CasesPage /> },
       { path: "lawyers", element: <LawyersPage /> },
       { path: "hearings", element: <HearingsPage /> },
+      { path: "reports", element: <ReportsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },
