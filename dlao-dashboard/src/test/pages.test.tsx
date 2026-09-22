@@ -35,3 +35,25 @@ describe("Home", () => {
     )
   })
 })
+
+describe("All cases", () => {
+  const rowFor = (id: string) =>
+    screen.getAllByRole("row").find((r) => r.getAttribute("data-case-id") === id)!
+
+  it("lists open cases by default and closed cases with their outcome", async () => {
+    const { user } = renderApp({ path: "/cases" })
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 8 of 13 cases")
+    expect(rowFor("APP-2026-001")).toHaveTextContent("Moyuri Akter")
+
+    await user.click(screen.getByRole("button", { name: "Closed" }))
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 13 cases")
+    expect(rowFor("DLAS-2026-008")).toHaveTextContent("Settled by mediation")
+  })
+
+  it("opens a case from the register", async () => {
+    const { user } = renderApp({ path: "/cases" })
+    await user.click(screen.getByRole("button", { name: "Open case: Abdul Malek" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
+  })
+})

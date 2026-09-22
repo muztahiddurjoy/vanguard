@@ -121,6 +121,20 @@ export interface Officer {
   joinedAt: string
 }
 
+export type CaseOutcome = "resolved" | "settled" | "withdrawn" | "referred"
+
+/** Closed cases keep only what the register needs. */
+export interface ClosedCase {
+  id: string
+  name: Localized
+  category: CaseCategory
+  receivedAt: string
+  closedAt: string
+  outcome: CaseOutcome
+  note: Localized
+  lawyerId?: string
+}
+
 export interface Hearing {
   id: string
   caseId: string
