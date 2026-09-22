@@ -128,6 +128,28 @@ export const en = {
     count: (n: string, total: string) => `Showing ${n} of ${total} cases`,
     empty: "No cases match. Try a different search or filter.",
   },
+  lawyers: {
+    title: "Lawyers",
+    description:
+      "The district's panel lawyers who take legal aid cases. See who is keeping up, and remind anyone who has stopped reporting.",
+    summary: (n: string, late: string) => `${n} lawyers on the panel · Reminders needed: ${late}`,
+    since: (year: string) => `On the panel since ${year}`,
+    active: "Open cases",
+    lastUpdate: "Last progress update",
+    never: "No updates yet",
+    status: {
+      ok: "Up to date",
+      free: "Available for new cases",
+      late: (n: string) => `Missed ${n} updates`,
+      reminded: "Reminder sent — waiting for a reply",
+    },
+    theirCases: "Their open cases",
+    noCases: "No open cases right now.",
+    remind: "Send reminder",
+    call: "Call",
+    callToast: (name: string) => `Calling ${name} is not part of the prototype.`,
+    reminderToast: (name: string) => `Reminder sent to ${name}`,
+  },
   hearings: {
     title: "Hearings",
     description:

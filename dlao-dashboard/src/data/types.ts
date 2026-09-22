@@ -148,6 +148,10 @@ export interface Hearing {
 export interface PanelLawyer {
   id: string
   name: Localized
+  speciality: Localized
+  phone: string
+  /** Year they joined the district legal aid panel. */
+  since: number
 }
 
 export interface DuplicateMatch {

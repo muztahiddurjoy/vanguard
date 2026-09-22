@@ -12,6 +12,7 @@ export function localeOf(lang: Lang) {
 export function createFormatters(lang: Lang) {
   const locale = localeOf(lang)
   const number = new Intl.NumberFormat(locale)
+  const plain = new Intl.NumberFormat(locale, { useGrouping: false })
   const percent = new Intl.NumberFormat(locale, { style: "percent" })
   const date = new Intl.DateTimeFormat(locale, {
     day: "numeric",
@@ -50,6 +51,8 @@ export function createFormatters(lang: Lang) {
 
   return {
     num: (n: number) => number.format(n),
+    /** No thousands separator — for years and IDs. */
+    plain: (n: number) => plain.format(n),
     pct: (x: number) => percent.format(x),
     date: (iso: string) => date.format(new Date(iso)),
     dateTime: (d: string | Date) => dateTime.format(new Date(d)),

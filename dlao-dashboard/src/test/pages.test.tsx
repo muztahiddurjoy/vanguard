@@ -57,3 +57,18 @@ describe("All cases", () => {
     expect(within(dialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
   })
 })
+
+describe("Lawyers", () => {
+  it("shows who is behind on updates and sends a reminder", async () => {
+    const { user } = renderApp({ path: "/lawyers" })
+    expect(screen.getByRole("status")).toHaveTextContent("Reminders needed: 1")
+    const card = screen
+      .getByRole("heading", { name: "Adv. Shahidul Islam" })
+      .closest("[data-slot=card]")!
+    expect(card).toHaveTextContent("Missed 2 updates")
+
+    await user.click(within(card as HTMLElement).getByRole("button", { name: "Send reminder" }))
+    expect(card).toHaveTextContent("Reminder sent — waiting for a reply")
+    expect(screen.getByRole("status")).toHaveTextContent("Reminders needed: 0")
+  })
+})
