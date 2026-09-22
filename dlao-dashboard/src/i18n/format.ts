@@ -35,13 +35,37 @@ export function createFormatters(lang: Lang) {
     weekday: lang === "bn" ? "long" : "short",
   })
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+  const longDate = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+  const dayMonth = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  const month = new Intl.DateTimeFormat(locale, { month: "short" })
 
   return {
     num: (n: number) => number.format(n),
     pct: (x: number) => percent.format(x),
     date: (iso: string) => date.format(new Date(iso)),
     dateTime: (d: string | Date) => dateTime.format(new Date(d)),
-    time: (d: Date) => time.format(d),
+    time: (d: Date | string) => time.format(new Date(d)),
+    longDate: (d: Date | string) => longDate.format(new Date(d)),
+    month: (d: Date | string) => month.format(new Date(d)),
+    /** "Today", "Tomorrow", or e.g. "Friday, 25 September". */
+    dayLabel(iso: string, now = Date.now()) {
+      const startOf = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+      const days = Math.round((startOf(Date.parse(iso)) - startOf(now)) / DAY)
+      if (days === 0 || days === 1) {
+        const word = rtf.format(days, "day")
+        return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1)
+      }
+      return dayMonth.format(new Date(iso))
+    },
     relative(iso: string, now = Date.now()) {
       const diff = new Date(iso).getTime() - now
       const abs = Math.abs(diff)

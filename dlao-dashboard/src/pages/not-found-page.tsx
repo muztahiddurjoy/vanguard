@@ -1,7 +1,6 @@
 import { MapPinOff } from "lucide-react"
-import { Link } from "react-router"
 
-import { Button } from "@/components/ui/button"
+import { ButtonLink } from "@/components/ui/button-link"
 import {
   Empty,
   EmptyContent,
@@ -28,7 +27,7 @@ export function NotFoundPage() {
         <EmptyDescription className="text-base">{t.notFound.body}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button render={<Link to="/" />}>{t.common.backHome}</Button>
+        <ButtonLink to="/">{t.common.backHome}</ButtonLink>
       </EmptyContent>
     </Empty>
   )

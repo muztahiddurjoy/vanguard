@@ -121,6 +121,16 @@ export interface Officer {
   joinedAt: string
 }
 
+export interface Hearing {
+  id: string
+  caseId: string
+  at: string
+  kind: "court" | "mediation"
+  place: Localized
+  purpose: Localized
+  lawyerId?: string
+}
+
 export interface PanelLawyer {
   id: string
   name: Localized
