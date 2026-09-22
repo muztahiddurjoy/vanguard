@@ -18,11 +18,14 @@ function renderApp() {
   return user
 }
 
-/** The queue renders a table and a card list (CSS picks one); use the table. */
-const queueTable = () => screen.getAllByRole("table")[0]
+// The list's accessible name follows the UI language.
+const queueList = () =>
+  screen.getByRole("list", {
+    name: /^(Cases, most urgent first|মামলাসমূহ, সবচেয়ে জরুরিগুলো আগে)$/,
+  })
 const rowFor = (id: string) =>
-  within(queueTable())
-    .getAllByRole("row")
+  within(queueList())
+    .getAllByRole("listitem")
     .find((r) => r.getAttribute("data-case-id") === id)!
 
 beforeEach(() => {
@@ -38,14 +41,14 @@ afterEach(() => {
 describe("language toggle", () => {
   it("switches the whole UI and <html lang> to Bengali", async () => {
     const user = renderApp()
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Unified Operational Queue")
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Work queue")
 
     await user.click(screen.getByRole("button", { name: "বাংলা" }))
 
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("সমন্বিত কার্যক্রম তালিকা")
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("কাজের তালিকা")
     expect(document.documentElement.lang).toBe("bn")
     // data is localised too
-    expect(within(queueTable()).getByText("ময়ূরী আক্তার")).toBeInTheDocument()
+    expect(within(queueList()).getByText("ময়ূরী আক্তার")).toBeInTheDocument()
   })
 })
 
@@ -63,9 +66,9 @@ describe("Moyuri's case (T8 triage)", () => {
 
     expect(within(dialog).getByText("AI Triage Recommendation")).toBeInTheDocument()
     for (const factor of [
-      "Active violence detected",
-      "Proxy reported (access barrier)",
-      "Safe contact restricted",
+      "Active Violence Detected",
+      "Proxy Reported (Access Barrier)",
+      "Safe Contact Restricted",
     ]) {
       expect(within(dialog).getByText(factor).closest("li")).toHaveAttribute(
         "data-detected",
@@ -85,32 +88,30 @@ describe("Moyuri's case (T8 triage)", () => {
 
     await user.click(within(rowFor("APP-2026-001")).getByRole("button", { name: "Moyuri Akter" }))
     const dialog = await screen.findByRole("dialog")
-    await user.click(within(dialog).getByRole("button", { name: "Override priority" }))
-    await user.click(within(dialog).getByRole("button", { name: "Save override" }))
+    await user.click(within(dialog).getByRole("button", { name: "Override Priority" }))
+    await user.click(within(dialog).getByRole("button", { name: "Save new priority" }))
 
     expect(within(dialog).getByText("Choose a new priority.")).toBeInTheDocument()
     expect(
-      within(dialog).getByText("A justification is required to override the AI recommendation."),
+      within(dialog).getByText("Please explain why you are changing the priority."),
     ).toBeInTheDocument()
 
     await user.click(within(dialog).getByRole("combobox", { name: /New priority/ }))
     await user.click(await screen.findByRole("option", { name: "Critical" }))
 
     const justification = within(dialog).getByRole("textbox", {
-      name: /Justification for override/,
+      name: /Justification for Override/,
     })
     await user.type(justification, "too short")
-    await user.click(within(dialog).getByRole("button", { name: "Save override" }))
-    expect(
-      within(dialog).getByText("The justification must be at least 20 characters."),
-    ).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Save new priority" }))
+    expect(within(dialog).getByText("Please write at least 20 characters.")).toBeInTheDocument()
     // The dialog header's badge is the first priority badge in the dialog.
     const dialogBadge = () => within(dialog).getAllByLabelText(/^Priority:/)[0]
     expect(dialogBadge()).toHaveAttribute("data-priority", "high")
 
     await user.clear(justification)
     await user.type(justification, "Proxy reports a knife threat last night.")
-    await user.click(within(dialog).getByRole("button", { name: "Save override" }))
+    await user.click(within(dialog).getByRole("button", { name: "Save new priority" }))
     expect(dialogBadge()).toHaveAttribute("data-priority", "critical")
     expect(within(dialog).getByText("Proxy reports a knife threat last night.")).toBeInTheDocument()
 
@@ -118,7 +119,7 @@ describe("Moyuri's case (T8 triage)", () => {
     await user.keyboard("{Escape}")
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     expect(badge()).toHaveAttribute("data-priority", "critical")
-    expect(within(rowFor("APP-2026-001")).getByText("Set by officer override")).toBeInTheDocument()
+    expect(within(rowFor("APP-2026-001")).getByText("Changed by officer")).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: /Pending AI Triage/ })).toHaveTextContent("1")
   })
 })
@@ -128,7 +129,7 @@ describe("duplicate review (T4)", () => {
     const user = renderApp()
     await user.click(
       within(rowFor("APP-2026-023")).getByRole("button", {
-        name: "Review duplicate: Rohima Begum",
+        name: "Compare records: Rohima Begum",
       }),
     )
     const dialog = await screen.findByRole("dialog")
@@ -138,14 +139,14 @@ describe("duplicate review (T4)", () => {
       .getAllByRole("row")
       .filter((r) => r.getAttribute("data-match") === "true")
       .map((r) => within(r).getByRole("rowheader").textContent)
-    expect(matched).toEqual(["NameMatch", "PhoneMatch", "VillageMatch"])
+    expect(matched).toEqual(["NameSame", "PhoneSame", "VillageSame"])
 
-    const merge = within(dialog).getByRole("button", { name: /Merge records/ })
+    const merge = within(dialog).getByRole("button", { name: /Merge Records/ })
     expect(merge).toHaveAttribute("aria-disabled", "true")
-    expect(merge).toHaveAccessibleDescription(/National ID numbers differ/)
+    expect(merge).toHaveAccessibleDescription(/National ID numbers are different/)
 
     await user.click(
-      within(dialog).getByRole("button", { name: "Confirm as distinct individuals" }),
+      within(dialog).getByRole("button", { name: "Confirm as Distinct Individuals" }),
     )
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
 
@@ -160,8 +161,10 @@ describe("queue filters", () => {
   it("filters to the alerts queue, including Abdul Malek's lawyer inactivity", async () => {
     const user = renderApp()
     await user.click(screen.getByRole("tab", { name: /Overdue \/ Alerts/ }))
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 3 of 3 cases")
-    expect(within(rowFor("DLAS-2026-045")).getByText("Lawyer missed 2 updates")).toBeInTheDocument()
-    expect(within(queueTable()).queryByText("Shirin Sultana")).not.toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 3 of 3")
+    expect(
+      within(rowFor("DLAS-2026-045")).getByText("Lawyer Inactivity: missed 2 updates"),
+    ).toBeInTheDocument()
+    expect(within(queueList()).queryByText("Shirin Sultana")).not.toBeInTheDocument()
   })
 })

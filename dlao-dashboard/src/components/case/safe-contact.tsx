@@ -10,41 +10,6 @@ import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 import { isWithinSafeWindow, nextSafeWindowStart } from "@/lib/safe-contact"
 
-/** Compact status for queue rows. */
-export function SafeContactPill({
-  window: w,
-  className,
-}: {
-  window: SafeContactWindow
-  className?: string
-}) {
-  const { t, f } = useI18n()
-  const safe = isWithinSafeWindow(useNow(), w)
-
-  return (
-    <p
-      className={cn(
-        "inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md border px-2 py-1 text-xs font-medium",
-        safe
-          ? "border-success/40 bg-success-surface text-success-foreground"
-          : "border-danger/50 bg-danger-surface text-danger-foreground",
-        className,
-      )}
-    >
-      {safe ? (
-        <Phone aria-hidden className="size-3.5 shrink-0" />
-      ) : (
-        <PhoneOff aria-hidden className="size-3.5 shrink-0" />
-      )}
-      <strong className="font-bold uppercase">
-        {safe ? t.safety.safeNow : t.safety.doNotCallShort}
-      </strong>
-      <span aria-hidden>·</span>
-      <span>{f.safeWindow(w)}</span>
-    </p>
-  )
-}
-
 /** Full guardrail banner for the case view: blocks calling outside the window. */
 export function SafeContactAlert({
   window: w,
@@ -64,7 +29,7 @@ export function SafeContactAlert({
     <Alert
       data-safe={safe}
       className={cn(
-        "border-2",
+        "border-2 px-5 py-4",
         safe
           ? "border-success bg-success-surface text-success-foreground"
           : "border-danger bg-danger-surface text-danger-foreground",
@@ -75,7 +40,7 @@ export function SafeContactAlert({
       <AlertTitle className="text-base font-bold tracking-wide uppercase">
         {safe ? t.safety.safeNow : t.safety.doNotCall}
       </AlertTitle>
-      <AlertDescription className="flex flex-col gap-2 text-current">
+      <AlertDescription className="flex flex-col gap-1.5 text-current [&_p:not(:last-child)]:mb-0">
         <p className="text-sm font-semibold">{t.safety.window(f.safeWindow(w))}</p>
         {!safe && <p>{t.safety.explain}</p>}
         <p className="text-xs">

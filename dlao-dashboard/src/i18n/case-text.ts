@@ -1,0 +1,24 @@
+import { nextActionOf, type LegalCase } from "@/data/types"
+import type { I18nValue } from "@/i18n/context"
+
+/** One plain sentence explaining why a case needs the officer right now. */
+export function caseReason(c: LegalCase, { t, f, pick }: I18nValue): string {
+  switch (nextActionOf(c)) {
+    case "reviewTriage":
+      return t.reason.reviewTriage(t.priority[c.triage?.priority ?? c.priority])
+    case "reviewDuplicate":
+      return t.reason.reviewDuplicate(c.duplicate?.otherId ?? "")
+    case "followUpLawyer":
+      return t.reason.followUpLawyer(f.num(c.lawyer?.missedUpdates ?? 0))
+    case "escalateJurisdiction":
+      return t.reason.escalateJurisdiction
+    case "resolveOverdue":
+      return c.overdue ? t.reason.resolveOverdue(pick(c.overdue.task)) : t.reason.viewCase
+    case "assignLawyer":
+      return t.reason.assignLawyer
+    case "scheduleSafeCall":
+      return t.reason.scheduleSafeCall
+    case "viewCase":
+      return t.reason.viewCase
+  }
+}

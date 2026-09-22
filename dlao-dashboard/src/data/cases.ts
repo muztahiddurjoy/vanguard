@@ -151,8 +151,8 @@ export const INITIAL_CASES: LegalCase[] = [
         bn: "অভিযুক্ত ঢাকায় বসবাস করেন; অপরাধটি সাইবার অপরাধ, যার বিচার কেবল সাইবার ট্রাইব্যুনালে হয়।",
       },
       target: {
-        en: "Cyber Tribunal, Dhaka via NLASO",
-        bn: "জাতীয় আইনগত সহায়তা সংস্থার মাধ্যমে সাইবার ট্রাইব্যুনাল, ঢাকা",
+        en: "Cyber Tribunal, Dhaka (through the National Legal Aid Services Organisation)",
+        bn: "সাইবার ট্রাইব্যুনাল, ঢাকা (জাতীয় আইনগত সহায়তা প্রদান সংস্থার মাধ্যমে)",
       },
     },
     triage: {

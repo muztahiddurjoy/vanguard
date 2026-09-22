@@ -56,7 +56,7 @@ export default function App() {
       >
         {t.app.skipToContent}
       </a>
-      <AppSidebar filter={filter} counts={counts} onFilterChange={setFilter} />
+      <AppSidebar queueCount={counts.actionToday} />
       <SidebarInset>
         <SiteHeader />
         <div id="main" tabIndex={-1} className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8">

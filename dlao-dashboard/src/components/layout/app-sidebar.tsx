@@ -1,16 +1,13 @@
 import {
   CalendarDays,
   ChartColumn,
-  CopyCheck,
   FolderOpen,
   Gavel,
+  House,
   LifeBuoy,
   ListChecks,
   Scale,
   Settings,
-  Sparkles,
-  TriangleAlert,
-  Inbox,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -21,144 +18,87 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  useSidebar,
 } from "@/components/ui/sidebar"
 import { OFFICER } from "@/data/cases"
 import { useI18n } from "@/i18n/use-i18n"
-import type { QueueFilter } from "@/lib/queue"
 
-const QUEUE_ICONS: Record<QueueFilter, LucideIcon> = {
-  all: Inbox,
-  actionToday: ListChecks,
-  pendingTriage: Sparkles,
-  duplicates: CopyCheck,
-  alerts: TriangleAlert,
-}
+type NavItem = { key: string; label: string; Icon: LucideIcon; badge?: number; current?: boolean }
 
-export function AppSidebar({
-  filter,
-  counts,
-  onFilterChange,
-}: {
-  filter: QueueFilter
-  counts: Record<QueueFilter, number>
-  onFilterChange: (filter: QueueFilter) => void
-}) {
+export function AppSidebar({ queueCount }: { queueCount: number }) {
   const { t, f, pick } = useI18n()
-  const { isMobile, setOpenMobile } = useSidebar()
   const notAvailable = () => toast.info(t.nav.notInPrototype)
 
-  const workspace: { label: string; Icon: LucideIcon; current?: boolean }[] = [
-    { label: t.nav.queue, Icon: ListChecks, current: true },
-    { label: t.nav.registry, Icon: FolderOpen },
-    { label: t.nav.lawyers, Icon: Gavel },
-    { label: t.nav.hearings, Icon: CalendarDays },
-    { label: t.nav.reports, Icon: ChartColumn },
+  const main: NavItem[] = [
+    { key: "home", label: t.nav.home, Icon: House },
+    { key: "queue", label: t.nav.queue, Icon: ListChecks, badge: queueCount, current: true },
+    { key: "cases", label: t.nav.cases, Icon: FolderOpen },
+    { key: "lawyers", label: t.nav.lawyers, Icon: Gavel },
+    { key: "hearings", label: t.nav.hearings, Icon: CalendarDays },
+    { key: "reports", label: t.nav.reports, Icon: ChartColumn },
+  ]
+  const support: NavItem[] = [
+    { key: "help", label: t.nav.help, Icon: LifeBuoy },
+    { key: "settings", label: t.nav.settings, Icon: Settings },
   ]
 
-  const selectQueue = (next: QueueFilter) => {
-    onFilterChange(next)
-    if (isMobile) setOpenMobile(false)
-  }
+  const renderItem = ({ key, label, Icon, badge, current }: NavItem) => (
+    <SidebarMenuItem key={key}>
+      <SidebarMenuButton
+        size="lg"
+        isActive={current}
+        aria-current={current ? "page" : undefined}
+        tooltip={label}
+        onClick={current ? undefined : notAvailable}
+        className="h-10 text-[0.9375rem]"
+      >
+        <Icon aria-hidden />
+        <span>{label}</span>
+      </SidebarMenuButton>
+      {!!badge && (
+        <SidebarMenuBadge className="top-2.5 rounded-full bg-sidebar-primary px-2 font-semibold text-sidebar-primary-foreground! peer-data-active/menu-button:text-sidebar-primary-foreground!">
+          {f.num(badge)}
+        </SidebarMenuBadge>
+      )}
+    </SidebarMenuItem>
+  )
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="flex items-center gap-3 rounded-md p-1.5 group-data-[collapsible=icon]:p-0">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground group-data-[collapsible=icon]:size-8">
-                <Scale aria-hidden className="size-5" />
-              </span>
-              <span className="grid min-w-0 leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate text-sm font-semibold">DLAS</span>
-                <span className="truncate text-xs text-sidebar-foreground/75">
-                  {t.app.district(pick(OFFICER.district))}
-                </span>
-              </span>
-            </div>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarHeader className="border-b border-sidebar-border">
+        <div className="flex items-center gap-3 p-1.5 group-data-[collapsible=icon]:p-0">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground group-data-[collapsible=icon]:size-8">
+            <Scale aria-hidden className="size-5" />
+          </span>
+          <span className="grid min-w-0 leading-tight group-data-[collapsible=icon]:hidden">
+            <span className="truncate text-sm font-semibold">DLAS</span>
+            <span className="truncate text-xs text-sidebar-foreground/75">
+              {t.app.district(pick(OFFICER.district))}
+            </span>
+          </span>
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
-        <nav aria-label={t.nav.label} className="flex flex-col gap-2">
+        <nav aria-label={t.nav.label}>
           <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/70">
-              {t.nav.workspace}
-            </SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                {workspace.map(({ label, Icon, current }) => (
-                  <SidebarMenuItem key={label}>
-                    <SidebarMenuButton
-                      isActive={current}
-                      aria-current={current ? "page" : undefined}
-                      tooltip={label}
-                      onClick={current ? undefined : notAvailable}
-                    >
-                      <Icon aria-hidden />
-                      <span>{label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/70">
-              {t.nav.queues}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {(["actionToday", "pendingTriage", "duplicates", "alerts"] as const).map((key) => {
-                  const Icon = QUEUE_ICONS[key]
-                  return (
-                    <SidebarMenuItem key={key}>
-                      <SidebarMenuButton
-                        isActive={filter === key}
-                        aria-pressed={filter === key}
-                        tooltip={t.queue[key]}
-                        onClick={() => selectQueue(filter === key ? "all" : key)}
-                      >
-                        <Icon aria-hidden />
-                        <span>{t.queue[key]}</span>
-                      </SidebarMenuButton>
-                      <SidebarMenuBadge className="text-sidebar-foreground">
-                        {f.num(counts[key])}
-                      </SidebarMenuBadge>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
+              <SidebarMenu className="gap-1">{main.map(renderItem)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </nav>
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip={t.nav.help} onClick={notAvailable}>
-              <LifeBuoy aria-hidden />
-              <span>{t.nav.help}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip={t.nav.settings} onClick={notAvailable}>
-              <Settings aria-hidden />
-              <span>{t.nav.settings}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <SidebarMenu className="gap-1">{support.map(renderItem)}</SidebarMenu>
+        <p className="px-2 pt-1 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
+          {t.app.prototype}
+        </p>
       </SidebarFooter>
       <SidebarRail aria-label={t.nav.toggleSidebar} title={t.nav.toggleSidebar} />
     </Sidebar>

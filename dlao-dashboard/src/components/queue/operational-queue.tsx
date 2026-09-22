@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react"
-import { Search } from "lucide-react"
+import { Inbox, Info, Search } from "lucide-react"
 
-import { QueueList } from "@/components/queue/queue-list"
-import { QueueStats } from "@/components/queue/queue-stats"
-import { Badge } from "@/components/ui/badge"
+import { CaseRow } from "@/components/queue/case-row"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -48,31 +47,37 @@ export function OperationalQueue({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">{t.queue.title}</h1>
-        <p className="text-sm text-muted-foreground">{t.queue.description}</p>
-      </div>
-
-      <QueueStats cases={cases} />
+      <header className="flex flex-col gap-1.5">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          {t.queue.title}
+        </h1>
+        <p className="max-w-2xl text-base text-muted-foreground">{t.queue.description}</p>
+      </header>
 
       <Tabs value={filter} onValueChange={(v) => onFilterChange(v as QueueFilter)}>
-        <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-          <TabsList aria-label={t.queue.filterLabel} className="h-auto">
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsList
+            variant="line"
+            aria-label={t.queue.filterLabel}
+            className="h-auto w-full justify-start gap-0 border-b"
+          >
             {QUEUE_FILTERS.map((key) => (
-              <TabsTrigger key={key} value={key} className="h-8 gap-2 px-3">
+              <TabsTrigger key={key} value={key} className="h-10 flex-none gap-1.5 px-3 text-sm">
                 {t.queue[key]}
-                <Badge
-                  variant="secondary"
-                  className="h-5 min-w-5 px-1.5 tabular-nums group-data-active:bg-primary group-data-active:text-primary-foreground"
-                >
-                  {f.num(counts[key])}
-                </Badge>
+                <span className="text-muted-foreground tabular-nums group-data-active:text-foreground">
+                  ({f.num(counts[key])})
+                </span>
               </TabsTrigger>
             ))}
           </TabsList>
         </div>
 
-        <TabsContent value={filter} className="mt-3 flex flex-col gap-4">
+        <TabsContent value={filter} className="flex flex-col gap-4 pt-4">
+          <p className="flex items-start gap-2.5 rounded-lg bg-info-surface px-4 py-3 text-sm text-info-foreground">
+            <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+            {t.queue.hint[filter]}
+          </p>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Label htmlFor="case-search" className="sr-only">
@@ -88,7 +93,7 @@ export function OperationalQueue({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t.queue.searchPlaceholder}
-                className="h-9 bg-card pl-9"
+                className="h-10 bg-card pl-9 text-base sm:text-sm"
               />
             </div>
             <Select
@@ -96,14 +101,17 @@ export function OperationalQueue({
               value={priority}
               onValueChange={(v) => setPriority((v ?? "all") as Priority | "all")}
             >
-              <SelectTrigger aria-label={t.queue.priorityFilter} className="w-full bg-card sm:w-48">
+              <SelectTrigger
+                aria-label={t.queue.priorityFilter}
+                className="h-10! w-full bg-card sm:w-52"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t.queue.anyPriority}</SelectItem>
                 {PRIORITIES.map((p) => (
                   <SelectItem key={p} value={p}>
-                    {t.priority[p]}
+                    {t.priority[p]} — {t.priority.meaning[p]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -117,7 +125,24 @@ export function OperationalQueue({
             </p>
           </div>
 
-          <QueueList cases={visible} onOpen={onOpen} onAction={onAction} />
+          {visible.length === 0 ? (
+            <Card className="items-center gap-3 py-12 text-center">
+              <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Inbox aria-hidden className="size-6" />
+              </span>
+              <p className="text-base font-medium">{t.queue.empty}</p>
+              <p className="text-sm text-muted-foreground">{t.queue.emptyHint}</p>
+            </Card>
+          ) : (
+            <Card className="gap-0 py-0">
+              <h2 className="sr-only">{t.queue.listLabel}</h2>
+              <ul aria-label={t.queue.listLabel} className="divide-y">
+                {visible.map((c) => (
+                  <CaseRow key={c.id} legalCase={c} onOpen={onOpen} onAction={onAction} />
+                ))}
+              </ul>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

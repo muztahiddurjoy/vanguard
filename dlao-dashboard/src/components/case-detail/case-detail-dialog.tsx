@@ -8,7 +8,6 @@ import { ActivityLog } from "@/components/case-detail/activity-log"
 import { CaseDetails } from "@/components/case-detail/case-details"
 import { NextStepPanel } from "@/components/case-detail/next-step-panel"
 import { TriagePanel } from "@/components/triage/triage-panel"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Dialog,
   DialogContent,
@@ -41,62 +40,68 @@ export function CaseDetailDialog({
   const { t, pick } = useI18n()
   const [tab, setTab] = useState<CaseTab>(initialTab)
   const at = () => new Date().toISOString()
+  const sensitive = c.flags.includes("sensitive")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         closeLabel={t.detail.close}
-        className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-4xl"
+        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto p-5 sm:max-w-4xl sm:p-7"
       >
-        <DialogHeader className="gap-2 pr-10">
-          <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-            <span className="font-mono font-medium text-foreground">{c.id}</span>
-            <span aria-hidden>·</span>
-            <span>{t.category[c.category]}</span>
+        <DialogHeader className="gap-2.5 pr-10">
+          <p className="text-sm text-muted-foreground">
+            {t.detail.caseLine(c.id, t.category[c.category])}
           </p>
-          <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-            {c.flags.includes("sensitive") && (
-              <EyeOff aria-hidden className="size-5 text-muted-foreground" />
-            )}
+          <DialogTitle className="flex items-center gap-2 text-2xl leading-tight font-semibold">
+            {sensitive && <EyeOff aria-hidden className="size-5 text-muted-foreground" />}
             {pick(c.applicant.name)}
           </DialogTitle>
-          <DialogDescription>
+          <PriorityBadge
+            priority={c.priority}
+            withMeaning
+            overridden={c.triage?.status === "overridden"}
+          />
+          <DialogDescription className="text-sm">
             {pick(c.applicant.village)}, {pick(c.applicant.upazila)} · {t.channel[c.channel]}
           </DialogDescription>
-          <div className="flex flex-wrap items-start gap-2 pt-1">
-            <PriorityBadge priority={c.priority} overridden={c.triage?.status === "overridden"} />
-            <CaseFlags legalCase={c} />
-          </div>
+          <CaseFlags legalCase={c} />
+          {sensitive && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <EyeOff aria-hidden className="size-4" />
+              {t.detail.sensitiveNotice}
+            </p>
+          )}
         </DialogHeader>
 
         {c.safeContact && <SafeContactAlert window={c.safeContact} />}
-        {c.flags.includes("sensitive") && (
-          <Alert className="border-primary/20 bg-primary/5">
-            <EyeOff aria-hidden />
-            <AlertDescription className="text-foreground">
-              {t.detail.sensitiveNotice}
-            </AlertDescription>
-          </Alert>
-        )}
+
+        <NextStepPanel
+          legalCase={c}
+          dispatch={dispatch}
+          onOpenTriage={() => setTab("triage")}
+          onOpenDuplicate={() => onOpenDuplicate(c)}
+        />
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as CaseTab)}>
           <TabsList
             variant="line"
             aria-label={t.detail.tabsLabel}
-            className="w-full justify-start border-b"
+            className="h-auto w-full justify-start gap-0 border-b"
           >
-            <TabsTrigger value="triage" className="flex-none px-3">
-              {t.detail.tabTriage}
-            </TabsTrigger>
-            <TabsTrigger value="details" className="flex-none px-3">
-              {t.detail.tabDetails}
-            </TabsTrigger>
-            <TabsTrigger value="activity" className="flex-none px-3">
-              {t.detail.tabActivity}
-            </TabsTrigger>
+            {(
+              [
+                ["triage", t.detail.tabTriage],
+                ["details", t.detail.tabDetails],
+                ["activity", t.detail.tabActivity],
+              ] as const
+            ).map(([value, label]) => (
+              <TabsTrigger key={value} value={value} className="h-10 flex-none px-4 text-sm">
+                {label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <TabsContent value="triage" className="pt-4">
+          <TabsContent value="triage" className="pt-5">
             <TriagePanel
               legalCase={c}
               onAccept={() => dispatch({ type: "acceptTriage", id: c.id, at: at() })}
@@ -105,16 +110,10 @@ export function CaseDetailDialog({
               }
             />
           </TabsContent>
-          <TabsContent value="details" className="flex flex-col gap-5 pt-4">
-            <NextStepPanel
-              legalCase={c}
-              dispatch={dispatch}
-              onOpenTriage={() => setTab("triage")}
-              onOpenDuplicate={() => onOpenDuplicate(c)}
-            />
+          <TabsContent value="details" className="pt-5">
             <CaseDetails legalCase={c} />
           </TabsContent>
-          <TabsContent value="activity" className="pt-4">
+          <TabsContent value="activity" className="pt-5">
             <ActivityLog legalCase={c} />
           </TabsContent>
         </Tabs>

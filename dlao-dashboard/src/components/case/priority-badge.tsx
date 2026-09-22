@@ -27,11 +27,14 @@ const PRIORITY_STYLE: Record<Priority, { className: string; Icon: LucideIcon }> 
 export function PriorityBadge({
   priority,
   overridden = false,
+  withMeaning = false,
   size = "default",
   className,
 }: {
   priority: Priority
   overridden?: boolean
+  /** Adds the plain-language meaning, e.g. "Act today". */
+  withMeaning?: boolean
   size?: "default" | "lg"
   className?: string
 }) {
@@ -41,18 +44,23 @@ export function PriorityBadge({
 
   return (
     <span className={cn("inline-flex flex-col items-start gap-1", className)}>
-      <Badge
-        data-priority={priority}
-        aria-label={t.priority.label(label)}
-        className={cn(
-          "font-semibold tracking-wide uppercase",
-          size === "lg" ? "h-8 gap-1.5 px-3 text-sm [&>svg]:size-4!" : "h-6 px-2.5",
-          tone,
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <Badge
+          data-priority={priority}
+          aria-label={t.priority.label(label)}
+          className={cn(
+            "font-semibold tracking-wide uppercase",
+            size === "lg" ? "h-8 gap-1.5 px-3 text-sm [&>svg]:size-4!" : "h-6 px-2.5",
+            tone,
+          )}
+        >
+          <Icon aria-hidden data-icon="inline-start" />
+          {label}
+        </Badge>
+        {withMeaning && (
+          <span className="text-sm text-muted-foreground">{t.priority.meaning[priority]}</span>
         )}
-      >
-        <Icon aria-hidden data-icon="inline-start" />
-        {label}
-      </Badge>
+      </span>
       {overridden && (
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
           <UserPen aria-hidden className="size-3" />

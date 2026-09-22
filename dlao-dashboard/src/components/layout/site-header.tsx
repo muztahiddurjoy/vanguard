@@ -1,8 +1,5 @@
-import { FlaskConical } from "lucide-react"
-
 import { LanguageToggle } from "@/components/layout/language-toggle"
 import { UserMenu } from "@/components/layout/user-menu"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { OFFICER } from "@/data/cases"
@@ -30,13 +27,6 @@ export function SiteHeader() {
           {t.app.district(pick(OFFICER.district))}
         </p>
       </div>
-      <Badge
-        variant="outline"
-        className="hidden h-6 border-warning/50 bg-warning-surface text-warning-foreground lg:inline-flex"
-      >
-        <FlaskConical aria-hidden data-icon="inline-start" />
-        {t.app.prototype}
-      </Badge>
       <LanguageToggle />
       <UserMenu />
     </header>
