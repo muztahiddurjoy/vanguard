@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -79,18 +78,19 @@ export function TriagePanel({
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader className="border-b">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Bot aria-hidden className="size-4" />
-            </span>
-            {t.triage.title}
-          </CardTitle>
+          {/* Wraps the status under the title on narrow screens instead of squeezing it. */}
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <Bot aria-hidden className="size-4" />
+              </span>
+              {t.triage.title}
+            </CardTitle>
+            <StatusBadge status={triage.status} />
+          </div>
           <CardDescription>
             {t.triage.subtitle} · {f.relative(triage.generatedAt, now)}
           </CardDescription>
-          <CardAction>
-            <StatusBadge status={triage.status} />
-          </CardAction>
         </CardHeader>
 
         <CardContent className="grid gap-6 md:grid-cols-[minmax(0,14rem)_1fr]">
