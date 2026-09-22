@@ -2,6 +2,7 @@ import { useMemo, useReducer, useState } from "react"
 
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { SiteHeader } from "@/components/layout/site-header"
+import { OperationalQueue } from "@/components/queue/operational-queue"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { INITIAL_CASES } from "@/data/cases"
 import { useI18n } from "@/i18n/use-i18n"
@@ -26,7 +27,13 @@ export default function App() {
       <SidebarInset>
         <SiteHeader />
         <div id="main" tabIndex={-1} className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">{t.queue.title}</h1>
+          <OperationalQueue
+            cases={cases}
+            filter={filter}
+            onFilterChange={setFilter}
+            onOpen={() => {}}
+            onAction={() => {}}
+          />
         </div>
       </SidebarInset>
     </SidebarProvider>
