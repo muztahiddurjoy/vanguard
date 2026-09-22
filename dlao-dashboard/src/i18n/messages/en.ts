@@ -271,7 +271,7 @@ export const en = {
     openDuplicate: "Compare records",
   },
   activity: {
-    label: "Case activity, oldest first",
+    label: "Case activity, newest first",
     system: "System",
     ai: "AI",
     justification: "Justification",

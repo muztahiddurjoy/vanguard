@@ -270,7 +270,7 @@ export const bn: Messages = {
     openDuplicate: "রেকর্ড তুলনা করুন",
   },
   activity: {
-    label: "মামলার কার্যক্রম, পুরোনো থেকে নতুন",
+    label: "মামলার কার্যক্রম, নতুন থেকে পুরোনো",
     system: "সিস্টেম",
     ai: "এআই",
     justification: "যৌক্তিকতা",
