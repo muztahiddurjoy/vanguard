@@ -1,7 +1,7 @@
 // English is the source of truth for the message shape; bn.ts must match it.
 // Function messages receive values that are already locale-formatted.
 //
-// Writing style: plain words a first-day officer (or a hackathon judge) can follow.
+// Writing style: plain words a first-day officer can follow.
 // Keep the spec's named terms (e.g. "Pending AI Triage") but always pair them
 // with a one-line explanation of what they mean.
 export const en = {
@@ -10,7 +10,6 @@ export const en = {
     system: "Digital Legal Aid System",
     district: (d: string) => `${d} District`,
     skipToContent: "Skip to main content",
-    prototype: "Prototype — sample data only",
   },
   nav: {
     label: "Main navigation",
@@ -27,7 +26,7 @@ export const en = {
   common: {
     loading: "Loading",
     backHome: "Go to Home",
-    notInPrototype: "This part is not included in the prototype.",
+    notAvailable: "This feature is not available yet.",
   },
   login: {
     title: "Sign in",
@@ -38,9 +37,8 @@ export const en = {
     point1: "See every case that needs you in one simple list",
     point2: "Check AI suggestions — you always make the final decision",
     point3: "Safety checks stop calls that could put someone at risk",
-    demoTitle: "This is a prototype",
-    demoBody:
-      "There are no real accounts. Use the demo account, or any officer ID with a password of at least 4 characters.",
+    demoTitle: "Demo account",
+    demoBody: "Sign in as a District Legal Aid Officer to explore the dashboard.",
     useDemo: "Fill in the demo account",
     id: "Officer ID or email",
     idHint: "Example: DLAO-RGP-0142",
@@ -63,7 +61,6 @@ export const en = {
     },
     welcome: (name: string) => `Welcome, ${name}`,
     signedOut: "You have signed out.",
-    footer: "Prototype for the Digital Legal Aid System hackathon. Sample data only.",
   },
   notFound: {
     title: "Page not found",
@@ -152,14 +149,14 @@ export const en = {
     noCases: "No open cases right now.",
     remind: "Send reminder",
     call: "Call",
-    callToast: (name: string) => `Calling ${name} is not part of the prototype.`,
+    callToast: (name: string) =>
+      `Calls from the dashboard are not available yet. Please phone ${name} directly.`,
     reminderToast: (name: string) => `Reminder sent to ${name}`,
   },
   reports: {
     title: "Reports",
     description:
       "How the office is doing: how many people asked for help, what kind of help, and how cases ended.",
-    sample: "These are sample figures for the prototype.",
     download: "Download report",
     kpi: {
       newThisMonth: "New cases this month",

@@ -1,6 +1,6 @@
 import type { Officer } from "@/data/types"
 
-/** The single demo account. Any officer ID signs in as this person in the prototype. */
+/** The demo officer account. Every sign-in uses this profile. */
 export const DEMO_OFFICER: Officer = {
   id: "DLAO-RGP-0142",
   name: { en: "Farhana Rahman", bn: "ফারহানা রহমান" },

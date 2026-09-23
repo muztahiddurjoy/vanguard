@@ -1,9 +1,9 @@
-# DLAO Dashboard — Digital Legal Aid System (prototype)
+# DLAO Dashboard — Digital Legal Aid System
 
-An interactive, front-end-only prototype of the **District Legal Aid Officer (DLAO)** dashboard
-for the Digital Legal Aid System (DLAS) hackathon. There is no backend: every case, lawyer and
-hearing is sample data held in React state. You can click through the whole officer workflow and
-reset it by reloading the page.
+The **District Legal Aid Officer (DLAO)** dashboard for the Digital Legal Aid System (DLAS).
+It runs entirely in the browser: cases, lawyers and hearings are sample data held in React state
+(there is no backend yet), so you can work through the whole officer workflow and reset it by
+reloading the page.
 
 It is built to be understood by anyone. Every screen opens with a sentence saying what it is for.
 Every case says why it needs attention and offers one clear button for the next step. Technical
@@ -82,7 +82,7 @@ src/
   main.tsx                    providers + hash router
   routes.tsx                  every screen and its URL
   pages/                      one file per screen
-  auth/                       prototype sign-in (session storage) + route guard
+  auth/                       sign-in (session storage) + route guard
   state/                      case reducer (pure, tested) + provider that owns the case dialogs
   preferences/                text size and notification choices
   data/                       types and bilingual sample data (cases, lawyers, hearings, reports)

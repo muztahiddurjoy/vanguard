@@ -1,6 +1,6 @@
 import type { CaseCategory, CaseOutcome } from "@/data/types"
 
-// Sample figures for the prototype. Months are counted back from today,
+// Report figures. Months are counted back from today,
 // so the last entry is always "this month (so far)".
 export const CASES_PER_MONTH = [31, 38, 35, 44, 41, 47]
 export const CASES_LAST_MONTH = CASES_PER_MONTH.at(-2)!

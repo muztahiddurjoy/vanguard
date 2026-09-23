@@ -107,9 +107,6 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarMenu className="gap-1">{support.map(renderItem)}</SidebarMenu>
-        <p className="px-2 pt-1 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
-          {t.app.prototype}
-        </p>
       </SidebarFooter>
       <SidebarRail aria-label={t.nav.toggleSidebar} title={t.nav.toggleSidebar} />
     </Sidebar>

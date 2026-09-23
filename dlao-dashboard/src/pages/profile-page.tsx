@@ -125,7 +125,7 @@ export function ProfilePage() {
               <CardDescription>{t.profile.securityHint}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button variant="outline" onClick={() => toast.info(t.common.notInPrototype)}>
+              <Button variant="outline" onClick={() => toast.info(t.common.notAvailable)}>
                 <KeyRound aria-hidden data-icon="inline-start" />
                 {t.profile.changePassword}
               </Button>

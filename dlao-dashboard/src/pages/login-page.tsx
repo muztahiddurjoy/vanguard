@@ -2,11 +2,11 @@ import { useId, useRef, useState, type FormEvent } from "react"
 import {
   Eye,
   EyeOff,
-  FlaskConical,
   KeyRound,
   Scale,
   ShieldCheck,
   Sparkles,
+  UserRound,
   UsersRound,
 } from "lucide-react"
 import { Navigate, useLocation, useNavigate, type Location } from "react-router"
@@ -108,7 +108,7 @@ export function LoginPage() {
             <p className="text-sm text-sidebar-foreground/75">{t.app.system}</p>
           </div>
         </div>
-        <div className="flex max-w-md flex-col gap-6">
+        <div className="my-auto flex max-w-md flex-col gap-6">
           <h2 className="font-heading text-3xl leading-tight font-semibold text-balance">
             {t.login.heroTitle}
           </h2>
@@ -124,7 +124,6 @@ export function LoginPage() {
             ))}
           </ul>
         </div>
-        <p className="text-sm text-sidebar-foreground/70">{t.login.footer}</p>
       </aside>
 
       <main className="flex flex-col bg-background">
@@ -149,7 +148,7 @@ export function LoginPage() {
 
             <div className="flex flex-col gap-3 rounded-xl border border-info/30 bg-info-surface p-4 text-info-foreground">
               <p className="flex items-center gap-2 font-semibold">
-                <FlaskConical aria-hidden className="size-4" />
+                <UserRound aria-hidden className="size-4" />
                 {t.login.demoTitle}
               </p>
               <p className="text-sm">{t.login.demoBody}</p>
@@ -249,8 +248,6 @@ export function LoginPage() {
                 {submitting ? t.login.submitting : t.login.submit}
               </Button>
             </form>
-
-            <p className="text-center text-xs text-muted-foreground lg:hidden">{t.login.footer}</p>
           </div>
         </div>
       </main>

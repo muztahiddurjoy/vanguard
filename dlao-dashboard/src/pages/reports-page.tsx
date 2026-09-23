@@ -79,13 +79,12 @@ export function ReportsPage() {
         title={t.reports.title}
         description={t.reports.description}
         actions={
-          <Button variant="outline" onClick={() => toast.info(t.common.notInPrototype)}>
+          <Button variant="outline" onClick={() => toast.info(t.common.notAvailable)}>
             <Download aria-hidden data-icon="inline-start" />
             {t.reports.download}
           </Button>
         }
       />
-      <p className="-mt-3 text-sm text-muted-foreground">{t.reports.sample}</p>
 
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <li>

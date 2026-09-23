@@ -1,7 +1,7 @@
 import type { LegalCase, PanelLawyer } from "@/data/types"
 
 // Dates are relative to page load so "overdue" and "2 days ago" stay true
-// whenever the prototype is demoed.
+// whenever the dashboard is opened.
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
 const now = Date.now()
