@@ -66,6 +66,15 @@ export const bn: Messages = {
     title: "পাতাটি পাওয়া যায়নি",
     body: "এই পাতাটি নেই। মেনু ব্যবহার করুন, অথবা হোমে ফিরে যান।",
   },
+  notifications: {
+    title: "বিজ্ঞপ্তি",
+    label: (n) => `বিজ্ঞপ্তি: ${n}টি পড়া হয়নি`,
+    markAll: "সবগুলো পড়া হয়েছে",
+    empty: "নতুন কিছু নেই।",
+    hearingToday: (time, place) => `আজ ${time}-এ শুনানি, ${place}`,
+    openQueue: "কাজের তালিকা খুলুন",
+    unread: "পড়া হয়নি",
+  },
   header: {
     language: "ভাষা",
     accountMenu: "অ্যাকাউন্ট মেনু",

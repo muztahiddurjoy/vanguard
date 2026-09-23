@@ -156,3 +156,20 @@ describe("Help", () => {
     expect(screen.getByRole("link", { name: "16430" })).toHaveAttribute("href", "tel:16430")
   })
 })
+
+describe("Notifications", () => {
+  it("lists what needs attention, marks items read and opens the case", async () => {
+    const { user } = renderApp({ path: "/" })
+    // 7 cases waiting on a step + 1 hearing today
+    await user.click(screen.getByRole("button", { name: "Notifications: 8 unread" }))
+    const panel = await screen.findByRole("dialog", { name: "Notifications" })
+    await user.click(within(panel).getByRole("button", { name: /Abdul Malek/ }))
+
+    const caseDialog = await screen.findByRole("dialog", { name: "Abdul Malek" })
+    expect(within(caseDialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
+    await user.keyboard("{Escape}")
+    expect(
+      await screen.findByRole("button", { name: "Notifications: 7 unread" }),
+    ).toBeInTheDocument()
+  })
+})

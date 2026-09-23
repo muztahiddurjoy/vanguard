@@ -70,6 +70,15 @@ export const en = {
     title: "Page not found",
     body: "This page does not exist. Use the menu, or go back to Home.",
   },
+  notifications: {
+    title: "Notifications",
+    label: (n: string) => `Notifications: ${n} unread`,
+    markAll: "Mark all as read",
+    empty: "You are all caught up.",
+    hearingToday: (time: string, place: string) => `Hearing today at ${time}, ${place}`,
+    openQueue: "Open the work queue",
+    unread: "Unread",
+  },
   header: {
     language: "Language",
     accountMenu: "Account menu",
