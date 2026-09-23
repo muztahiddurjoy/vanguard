@@ -18,7 +18,6 @@ export const bn: Messages = {
     reports: "প্রতিবেদন",
     help: "সাহায্য",
     settings: "সেটিংস",
-    notInPrototype: "এই পাতাটি এখনো প্রোটোটাইপে যোগ হয়নি",
     toggleSidebar: "মেনু দেখান বা লুকান",
   },
   common: {
@@ -98,7 +97,6 @@ export const bn: Messages = {
     comingUp: "সামনে যা আছে",
     comingUpHint: "আগামী দুই সপ্তাহের আদালতের শুনানি ও মধ্যস্থতা সভা।",
     seeHearings: "সব শুনানি দেখুন",
-    cases: (n) => `${n}টি মামলা`,
   },
   cases: {
     title: "সব মামলা",
@@ -112,7 +110,6 @@ export const bn: Messages = {
     anyType: "সব ধরন",
     caption: "অফিসের সব মামলা",
     columns: {
-      id: "মামলা নম্বর",
       applicant: "আবেদনকারী",
       type: "ধরন",
       status: "অবস্থা",
@@ -126,7 +123,6 @@ export const bn: Messages = {
       withdrawn: "প্রত্যাহার করা হয়েছে",
       referred: "অন্যত্র পাঠানো হয়েছে",
     },
-    openStatus: "চলমান",
     closedOn: (date) => `নিষ্পন্ন ${date}`,
     open: "মামলা খুলুন",
     none: "আইনজীবী নেই",
@@ -365,7 +361,6 @@ export const bn: Messages = {
     where: "কোথায়",
     lawyer: "আইনজীবী",
     noLawyer: "আইনজীবী লাগবে না",
-    applicant: "আবেদনকারী",
     none: "আগামী দুই সপ্তাহে কোনো শুনানি নেই।",
     openCase: "মামলা খুলুন",
     remind: "মনে করিয়ে দিন",
@@ -504,7 +499,6 @@ export const bn: Messages = {
     name: "নাম",
     phone: "ফোন",
     village: "গ্রাম",
-    upazila: "উপজেলা",
     guardian: "পিতা / স্বামী",
     nid: "জাতীয় পরিচয়পত্র",
     age: "বয়স",

@@ -22,7 +22,6 @@ export const en = {
     reports: "Reports",
     help: "Help",
     settings: "Settings",
-    notInPrototype: "This page is not part of the prototype yet",
     toggleSidebar: "Show or hide the menu",
   },
   common: {
@@ -102,7 +101,6 @@ export const en = {
     comingUp: "Coming up",
     comingUpHint: "Court hearings and mediation meetings in the next two weeks.",
     seeHearings: "See all hearings",
-    cases: (n: string) => `${n} cases`,
   },
   cases: {
     title: "All cases",
@@ -116,7 +114,6 @@ export const en = {
     anyType: "All types",
     caption: "All cases in the office",
     columns: {
-      id: "Case number",
       applicant: "Applicant",
       type: "Type",
       status: "Status",
@@ -130,7 +127,6 @@ export const en = {
       withdrawn: "Withdrawn",
       referred: "Referred elsewhere",
     },
-    openStatus: "Open",
     closedOn: (date: string) => `Closed ${date}`,
     open: "Open case",
     none: "No lawyer",
@@ -369,7 +365,6 @@ export const en = {
     where: "Where",
     lawyer: "Lawyer",
     noLawyer: "No lawyer needed",
-    applicant: "Applicant",
     none: "No hearings in the next two weeks.",
     openCase: "Open case",
     remind: "Send reminder",
@@ -510,7 +505,6 @@ export const en = {
     name: "Name",
     phone: "Phone",
     village: "Village",
-    upazila: "Upazila",
     guardian: "Father / husband",
     nid: "National ID",
     age: "Age",
