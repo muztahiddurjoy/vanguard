@@ -189,11 +189,11 @@ def test_t5_conversation_creates_application(client):
     )
     sid = start.json()["sessionId"]
     turns = [
+        "My neighbour's husband beats her and she has visible injuries",
         "I am calling for my neighbour",
         "My name is Ripon",
         "Moyuri Akter",
         "01712345318 in Rangpur",
-        "Her husband beats her and she has visible injuries",
         "Her husband Jalal Uddin",
         "I don't know",
         "Rangpur",
@@ -253,10 +253,10 @@ def say(client, sid: str, *utterances: str) -> dict:
 
 def test_t5_son_applies_for_his_mother_with_nid_matches(client, db, nid_registry):
     sid = client.post("/intake/conversations", json={"language": "en"}).json()["sessionId"]
-    last = say(client, sid, "for my mother", "Rafiqul Islam", "Md Abdul Karim", "Rangpur",
-               "2 June 1994", "Rahima Khatun", "My employer Kamal Hossain has not paid her wages",
-               "Kamal Hossain", "Abdul Hamid", "Gaibandha", "no, not now", "01811223344",
-               "any time")  # fmt: skip
+    last = say(client, sid, "My mother's employer Kamal Hossain has not paid her wages",
+               "for my mother", "Rafiqul Islam", "Md Abdul Karim", "Rangpur", "2 June 1994",
+               "Rahima Khatun", "Kamal Hossain", "Abdul Hamid", "Gaibandha", "no, not now",
+               "01811223344", "any time")  # fmt: skip
     assert last["complete"] is True
     assert last["identity"] == {
         "caller": "verified",
@@ -285,19 +285,14 @@ def test_t5_son_applies_for_his_mother_with_nid_matches(client, db, nid_registry
 
 def test_call_cut_while_describing_violence_is_marked_do_not_call(client, db):
     sid = client.post("/intake/conversations", json={"language": "en"}).json()["sessionId"]
-    say(client, sid, "for myself", "Moyuri Akter", "Rangpur",
-        "My husband beats me every night and I am injured")  # fmt: skip
+    say(client, sid, "My husband beats me every night and I am injured", "for myself",
+        "Moyuri Akter")  # fmt: skip
     case = client.post(f"/intake/conversations/{sid}/end").json()["case"]
     assert {"callDropped", "doNotCall"} <= set(case["flags"])
     row = db.scalars(select(Case)).one()
     assert row.do_not_call_reason == "dangerCallCut"
     assert row.applicant is not None and row.applicant.safety_level == "no_contact"
-    assert [n["topic"] for n in row.call_notes] == [
-        "filing_for",
-        "caller_name",
-        "district",
-        "problem",
-    ]
+    assert [n["topic"] for n in row.call_notes] == ["problem", "filing_for", "caller_name"]
     # Ending again (a late hang-up after a finished call, say) changes nothing.
     again = client.post(f"/intake/conversations/{sid}/end").json()["case"]
     assert again["id"] == case["id"]

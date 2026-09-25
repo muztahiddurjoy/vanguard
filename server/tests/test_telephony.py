@@ -151,11 +151,11 @@ def test_call_collects_intake_and_creates_application(db_engine):
             }
         )
         for utterance in (
+            "My neighbour's husband beats her and she has visible injuries",
             "I am calling for my neighbour",
             "My name is Ripon",
             "Moyuri Akter",
             "01712345318 in Rangpur",
-            "Her husband beats her and she has visible injuries",
             "Her husband Jalal Uddin",
             "I don't know",
             "Rangpur",
@@ -166,7 +166,7 @@ def test_call_collects_intake_and_creates_application(db_engine):
         return ws, tts, stt, manager
 
     ws, tts, stt, manager = asyncio.run(scenario())
-    assert tts.spoken[0].startswith("Are you applying for yourself")
+    assert tts.spoken[0] == "Legal aid. I'm listening, tell me what happened."
     assert tts.spoken[-1].startswith("Thank you. Your application is recorded.")
     assert stt.fed == 160 and stt.closed
     assert set(tts.languages) == {"en"} and tts.closed
@@ -225,9 +225,9 @@ def test_call_cut_mid_intake_is_recorded_and_marked_do_not_call(db_engine):
         )
         runner = asyncio.create_task(manager.run())
         ws.push(START)
+        stt.say("He hits me with a stick and says he will kill me")
         for utterance in ("for myself", "Moyuri Akter", "Rangpur"):
             stt.say(utterance)
-        stt.say("He hits me with a stick and says he will kill me")
         await until(lambda: len(tts.spoken) == 5)  # greeting + one reply per utterance
         ws.push({"event": "stop"})  # the line goes dead
         await asyncio.wait_for(runner, 5)
@@ -295,9 +295,9 @@ def test_speech_to_text_failing_mid_call_apologises_and_files_what_was_said(db_e
         )
         runner = asyncio.create_task(manager.run())
         ws.push(START)
+        stt.say("My landlord took my land and will not give it back")
         for utterance in ("for myself", "Moyuri Akter", "Rangpur"):
             stt.say(utterance)
-        stt.say("My landlord took my land and will not give it back")
         await until(lambda: len(tts.spoken) == 5)
         stt.queue.put_nowait(TranscriptEvent("error", "the transcription session closed"))
         await asyncio.wait_for(runner, 5)

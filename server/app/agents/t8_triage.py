@@ -199,6 +199,12 @@ def find_hostage_sign(text: str) -> str | None:
     return _first_match(text.casefold(), RISK_FACTORS["hostageSituation"][2])
 
 
+def has_risk_sign(text: str) -> bool:
+    """Whether ``text`` mentions any warning sign (violence, threats, hostage, ...)."""
+    lowered = text.casefold()
+    return any(_first_match(lowered, terms) for _, _, terms in RISK_FACTORS.values())
+
+
 def track_by_rules(
     text: str, category: str | None, detected: set[str], has_respondent: bool
 ) -> tuple[str, dict[str, str]]:

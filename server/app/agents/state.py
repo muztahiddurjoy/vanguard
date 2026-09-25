@@ -54,8 +54,13 @@ class IntakeState(TypedDict, total=False):
     caller_phone: str | None
     # The caller's latest utterance (speech-to-text or typed).
     utterance: str
-    # Collected answers, keyed by slot name.
+    # Collected answers, keyed by slot name. "" means asked but not known.
     slots: dict[str, Any]
+    # What the caller said while we listened, before any question: their account of
+    # what happened, which becomes the "problem" once it sounds like a case.
+    story: str
+    # How often each slot has been asked without an answer ("problem": turns listened).
+    asks: dict[str, int]
     # Everything the caller said: [{"at", "topic", "text"}]; kept as the case's call notes.
     notes: list[dict[str, str]]
     # The slot we last asked about, so a bare answer ("Rangpur") fills it.

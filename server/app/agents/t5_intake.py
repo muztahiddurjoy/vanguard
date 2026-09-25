@@ -1,15 +1,20 @@
 """T5 intake: the conversational agent on the legal aid hotline (and at UDCs).
 
-One turn = one utterance in, one reply out. Each turn the graph
+The call opens with a short greeting and then listens: nothing is asked until
+the caller has said what happened, because a frightened caller, or one in
+danger, needs to be heard before any form is filled in. One turn = one
+utterance in, one reply out. Each turn the graph
 
-1. ``extract``: pulls answers out of the utterance (rules first; Claude, if
-   configured, for free-form speech) and keeps a note of what was said;
+1. ``extract``: pulls answers out of the utterance (rules first; the model,
+   if configured, for free-form speech) and keeps a note of what was said;
 2. ``check_danger``: listens for immediate danger and for signs that the
    caller is being held;
-3. ``resolve``: checks the NID registry once enough is known: the caller's
+3. ``listen``: while the caller is saying what happened, decides whether it
+   sounds like a case yet; until it does, it only encourages them to go on;
+4. ``resolve``: checks the NID registry once enough is known: the caller's
    identity, the relative they are applying for, and the person the
    complaint is against;
-4. ``respond``: asks the next question.
+5. ``respond``: asks the next question, skipping anything already said.
 
 A caller cannot read out a 10- or 17-digit NID on a call, so they give their
 name and answer security questions only they should know (father's name,
@@ -49,7 +54,12 @@ from app.agents.spoken import (
     yes_or_no,
 )
 from app.agents.state import IntakeState
-from app.agents.t8_triage import PHONE_MONITORED, categorize_by_rules, find_hostage_sign
+from app.agents.t8_triage import (
+    PHONE_MONITORED,
+    categorize_by_rules,
+    find_hostage_sign,
+    has_risk_sign,
+)
 from app.database import utcnow
 from app.services.adnsms import normalize_bd_mobile
 from app.services.nid_registry import Citizen, NidRegistry, default_registry
@@ -57,7 +67,9 @@ from app.services.nid_registry import Citizen, NidRegistry, default_registry
 FilingFor = Literal["self", "father", "mother", "sibling", "other"]
 
 # Asked in this order; a slot is skipped once filled or when not needed (see ``needed``).
+# "problem" is not a question: it is what the caller says after the greeting.
 SLOTS = (
+    "problem",
     "filing_for",
     "caller_name",
     "father_name",
@@ -65,7 +77,6 @@ SLOTS = (
     "date_of_birth",
     "name",
     "district",
-    "problem",
     "respondent_name",
     "respondent_father_name",
     "respondent_district",
@@ -76,6 +87,10 @@ SLOTS = (
 IDENTITY_SLOTS = ("father_name", "permanent_district", "date_of_birth")
 REQUIRED = {"name", "phone", "district", "problem"}
 MAX_TURNS = 24
+# Turns spent listening for what happened before we either take it as it is or give up.
+MAX_LISTENS = 3
+# An account this long (not counting "hello"s) is taken as a case even with no keywords.
+STORY_WORDS = 6
 MAX_VERIFY_ATTEMPTS = 2
 # Name similarity (0-100) for accepting a relative found through NID parent links.
 FAMILY_MATCH = 85
@@ -107,7 +122,6 @@ QUESTIONS: dict[str, Text] = {
         "What is your date of birth according to your NID?",
         "এনআইডি অনুযায়ী আপনার জন্ম তারিখ কত?",
     ),
-    "problem": _t("Briefly, what has happened?", "সংক্ষেপে বলুন, কী সমস্যা হয়েছে?"),
     "respondent_name": _t(
         "Who is the complaint against? Tell me their name, or say 'no one'.",
         "অভিযোগটি কার বিরুদ্ধে? তাঁর নাম বলুন, কেউ না থাকলে বলুন 'কেউ না'।",
@@ -161,6 +175,21 @@ RELATION_WORDS: dict[str, Text] = {
     "sibling": _t("brother or sister", "ভাই বা বোন"),
 }
 SIBLING_WORDS: dict[str, Text] = {"male": _t("brother", "ভাই"), "female": _t("sister", "বোন")}
+
+GREETING = _t(
+    "Legal aid. I'm listening, tell me what happened.", "লিগ্যাল এইড। আমি শুনছি, বলুন কী হয়েছে।"
+)
+# The caller has not said what happened yet ("hello?", a fragment).
+KEEP_LISTENING = _t("I'm listening. Tell me, what happened?", "আমি শুনছি। বলুন, কী হয়েছে?")
+HEARD = _t(
+    "Thank you for telling me. I will ask a few short questions.",
+    "বুঝেছি, ধন্যবাদ। কয়েকটি ছোট প্রশ্ন করব।",
+)
+CLOSING_UNHEARD = _t(
+    "Sorry, I could not understand what happened. Please call again. "
+    "If you are in danger, call 999.",
+    "দুঃখিত, কী হয়েছে বুঝতে পারিনি। আবার ফোন করুন। বিপদে থাকলে ৯৯৯ নম্বরে ফোন করুন।",
+)
 
 VERIFIED = _t(
     "Thank you, {name}. Your identity is confirmed.", "ধন্যবাদ, {name}। আপনার পরিচয় নিশ্চিত হয়েছে।"
@@ -219,6 +248,14 @@ HOSTAGE_ACK = _t(
     "আপনাকে এখন আটকে রাখা হলে যত দ্রুত সম্ভব ৯৯৯ নম্বরে ফোন করুন। আমরা এই নম্বরে ফোন করব না।",
 )
 
+# What people say on a line before they say anything: none of it is an account.
+FILLER_WORDS = {
+    "hello", "hallo", "helo", "hi", "yes", "yeah", "ok", "okay", "hmm", "um", "uh", "ah",
+    "sir", "madam", "can", "you", "hear", "me", "is", "anyone", "there",
+    "হ্যালো", "হ্যাঁ", "হ্যা", "জি", "জ্বি", "আচ্ছা", "শুনছেন", "শুনতে", "পাচ্ছেন", "পারছেন",
+    "স্যার", "ম্যাডাম", "আপা", "ভাই", "আসসালামু", "আলাইকুম", "সালাম", "নমস্কার", "কেউ", "আছেন",
+}  # fmt: skip
+
 TOKEN_LINE = _t(
     "Your tracking number is {digits}. Please note it down.",
     "আপনার ট্র্যাকিং নম্বর {digits}। নম্বরটি লিখে রাখুন।",
@@ -259,6 +296,26 @@ _RESPONDENT_FILLER = {
     "complaint", "factory", "company", "আমার", "তার", "তাঁর", "ওর", "বিরুদ্ধে", "নাম", "অভিযোগ",
     "কারখানার", "কোম্পানির",
 }  # fmt: skip
+
+
+def substance(text: str) -> int:
+    """How many words of ``text`` say something ("hello, can you hear me?" says nothing)."""
+    return sum(1 for w in words(text) if w not in FILLER_WORDS)
+
+
+def sounds_like_case(text: str) -> bool:
+    """Whether the caller has said what happened, by rules alone.
+
+    Either a problem legal aid knows (land, wages, dowry, ...), a warning sign,
+    or simply an account of some length. "I need help" or "my husband" is not
+    yet: the caller is encouraged to go on rather than questioned.
+    """
+    return (
+        substance(text) >= STORY_WORDS
+        or categorize_by_rules(text)[0] is not None
+        or has_risk_sign(text)
+        or has_any(text, DANGER_TERMS)
+    )
 
 
 def filing_for_from(utterance: str) -> FilingFor | None:
@@ -316,9 +373,6 @@ def extract_by_rules(utterance: str, asking: str | None) -> dict[str, Any]:
                 found["date_of_birth"] = born.isoformat()
             elif unknown:
                 found["date_of_birth"] = ""
-        case "problem":
-            if len(utterance.split()) >= 3:
-                found["problem"] = utterance.strip()
         case "respondent_name":
             if unknown or has_word(utterance, NO_ONE):
                 found["respondent_name"] = ""
@@ -334,9 +388,7 @@ def extract_by_rules(utterance: str, asking: str | None) -> dict[str, Any]:
         case "safe_to_call":
             found["safe_to_call"] = utterance.strip()
     # Where the applicant lives, when it comes up while we ask about them.
-    if asking in (None, "district", "name", "problem", "phone") and (
-        district := find_district(utterance)
-    ):
+    if asking in (None, "district", "name", "phone") and (district := find_district(utterance)):
         found["district"] = district
     return found
 
@@ -429,6 +481,14 @@ def _join(*parts: str | None) -> str:
     return " ".join(p for p in parts if p)
 
 
+def _categorized(slots: dict[str, Any]) -> None:
+    if slots.get("problem") and "category" not in slots:
+        category, confidence = categorize_by_rules(slots["problem"])
+        if category:
+            slots["category"] = category
+            slots["category_confidence"] = confidence
+
+
 def _citizen(raw: dict[str, Any] | None) -> Citizen | None:
     return Citizen.model_validate(raw) if raw else None
 
@@ -446,17 +506,29 @@ def build_intake_graph(
         utterance = state.get("utterance", "")
         slots = dict(state.get("slots") or {})
         asking = state.get("asking")
-        found = extract_by_rules(utterance, asking)
+        # While we listen, everything said so far is read together as one account,
+        # and never as the answer to a question.
+        listening = asking == "problem"
+        story = state.get("story", "")
+        if listening and substance(utterance):
+            story = _join(story, utterance.strip())
+        found = extract_by_rules(story, None) if listening else extract_by_rules(utterance, asking)
 
         if llm is not None and utterance.strip():
-            context = f"We had just asked about: {asking}." if asking else ""
+            if listening:
+                context = "The caller is saying what happened, in their own words."
+            else:
+                context = f"We had just asked about: {asking}." if asking else ""
+            said = story if listening else utterance
             result = llm.structured(
                 system=EXTRACT_SYSTEM,
-                content=f"{context}\n<utterance>\n{utterance}\n</utterance>",
+                content=f"{context}\n<utterance>\n{said}\n</utterance>",
                 schema=LLMSlots,
             )
             if result is not None:
                 for key, value in _llm_values(result.model_dump(exclude_none=True)).items():
+                    if listening and key == "problem":
+                        continue  # the caller's own words are kept, not a summary
                     # Rules win: their answers are validated formats.
                     found.setdefault(key, value)
 
@@ -467,11 +539,7 @@ def build_intake_graph(
             if key in IDENTITY_SLOTS and verified_already:
                 continue
             slots[key] = value
-        if "problem" in slots and "category" not in slots:
-            category, confidence = categorize_by_rules(slots["problem"])
-            if category:
-                slots["category"] = category
-                slots["category_confidence"] = confidence
+        _categorized(slots)
 
         notes = list(state.get("notes") or [])
         if utterance.strip():
@@ -482,7 +550,12 @@ def build_intake_graph(
                     "text": utterance.strip(),
                 }
             )
-        return {"slots": slots, "notes": notes, "turns": state.get("turns", 0) + 1}
+        return {
+            "slots": slots,
+            "notes": notes,
+            "turns": state.get("turns", 0) + 1,
+            "story": story,
+        }
 
     def check_danger(state: IntakeState) -> IntakeState:
         utterance = state.get("utterance", "")
@@ -495,6 +568,25 @@ def build_intake_graph(
         if held and not state.get("hostage") and not emergency:
             update["ack"] = HOSTAGE_ACK[state.get("language", "bn")]
         return update
+
+    def listen(state: IntakeState) -> IntakeState:
+        """Hear the caller out: ask nothing until what they said sounds like a case."""
+        utterance = state.get("utterance", "")
+        if state.get("asking") != "problem" or state.get("emergency") or not utterance.strip():
+            return {}
+        lang = state.get("language", "bn")
+        story = state.get("story", "")
+        asks = dict(state.get("asks") or {})
+        asks["problem"] = heard = asks.get("problem", 0) + 1
+        # After a few tries a short account is taken as it is: an officer can follow up.
+        if sounds_like_case(story) or (heard >= MAX_LISTENS and substance(story) >= 3):
+            slots = {**(state.get("slots") or {}), "problem": story}
+            _categorized(slots)
+            return {"slots": slots, "asks": asks, "ack": _join(state.get("ack"), HEARD[lang])}
+        if heard >= MAX_LISTENS:
+            closing = CLOSING_UNHEARD[lang]
+            return {"asks": asks, "reply": closing, "complete": True, "asking": None, "ack": ""}
+        return {"asks": asks, "ack": KEEP_LISTENING[lang]}
 
     def verify_caller(state: IntakeState, slots: dict[str, Any], lang: Lang) -> IntakeState:
         """Match the caller's name and security answers to exactly one NID record."""
@@ -569,10 +661,11 @@ def build_intake_graph(
         }
 
     def resolve(state: IntakeState) -> IntakeState:
-        if state.get("emergency"):
+        slots = dict(state.get("slots") or {})
+        # Nothing is looked up before the caller has said what happened.
+        if state.get("emergency") or "problem" not in slots:
             return {}
         lang = state.get("language", "bn")
-        slots = dict(state.get("slots") or {})
         acks = [state.get("ack") or ""]
         update: IntakeState = {}
 
@@ -639,17 +732,25 @@ def build_intake_graph(
             closing = CLOSING_NO_CONTACT if state.get("hostage") else CLOSING
             return {"reply": _join(ack, closing[lang]), "complete": True, "asking": None, "ack": ""}
         nxt = missing[0]
+        if nxt == "problem":
+            # Still listening: the greeting, then only encouragement to go on.
+            return {"reply": ack or GREETING[lang], "complete": False, "asking": nxt, "ack": ""}
         reply = _join(ack, question(nxt, slots, lang))
         return {"reply": reply, "complete": False, "asking": nxt, "ack": ""}
 
     graph = StateGraph(IntakeState)
     graph.add_node("extract", extract)
     graph.add_node("check_danger", check_danger)
+    graph.add_node("listen", listen)
     graph.add_node("resolve", resolve)
     graph.add_node("respond", respond)
     graph.add_edge(START, "extract")
     graph.add_edge("extract", "check_danger")
-    graph.add_edge("check_danger", "resolve")
+    graph.add_edge("check_danger", "listen")
+    # Listening can end the call when nothing was said that we could act on.
+    graph.add_conditional_edges(
+        "listen", lambda s: END if s.get("complete") else "resolve", ["resolve", END]
+    )
     graph.add_edge("resolve", "respond")
     graph.add_edge("respond", END)
     return graph.compile(checkpointer=checkpointer)
@@ -688,7 +789,7 @@ class IntakeConversation:
         language: str = "bn",
         caller_phone: str | None = None,
     ) -> IntakeState:
-        """Open a conversation and return the first question.
+        """Open a conversation and return the greeting.
 
         ``caller_phone`` is the caller ID on phone calls: used as the contact
         number when someone applies for themselves, and checked against the
@@ -706,6 +807,8 @@ class IntakeConversation:
                 "utterance": "",
                 "slots": {},
                 "notes": [],
+                "story": "",
+                "asks": {},
                 "turns": 0,
                 "caller_phone": phone,
                 "identity": "pending" if self.registry is not None else "unavailable",
