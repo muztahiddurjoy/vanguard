@@ -1,0 +1,2 @@
+# start.sh keeps each service's output here
+/.logs/
