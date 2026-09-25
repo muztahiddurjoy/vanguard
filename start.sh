@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Start DLAS locally: the NID registry, the backend with its database, and an
-# ngrok tunnel so Twilio can reach the phone lines. Ctrl-C stops everything.
+# Start DLAS locally: the NID registry, the backend with its database, an ngrok
+# tunnel so Twilio can reach the phone lines, and the DLAO dashboard showing the
+# backend's cases. Ctrl-C stops everything.
 #
 # Dependencies are installed on the first run (and again when the requirements
 # change). Each service's output is shown here and kept in .logs/.
@@ -12,20 +13,24 @@ LOG_DIR=$ROOT/.logs
 
 NID_PORT=8100
 SERVER_PORT=8000
+DASHBOARD_PORT=5173
 
 INSTALL=0
 NGROK=1
+DASHBOARD=1
 
 usage() {
 	cat <<EOF
 Usage: ./start.sh [options]
 
-Starts the NID registry (port $NID_PORT), the backend (port $SERVER_PORT) and an
-ngrok tunnel to the backend, on the domain in PUBLIC_BASE_URL (server/.env)
-when one is set. Ctrl-C stops everything. Logs are kept in .logs/.
+Starts the NID registry (port $NID_PORT), the backend (port $SERVER_PORT), an ngrok
+tunnel to the backend (on the domain in PUBLIC_BASE_URL in server/.env, when one
+is set) and the dashboard (port $DASHBOARD_PORT). Ctrl-C stops everything. Logs are
+kept in .logs/.
 
 Options:
   --no-ngrok     No tunnel: everything but real phone calls works
+  --no-dashboard Backend only
   --install      Reinstall every dependency first
   -h, --help     Show this help
 EOF
@@ -35,6 +40,7 @@ while (($#)); do
 	case $1 in
 	--install) INSTALL=1 ;;
 	--no-ngrok) NGROK=0 ;;
+	--no-dashboard) DASHBOARD=0 ;;
 	-h | --help) usage && exit 0 ;;
 	*) usage >&2 && exit 2 ;;
 	esac
@@ -46,7 +52,7 @@ if [[ -t 1 ]]; then
 else
 	BOLD='' DIM='' RED='' GREEN='' YELLOW='' RESET=''
 fi
-declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m')
+declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m' [dashboard]=$'\e[34m')
 [[ -t 1 ]] || COLOR=()
 
 say() { printf '%s==>%s %s\n' "$BOLD" "$RESET" "$*"; }
@@ -70,6 +76,7 @@ need() { command -v "$1" >/dev/null || die "$1 is not installed. $2"; }
 need curl ""
 need setsid "It comes with util-linux."
 ((!NGROK)) || need ngrok "Install it from https://ngrok.com/download, or pass --no-ngrok."
+((!DASHBOARD)) || need npm "Install Node.js 20 or later, or pass --no-dashboard."
 if ! command -v uv >/dev/null; then
 	need python3.12 "Install uv (https://docs.astral.sh/uv/) or Python 3.12."
 fi
@@ -112,6 +119,23 @@ server_setting() {
 	printf '%s' "$value"
 }
 
+# A setting as Vite sees it: the environment, then .env.local, then .env.
+dashboard_setting() {
+	local value=${!1-} file
+	for file in .env.local .env; do
+		[[ -n $value ]] || value=$(env_value "$ROOT/dlao-dashboard/$file" "$1")
+	done
+	printf '%s' "$value"
+}
+
+if ((DASHBOARD)); then
+	lock=$ROOT/dlao-dashboard/node_modules/.package-lock.json
+	if ((INSTALL)) || [[ ! -f $lock || $ROOT/dlao-dashboard/package-lock.json -nt $lock ]]; then
+		say "Installing dlao-dashboard dependencies"
+		(cd "$ROOT/dlao-dashboard" && npm install --no-audit --no-fund --loglevel=error >/dev/null)
+	fi
+fi
+
 # --- Services ------------------------------------------------------------------
 
 port_owner() {
@@ -122,7 +146,9 @@ port_owner() {
 	fi
 }
 
-for port in "$NID_PORT" "$SERVER_PORT"; do
+ports=("$NID_PORT" "$SERVER_PORT")
+((!DASHBOARD)) || ports+=("$DASHBOARD_PORT")
+for port in "${ports[@]}"; do
 	owner=$(port_owner "$port")
 	[[ -z $owner ]] || die "Port $port is already in use: $owner"
 done
@@ -232,6 +258,24 @@ start server "$ROOT/server" env -u PYTHONPATH "${server_env[@]}" \
 	.venv/bin/uvicorn app.main:app --port "$SERVER_PORT" --reload --reload-dir app
 wait_for server "http://localhost:$SERVER_PORT/health" 90
 
+if ((DASHBOARD)); then
+	api_url=$(dashboard_setting VITE_API_URL)
+	api_url=${api_url:-http://localhost:$SERVER_PORT}
+	dashboard_env=(VITE_API_URL="$api_url")
+	# The backend's API_TOKEN, unless the dashboard has its own.
+	token=$(dashboard_setting VITE_API_TOKEN)
+	[[ -n $token ]] || token=$(server_setting API_TOKEN)
+	[[ -z $token ]] || dashboard_env+=(VITE_API_TOKEN="$token")
+	if [[ $api_url == "http://localhost:$SERVER_PORT" && $(server_setting CORS_ORIGINS) != *"localhost:$DASHBOARD_PORT"* ]]; then
+		warn "CORS_ORIGINS in server/.env does not include http://localhost:$DASHBOARD_PORT, so the dashboard cannot reach the backend."
+	fi
+
+	say "Starting the dashboard"
+	start dashboard "$ROOT/dlao-dashboard" env "${dashboard_env[@]}" \
+		npm run dev -- --port "$DASHBOARD_PORT" --strictPort
+	wait_for dashboard "http://localhost:$DASHBOARD_PORT" 60
+fi
+
 # --- Summary -------------------------------------------------------------------
 
 health=$(curl -fsS "http://localhost:$SERVER_PORT/health")
@@ -245,6 +289,11 @@ on() { [[ $1 == True ]] && printf '%son%s' "$GREEN" "$RESET" || printf 'off'; }
 
 row() { printf '  %-14s %s\n' "$1" "$2"; }
 printf '\n%sDLAS is running%s\n' "$BOLD" "$RESET"
+if ((DASHBOARD)); then
+	dashboard_row="$BOLD$GREEN""http://localhost:$DASHBOARD_PORT$RESET"
+	[[ $api_url == "http://localhost:$SERVER_PORT" ]] || dashboard_row+="  (cases from $api_url)"
+	row "Dashboard" "$dashboard_row"
+fi
 row "Backend API" "http://localhost:$SERVER_PORT/docs"
 row "NID registry" "http://localhost:$NID_PORT/docs"
 if [[ -n $public_url ]]; then
