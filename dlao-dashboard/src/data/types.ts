@@ -137,12 +137,20 @@ export type DoNotCallReason = "hostage" | "dangerCallCut"
 /** Who the caller applied for. */
 export type FilingFor = "self" | "father" | "mother" | "sibling" | "other"
 
+/**
+ * How a caller was confirmed: by the NID security questions, or, when they could
+ * not answer them, by the SIM they called from being registered to them ("sim")
+ * or to a relative on their NID record ("simFamily").
+ */
+export type CallerVerifiedBy = "answers" | "sim" | "simFamily"
+
 export interface Identity {
   filingFor: FilingFor
   /** The applicant's details were matched to their National ID record. */
   applicantVerified: boolean
-  /** The caller answered the NID security questions correctly. */
+  /** The caller's identity was confirmed against the National ID register. */
   callerVerified: boolean
+  callerVerifiedBy?: CallerVerifiedBy
   /** The caller phoned from a SIM registered under their own NID. */
   callerSimRegistered: boolean
 }

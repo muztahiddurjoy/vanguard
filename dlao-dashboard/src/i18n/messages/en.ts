@@ -748,6 +748,9 @@ export const en = {
     verified: "Confirmed with the National ID register",
     notVerified: "Not confirmed yet. Check the NID at the office.",
     callerVerified: "The caller answered the NID security questions",
+    callerVerifiedBySim: "Confirmed by the SIM they called from, not the security questions",
+    callerVerifiedBySimFamily:
+      "Confirmed as a relative of the SIM's owner, not by the security questions",
     simRegistered: "Called from a SIM registered to their own NID",
   },
   respondent: {

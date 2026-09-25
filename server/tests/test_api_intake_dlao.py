@@ -58,7 +58,7 @@ def test_web_intake_creates_triaged_application(client):
     assert case["track"]["key"] == "sensitive" and case["track"]["status"] == "suggested"
     assert case["identity"] == {
         "filingFor": "other", "applicantVerified": False, "callerVerified": False,
-        "callerSimRegistered": False,
+        "callerVerifiedBy": None, "callerSimRegistered": False,
     }  # fmt: skip
     assert len(case["trackingToken"]) == 9 and case["trackingToken"][4] == "-"
     assert case["doNotCall"] is None
@@ -279,6 +279,9 @@ def test_t5_son_applies_for_his_mother_with_nid_matches(client, db, nid_registry
     assert (kamal.phone, kamal.registered_phones) == ("01911000001", ["01911000001", "01611000002"])
     assert case.intake_data["notify_respondent"] is False
     assert case.intake_data["identity"]["filingFor"] == "mother"
+    assert case.intake_data["identity"]["callerVerifiedBy"] == "answers"
+    view = client.get("/dlao/cases").json()[0]["identity"]
+    assert (view["callerVerified"], view["callerVerifiedBy"]) == (True, "answers")
     assert len(case.call_notes) == 13
     assert case.track == "mediation"
 

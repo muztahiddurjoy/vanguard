@@ -94,6 +94,17 @@ describe("advice / mediation / sensitive mark", () => {
   })
 })
 
+describe("a caller confirmed through the SIM they called from", () => {
+  it("says so, since it is weaker than the security questions", async () => {
+    const { user, dialog } = await openCase("APP-2026-023", "Rohima Begum")
+    await user.click(within(dialog).getByRole("tab", { name: "Case information" }))
+    const value = (label: string) => within(dialog).getByText(label).nextElementSibling
+    expect(value("National ID check")).toHaveTextContent(
+      "Confirmed with the National ID register · Confirmed as a relative of the SIM's owner, not by the security questions",
+    )
+  })
+})
+
 describe("filing for a relative, verified through NID", () => {
   it("shows who filed, the NID checks, the tracking number and the respondent's SMS", async () => {
     const { user, dialog } = await openCase("APP-2026-027", "Jahanara Parvin")

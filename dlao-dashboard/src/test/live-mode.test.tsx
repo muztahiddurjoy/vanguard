@@ -58,7 +58,7 @@ describe("with a backend (VITE_API_URL)", () => {
     const list = await screen.findByRole("list", { name: "Cases, most urgent first" })
     expect(within(list).getByText("Rahima Khatun")).toBeInTheDocument()
     expect(within(list).getByText("Do not call: possible hostage situation")).toBeInTheDocument()
-    expect(within(list).queryByText("Moyuri Akter")).not.toBeInTheDocument()
+    expect(within(list).queryByText("Jahanara Parvin")).not.toBeInTheDocument()
     expect(screen.queryByText("Loading cases…")).not.toBeInTheDocument()
   })
 

@@ -1,6 +1,7 @@
 /** The server's case view (server/app/routers/dlao.py: case_view and get_case). */
 
 import type {
+  CallerVerifiedBy,
   CaseFlag,
   CaseCategory,
   DoNotCallReason,
@@ -98,6 +99,7 @@ export interface ApiCase {
     filingFor: FilingFor
     applicantVerified: boolean
     callerVerified: boolean
+    callerVerifiedBy: CallerVerifiedBy | null
     callerSimRegistered: boolean
   }
   notices: { filer?: ApiNotice; respondent?: ApiNotice }

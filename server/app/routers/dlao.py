@@ -150,16 +150,25 @@ def track_view(case: Case) -> dict[str, Any] | None:
     }
 
 
+# How a verified caller was confirmed (see t5_intake), as the dashboard names it.
+VERIFIED_BY = {"answers": "answers", "sim": "sim", "sim_family": "simFamily"}
+
+
 def identity_view(case: Case) -> dict[str, Any]:
     """Whose identity was confirmed against the NID registry, and how the case was filed."""
     recorded = dict((case.intake_data or {}).get("identity") or {})
     applicant = case.applicant
+    verified = recorded.get("caller") == "verified"
     return {
         "filingFor": recorded.get(
             "filingFor", "other" if case.party_with_role(PartyRole.PROXY) else "self"
         ),
         "applicantVerified": bool(applicant and applicant.nid_verified),
-        "callerVerified": recorded.get("caller") == "verified",
+        "callerVerified": verified,
+        # Applications from before this was recorded were all confirmed by answers.
+        "callerVerifiedBy": (
+            VERIFIED_BY.get(recorded.get("callerVerifiedBy") or "answers") if verified else None
+        ),
         "callerSimRegistered": bool(recorded.get("callerSimRegistered")),
     }
 
