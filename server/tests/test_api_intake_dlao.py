@@ -1,9 +1,12 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
+import pytest
 from sqlalchemy import select
 
+from app.agents import t5_intake
 from app.database import utcnow
-from app.models import Case
+from app.models import Case, PartyRole
+from tests.nid_fakes import FakeRegistry
 
 YEAR = utcnow().year
 
@@ -176,9 +179,13 @@ def test_t5_conversation_creates_application(client):
     sid = start.json()["sessionId"]
     turns = [
         "I am calling for my neighbour",
+        "My name is Ripon",
         "Moyuri Akter",
         "01712345318 in Rangpur",
         "Her husband beats her and she has visible injuries",
+        "Her husband Jalal Uddin",
+        "I don't know",
+        "Rangpur",
         "Tuesday 2 to 4 pm, he checks her phone",
     ]
     for utterance in turns:
@@ -187,7 +194,10 @@ def test_t5_conversation_creates_application(client):
         ).json()
     assert last["complete"] is True
     assert "phone" not in last["slots"]
+    assert last["identity"]["caller"] == "unavailable"  # no NID registry configured
     case = last["case"]
+    assert case["proxy"] == {"name": "Ripon", "relation": "reported by phone"}
+    assert case["respondent"] == {"name": "Jalal Uddin"}
     assert case["category"] == "domesticViolence"
     assert case["applicant"]["safetyLevel"] == "restricted"
     assert case["applicant"]["safeContactWindows"] == [{"day": 2, "start_hour": 14, "end_hour": 16}]
@@ -207,6 +217,93 @@ def test_t5_emergency_creates_critical_escalated_application(client):
     assert body["case"]["priority"] == "critical"
     assert "escalated" in body["case"]["flags"]
     assert body["case"]["applicant"]["name"] == "Unknown caller"
+
+
+@pytest.fixture
+def nid_registry(monkeypatch):
+    registry = FakeRegistry()
+    conv = t5_intake.IntakeConversation(use_default_llm=False, registry=registry)
+    monkeypatch.setattr(t5_intake, "_conversations", conv)
+    return registry
+
+
+def say(client, sid: str, *utterances: str) -> dict:
+    body: dict = {}
+    for u in utterances:
+        r = client.post(f"/intake/conversations/{sid}/turns", json={"utterance": u})
+        assert r.status_code == 200, r.text
+        body = r.json()
+    return body
+
+
+def test_t5_son_applies_for_his_mother_with_nid_matches(client, db, nid_registry):
+    sid = client.post("/intake/conversations", json={"language": "en"}).json()["sessionId"]
+    last = say(client, sid, "for my mother", "Rafiqul Islam", "Md Abdul Karim", "Rangpur",
+               "2 June 1994", "Rahima Khatun", "My employer Kamal Hossain has not paid her wages",
+               "Kamal Hossain", "Abdul Hamid", "Gaibandha", "no, not now", "01811223344",
+               "any time")  # fmt: skip
+    assert last["complete"] is True
+    assert last["identity"] == {
+        "caller": "verified",
+        "applicant": "verified",
+        "respondent": "found",
+    }
+    assert not {"father_name", "date_of_birth", "phone"} & set(last["slots"])
+
+    case = db.scalars(select(Case)).one()
+    mother, son = case.applicant, case.party_with_role(PartyRole.PROXY)
+    assert mother is not None and son is not None
+    assert (mother.name, mother.nid_verified, mother.guardian_name) == (
+        "Rahima Khatun", True, "Nurul Haque",
+    )  # fmt: skip
+    assert mother.date_of_birth == date(1968, 11, 20) and mother.nid_last4 == "0002"
+    assert (son.name, son.nid_verified, son.phone) == ("Rafiqul Islam", True, None)
+    assert case.parties[1].relation == "son"
+    kamal = case.party_with_role(PartyRole.RESPONDENT)
+    assert kamal is not None and kamal.nid_verified
+    assert (kamal.phone, kamal.registered_phones) == ("01911000001", ["01911000001", "01611000002"])
+    assert case.intake_data["notify_respondent"] is False
+    assert case.intake_data["identity"]["filingFor"] == "mother"
+    assert len(case.call_notes) == 13
+    assert case.track == "mediation"
+
+
+def test_call_cut_while_describing_violence_is_marked_do_not_call(client, db):
+    sid = client.post("/intake/conversations", json={"language": "en"}).json()["sessionId"]
+    say(client, sid, "for myself", "Moyuri Akter", "Rangpur",
+        "My husband beats me every night and I am injured")  # fmt: skip
+    case = client.post(f"/intake/conversations/{sid}/end").json()["case"]
+    assert {"callDropped", "doNotCall"} <= set(case["flags"])
+    row = db.scalars(select(Case)).one()
+    assert row.do_not_call_reason == "dangerCallCut"
+    assert row.applicant is not None and row.applicant.safety_level == "no_contact"
+    assert [n["topic"] for n in row.call_notes] == [
+        "filing_for",
+        "caller_name",
+        "district",
+        "problem",
+    ]
+    # Ending again (a late hang-up after a finished call, say) changes nothing.
+    again = client.post(f"/intake/conversations/{sid}/end").json()["case"]
+    assert again["id"] == case["id"]
+
+
+def test_hostage_call_cut_early_is_still_recorded_as_do_not_call(client, db):
+    sid = client.post("/intake/conversations", json={}).json()["sessionId"]
+    body = say(client, sid, "আমাকে ঘরে আটকে রেখেছে")
+    assert body["hostage"] is True and body["complete"] is False
+    case = client.post(f"/intake/conversations/{sid}/end").json()["case"]
+    assert "doNotCall" in case["flags"] and case["priority"] == "critical"
+    row = db.scalars(select(Case)).one()
+    assert row.do_not_call_reason == "hostage"
+    assert row.summary == "আমাকে ঘরে আটকে রেখেছে"
+
+
+def test_call_cut_before_anything_useful_creates_nothing(client):
+    sid = client.post("/intake/conversations", json={}).json()["sessionId"]
+    say(client, sid, "নিজের জন্য")
+    assert client.post(f"/intake/conversations/{sid}/end").json() == {"case": None}
+    assert client.get("/dlao/cases").json() == []
 
 
 def test_unknown_conversation_is_404(client):

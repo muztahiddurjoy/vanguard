@@ -10,8 +10,9 @@ whose ``ulaw_8000`` output Twilio plays as-is.
   our ``mark``), the socket is closed and Twilio moves on to the TwiML after
   ``<Connect>``, which hangs up.
 - The application is created as soon as T5 says the conversation is complete
-  (see ``routers.intake.finish_conversation``), so a dropped call loses nothing
-  already collected.
+  (see ``routers.intake.finish_conversation``). If the call is cut before that,
+  it is created from what was said so far; a caller who seemed to be held, or
+  who was describing violence when the line went dead, is marked do-not-call.
 
 No speech-to-text provider ships with this service: implement ``Transcriber``
 and return it from ``build_transcriber``. Until then callers hear
@@ -99,6 +100,8 @@ class StreamManager:
         self._listen_task: asyncio.Task[None] | None = None
         self._marks: dict[str, asyncio.Event] = {}
         self._reply_count = 0
+        # True between the intake greeting and _finish: a hang-up then is a cut call.
+        self._conversation_open = False
 
     # --- Twilio side ----------------------------------------------------------
 
@@ -148,8 +151,13 @@ class StreamManager:
             return
 
         state = await asyncio.to_thread(
-            self.intake.start, self.call_sid, channel="hotline_16699", language=self.language
+            self.intake.start,
+            self.call_sid,
+            channel="hotline_16699",
+            language=self.language,
+            caller_phone=self.caller,
         )
+        self._conversation_open = True
         self._listen_task = asyncio.create_task(self._listen())
         await self._speak(state["reply"])
 
@@ -219,17 +227,28 @@ class StreamManager:
                 return
             await self._speak(state["reply"])
 
-    def _finish(self, state: Any) -> None:
+    def _finish(self, state: Any, *, dropped: bool = False) -> None:
         from app.routers.intake import finish_conversation
 
         assert self.call_sid is not None
+        self._conversation_open = False
         with self.session_factory() as db:
             case = finish_conversation(
-                db, self.call_sid, state, actor="agent:t5:hotline", fallback_phone=self.caller
+                db,
+                self.call_sid,
+                state,
+                actor="agent:t5:hotline",
+                fallback_phone=self.caller,
+                dropped=dropped,
             )
             db.commit()
             self.case_ref = case.display_id if case else None
-        log.info("call %s finished; application %s", self.call_sid, self.case_ref)
+        log.info(
+            "call %s %s; application %s",
+            self.call_sid,
+            "was cut" if dropped else "finished",
+            self.case_ref,
+        )
 
     async def _shutdown(self) -> None:
         await self._stop_speaking(clear=False)
@@ -239,3 +258,6 @@ class StreamManager:
                 await self._listen_task
         if self.transcriber:
             await self.transcriber.close()
+        if self._conversation_open and self.call_sid:
+            state = await asyncio.to_thread(self.intake.state, self.call_sid)
+            await asyncio.to_thread(self._finish, state, dropped=True)

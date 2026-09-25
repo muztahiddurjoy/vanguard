@@ -50,18 +50,37 @@ class TriageState(TypedDict, total=False):
 class IntakeState(TypedDict, total=False):
     channel: str  # "hotline_16699" | "udc" | "web"
     language: Literal["bn", "en"]
+    # Caller ID on phone calls, 01XXXXXXXXX.
+    caller_phone: str | None
     # The caller's latest utterance (speech-to-text or typed).
     utterance: str
     # Collected answers, keyed by slot name.
     slots: dict[str, Any]
+    # Everything the caller said: [{"at", "topic", "text"}]; kept as the case's call notes.
+    notes: list[dict[str, str]]
     # The slot we last asked about, so a bare answer ("Rangpur") fills it.
     asking: str | None
     turns: int
+    # NID checks: "pending" | "verified" | "failed" | "unavailable" for the caller;
+    # the applicant and respondent statuses add "unverified", "not_found", "none", ...
+    identity: str
+    verify_attempts: int
+    applicant_status: str
+    respondent_status: str
+    # Registry records (Citizen as JSON) once matched.
+    caller_record: dict[str, Any]
+    applicant_record: dict[str, Any]
+    respondent_record: dict[str, Any]
+    caller_sim_registered: bool
+    # Said before the next question, e.g. "Your identity is confirmed."
+    ack: str
     # What to say next, and whether the conversation is finished.
     reply: str
     complete: bool
     # Set when the caller signals danger; the call is routed to a person.
     emergency: bool
+    # Set when the caller may be held by someone: never call or text them back.
+    hostage: bool
 
 
 class DocumentState(TypedDict, total=False):

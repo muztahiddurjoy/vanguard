@@ -204,12 +204,22 @@ def raise_safety(party: Any, level: SafetyLevel) -> bool:
     return True
 
 
-def mark_do_not_call(case: Case, reason: DoNotCallReason) -> None:
+def mark_do_not_call(db: Session, case: Case, reason: DoNotCallReason, actor: str) -> None:
     """Block every call and SMS to the applicant and show why on the dashboard."""
-    case.do_not_call_reason = case.do_not_call_reason or reason
+    if case.do_not_call_reason is not None:
+        return
+    case.do_not_call_reason = reason
     case.add_flag("doNotCall")
     if case.applicant is not None:
         raise_safety(case.applicant, SafetyLevel.NO_CONTACT)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.SAFETY_CHANGED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"level": SafetyLevel.NO_CONTACT, "reason": reason},
+    )
 
 
 def apply_triage(db: Session, case: Case, actor: str) -> None:
@@ -246,8 +256,6 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
         case.add_flag("jurisdictionEscalation")
     if applicant and rec.get("recommendedSafetyLevel") == SafetyLevel.RESTRICTED:
         raise_safety(applicant, SafetyLevel.RESTRICTED)
-    if "hostageSituation" in detected:
-        mark_do_not_call(case, DoNotCallReason.HOSTAGE)
     # An officer's confirmed or changed track stands; a fresh AI mark replaces only a mark.
     if case.track_status == TrackStatus.SUGGESTED:
         case.track = Track(rec["track"]["key"])
@@ -267,6 +275,8 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
             "track": rec["track"]["key"],
         },
     )
+    if "hostageSituation" in detected:
+        mark_do_not_call(db, case, DoNotCallReason.HOSTAGE, actor=actor)
 
 
 # --- endpoints ------------------------------------------------------------
