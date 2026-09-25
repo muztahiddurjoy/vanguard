@@ -238,6 +238,10 @@ def test_wife_calling_on_her_husbands_phone_is_found_through_his_nid_family():
     s = talk(conv, "x2", "আমার স্বামী জালালের বিরুদ্ধে", "জানি না", "রংপুর")
     assert (s["respondent_status"], s["respondent_via"]) == ("found", "family")
     assert s["respondent_record"]["nid"] == "4600000011"
+    # The phone she calls from is his: she is asked for a safe number instead.
+    s = conv.turn("x2", "না, এখন না")
+    assert s["asking"] == "phone" and "phone" not in s["slots"]
+    assert s["reply"] == t5_intake.QUESTIONS_SELF["phone"]["bn"]
 
 
 def test_a_respondent_who_is_not_family_is_not_looked_for_on_the_nid_record():

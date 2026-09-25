@@ -871,7 +871,12 @@ def build_intake_graph(
             slots["name"] = applicant.name.en
             slots.setdefault("district", applicant.present_address.district.en)
             slots.setdefault("upazila", applicant.present_address.upazila.en)
-        if filing == "self" and state.get("caller_phone"):
+        # The number they call from is their contact number only once we know it is
+        # theirs, or cannot check: a phone registered to someone else may be the abuser's.
+        identity = state.get("identity")
+        checked = identity in ("verified", "failed")
+        own_phone = identity != "pending" and (not checked or state.get("caller_sim_registered"))
+        if filing == "self" and state.get("caller_phone") and own_phone:
             slots.setdefault("phone", state["caller_phone"])
 
         if state.get("respondent_status") == "pending" and "respondent_name" in slots:
