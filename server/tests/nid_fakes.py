@@ -1,4 +1,4 @@
-"""A small in-memory NID registry for tests: the Karim family and two respondents."""
+"""A small in-memory NID registry for tests: the Karim family, two respondents, a couple."""
 
 from datetime import date
 
@@ -17,6 +17,7 @@ def person(
     district: tuple[str, str] = ("Rangpur", "রংপুর"),
     upazila: tuple[str, str] = ("Mithapukur", "মিঠাপুকুর"),
     sims: tuple[str, ...] = (),
+    spouse: tuple[str, str, str | None] | None = None,
 ) -> Citizen:
     place = {
         "village": {"en": "Balarhat", "bn": "বালারহাট"},
@@ -29,6 +30,9 @@ def person(
             "name": {"en": name[0], "bn": name[1]},
             "father": {"name": {"en": father[0], "bn": father[1]}, "nid": father[2]},
             "mother": {"name": {"en": mother[0], "bn": mother[1]}, "nid": mother[2]},
+            "spouse": (
+                {"name": {"en": spouse[0], "bn": spouse[1]}, "nid": spouse[2]} if spouse else None
+            ),
             "date_of_birth": born,
             "gender": gender,
             "permanent_address": place,
@@ -67,13 +71,21 @@ KAMAL = person(
     district=("Gaibandha", "গাইবান্ধা"), upazila=("Gobindaganj", "গোবিন্দগঞ্জ"),
     sims=("01911000001", "01611000002"),
 )  # fmt: skip
+JALAL_S = ("Jalal Uddin", "জালাল উদ্দিন", "4600000011")
+MOYURI_S = ("Moyuri Akter", "ময়ূরী আক্তার", "4600000012")
 JALAL = person(
-    "4600000011", ("Jalal Uddin", "জালাল উদ্দিন"), father=("Kashem Ali", "কাশেম আলী", None),
+    "4600000011", JALAL_S[:2], father=("Kashem Ali", "কাশেম আলী", None),
     mother=("Rokeya Begum", "রোকেয়া বেগম", None), born="1990-02-02", gender="male",
-    upazila=("Pirgachha", "পীরগাছা"), sims=("01722000333",),
+    upazila=("Pirgachha", "পীরগাছা"), sims=("01722000333",), spouse=MOYURI_S,
+)  # fmt: skip
+# Jalal's wife. She has no SIM of her own: she calls from his phone.
+MOYURI = person(
+    "4600000012", MOYURI_S[:2], father=("Abdul Hamid", "আব্দুল হামিদ", None),
+    mother=("Nurjahan Begum", "নূরজাহান বেগম", None), born="1997-02-14", gender="female",
+    upazila=("Pirgachha", "পীরগাছা"), spouse=JALAL_S,
 )  # fmt: skip
 
-EVERYONE = (KARIM, RAHIMA, RAFIQ, SHIRIN, KAMAL, JALAL)
+EVERYONE = (KARIM, RAHIMA, RAFIQ, SHIRIN, KAMAL, JALAL, MOYURI)
 
 
 def similar(said: str, recorded: Localized) -> bool:
@@ -113,6 +125,10 @@ class FakeRegistry:
 
         return [c for c in self.citizens.values() if fits(c)]
 
+    def citizen(self, nid: str) -> Citizen | None:
+        self.calls.append("citizen")
+        return None if self.down else self.citizens.get(nid)
+
     def family(self, nid: str) -> Family | None:
         self.calls.append("family")
         if self.down:
@@ -122,12 +138,17 @@ class FakeRegistry:
         return Family(
             father=self.citizens.get(me.father.nid or ""),
             mother=self.citizens.get(me.mother.nid or ""),
+            spouse=self.citizens.get(me.spouse.nid or "") if me.spouse else None,
             siblings=[
                 c
                 for c in self.citizens.values()
                 if c.nid != nid and parents & {c.father.nid, c.mother.nid}
             ],
+            children=[c for c in self.citizens.values() if nid in (c.father.nid, c.mother.nid)],
         )
 
     def sim_owner(self, msisdn: str) -> str | None:
+        self.calls.append("sim_owner")
+        if self.down:
+            return None
         return next((c.nid for c in self.citizens.values() if msisdn in c.phones), "")

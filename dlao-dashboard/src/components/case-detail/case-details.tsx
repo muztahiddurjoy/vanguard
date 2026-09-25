@@ -15,12 +15,19 @@ export function CaseDetails({
   const sensitive = c.flags.includes("sensitive")
   const lawyer = c.lawyer && PANEL_LAWYERS.find((l) => l.id === c.lawyer!.id)
   const identity = c.identity
+  // Confirming a caller by their SIM is weaker than by the security questions: say so.
+  const verifiedBy = identity?.callerVerified ? (identity.callerVerifiedBy ?? "answers") : undefined
+  const callerText = {
+    answers: identity?.filingFor !== "self" ? t.identity.callerVerified : "",
+    sim: t.identity.callerVerifiedBySim,
+    simFamily: t.identity.callerVerifiedBySimFamily,
+  }
   const identityText =
     identity &&
     [
       identity.applicantVerified ? t.identity.verified : t.identity.notVerified,
-      identity.callerVerified && identity.filingFor !== "self" ? t.identity.callerVerified : "",
-      identity.callerSimRegistered ? t.identity.simRegistered : "",
+      verifiedBy ? callerText[verifiedBy] : "",
+      identity.callerSimRegistered && verifiedBy !== "sim" ? t.identity.simRegistered : "",
     ]
       .filter(Boolean)
       .join(" · ")

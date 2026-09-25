@@ -4,6 +4,7 @@ from functools import lru_cache
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,8 +47,10 @@ class Settings(BaseSettings):
     openai_realtime_url: str = "wss://api.openai.com/v1/realtime?intent=transcription"
 
     # Our own voice activity detection on call audio (gpt-live-transcribe has none).
-    # A turn ends after this much silence.
+    # A turn ends after this much silence; while the caller is telling what happened
+    # (before any question), after the longer pause, since a story has pauses in it.
     stt_end_of_turn_ms: int = 700
+    stt_story_end_of_turn_ms: int = 1200
     # Loudness (RMS of 16-bit samples) below which audio never counts as speech.
     # Raise it if line noise interrupts the replies; lower it for quiet callers.
     stt_min_speech_rms: int = 500
@@ -58,8 +61,18 @@ class Settings(BaseSettings):
 
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
-    elevenlabs_model_id: str = "eleven_flash_v2_5"
-    elevenlabs_ws_base: str = "wss://api.elevenlabs.io"
+    # Must speak the line's language: eleven_v3 has Bangla; the flash and turbo
+    # models do not (they read Bangla script with a Hindi accent).
+    elevenlabs_model_id: str = "eleven_v3"
+    elevenlabs_base_url: str = "https://api.elevenlabs.io"
+    # A reply with no audio after this long is requested again (0 turns it off).
+    elevenlabs_first_audio_timeout_s: float = 2.5
+    # How much faster than generated the line speaks, at the same pitch. Done on our
+    # side (services.audio.TempoChanger): eleven_v3 ignores ElevenLabs' own speed.
+    voice_speed: float = Field(default=1.2, ge=0.5, le=2.0)
+    # Audio held back at the start of each reply so the line plays it without gaps
+    # (eleven_v3 streams in bursts). 0 sends audio as it comes.
+    voice_start_buffer_s: float = Field(default=0.6, ge=0.0, le=3.0)
 
     adnsms_api_key: str = ""
     adnsms_api_secret: str = ""

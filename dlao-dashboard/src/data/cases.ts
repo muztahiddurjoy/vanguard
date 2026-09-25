@@ -117,13 +117,13 @@ export const INITIAL_CASES: LegalCase[] = [
     trackingToken: "5307-2291",
     filerReceipt: { status: "blocked" },
     callNotes: [
-      { at: hoursAgo(1), topic: "filing_for", text: "নিজের জন্য" },
-      { at: hoursAgo(1), topic: "caller_name", text: "আমার নাম পারভীন" },
       {
         at: hoursAgo(1),
-        topic: "father_name",
+        topic: "problem",
         text: "আমার স্বামী কাল থেকে আমাকে ঘরে আটকে রেখেছে, বের হতে দিচ্ছে না",
       },
+      { at: hoursAgo(1), topic: "filing_for", text: "নিজের জন্য" },
+      { at: hoursAgo(1), topic: "caller_name", text: "আমার নাম পারভীন" },
     ],
   },
   {
@@ -200,12 +200,12 @@ export const INITIAL_CASES: LegalCase[] = [
       notice: { status: "held", reasons: ["sensitive", "callerDidNotAgree"] },
     },
     callNotes: [
-      { at: hoursAgo(20), topic: "filing_for", text: "I am calling for my neighbour Moyuri." },
       {
         at: hoursAgo(20),
         topic: "problem",
-        text: "Her husband beats her. Two days ago she had bruises all over her arms.",
+        text: "My neighbour's husband beats her. Two days ago she had bruises all over her arms.",
       },
+      { at: hoursAgo(20), topic: "filing_for", text: "I am calling for my neighbour Moyuri." },
       { at: hoursAgo(20), topic: "notify_respondent", text: "No, please don't tell him yet." },
       {
         at: hoursAgo(20),
@@ -424,6 +424,13 @@ export const INITIAL_CASES: LegalCase[] = [
         bn: "সংবেদনশীল মামলা: যৌতুকের জন্য হয়রানি।",
       },
     },
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: true,
+      callerVerifiedBy: "simFamily",
+      callerSimRegistered: false,
+    },
   },
   {
     id: "APP-2026-027",
@@ -495,13 +502,13 @@ export const INITIAL_CASES: LegalCase[] = [
       notice: { status: "sent" },
     },
     callNotes: [
-      { at: hoursAgo(9), topic: "filing_for", text: "আমার মায়ের জন্য" },
-      { at: hoursAgo(9), topic: "caller_name", text: "আমার নাম আরিফ হোসেন" },
       {
         at: hoursAgo(9),
         topic: "problem",
         text: "বাবা গত বছর মাকে তালাক দিয়েছেন। সালিশে দেনমোহর আর আমার ছোট বোনের খরচ দিতে বলা হয়েছিল, কিন্তু কিছুই দেননি।",
       },
+      { at: hoursAgo(9), topic: "filing_for", text: "আমার মায়ের জন্য" },
+      { at: hoursAgo(9), topic: "caller_name", text: "আমার নাম আরিফ হোসেন" },
       { at: hoursAgo(9), topic: "respondent_name", text: "সোহরাব আলী, আমার বাবা" },
       { at: hoursAgo(9), topic: "notify_respondent", text: "হ্যাঁ, পাঠান" },
     ],

@@ -76,7 +76,9 @@ async def voice(request: Request, lang: str = "bn", line: str = "intake") -> Res
         public_url(request.url.path, request.url.query),
         form,
     )
-    if not ElevenLabsTTS().configured:
+    # Without a working voice the caller would hear silence: say so instead.
+    broken = str(getattr(request.app.state, "voice", "")).startswith("error")
+    if broken or not ElevenLabsTTS().configured:
         return twiml(f'<Say language="en-IN">{escape(UNAVAILABLE)}</Say><Hangup/>')
     language = "en" if lang == "en" else "bn"
     params = f'<Parameter name="language" value={quoteattr(language)}/>'

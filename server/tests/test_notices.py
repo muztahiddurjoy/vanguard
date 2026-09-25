@@ -36,13 +36,13 @@ def call(client, *utterances: str, caller: str | None = None) -> dict:
     return body
 
 
+WAGES = "My employer has not paid my wages for three months"
 RAFIQ_SELF = ("for myself", "Rafiqul Islam", "Md Abdul Karim", "Rangpur", "2 June 1994")
-WAGES = ("My employer has not paid my wages for three months", "Kamal Hossain", "Abdul Hamid",
-         "Gaibandha")  # fmt: skip
+KAMAL = ("Kamal Hossain", "Abdul Hamid", "Gaibandha")
 
 
 def test_filer_gets_token_and_respondent_gets_notice_on_every_registered_sim(client, db, sms):
-    last = call(client, *RAFIQ_SELF, *WAGES, "yes", "after 5 pm", caller="01811223344")
+    last = call(client, WAGES, *RAFIQ_SELF, *KAMAL, "yes", "after 5 pm", caller="01811223344")
     assert last["complete"] is True
     case = db.scalars(select(Case)).one()
     token = format_token(case.tracking_token or "")
@@ -74,7 +74,7 @@ def test_filer_gets_token_and_respondent_gets_notice_on_every_registered_sim(cli
 
 
 def test_respondent_notice_is_held_when_the_caller_says_not_now(client, db, sms):
-    call(client, *RAFIQ_SELF, *WAGES, "no, not now", "after 5 pm", caller="01811223344")
+    call(client, WAGES, *RAFIQ_SELF, *KAMAL, "no, not now", "after 5 pm", caller="01811223344")
     case = db.scalars(select(Case)).one()
     assert case.notices["respondent"]["status"] == "held"
     assert case.notices["respondent"]["reasons"] == ["callerDidNotAgree"]
@@ -84,8 +84,8 @@ def test_respondent_notice_is_held_when_the_caller_says_not_now(client, db, sms)
 
 
 def test_family_filing_sends_the_token_to_the_relative_who_called(client, db, sms):
-    call(client, "for my mother", "Rafiqul Islam", "Md Abdul Karim", "Rangpur", "2 June 1994",
-         "Rahima Khatun", "Her brother took her land by force", "no one", "01711000999",
+    call(client, "Her brother took my mother's land by force", "for my mother", "Rafiqul Islam",
+         "Md Abdul Karim", "Rangpur", "2 June 1994", "Rahima Khatun", "no one", "01711000999",
          "mornings", caller="01811223344")  # fmt: skip
     case = db.scalars(select(Case)).one()
     assert case.applicant is not None and case.applicant.phone == "01711000999"
@@ -94,8 +94,8 @@ def test_family_filing_sends_the_token_to_the_relative_who_called(client, db, sm
 
 
 def test_hostage_caller_gets_no_sms_at_all(client, db, sms):
-    call(client, "for myself", "Rafiqul Islam", "Md Abdul Karim", "Rangpur", "2 June 1994",
-         "My wife's brothers locked me in a room", "Kamal Hossain", "Abdul Hamid",
+    call(client, "My wife's brothers locked me in a room", "for myself", "Rafiqul Islam",
+         "Md Abdul Karim", "Rangpur", "2 June 1994", "Kamal Hossain", "Abdul Hamid",
          "Gaibandha", "anytime", caller="01811223344")  # fmt: skip
     case = db.scalars(select(Case)).one()
     assert case.do_not_call_reason == "hostage"

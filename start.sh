@@ -313,6 +313,11 @@ import json, sys
 h = json.load(sys.stdin)
 print(h["llm"], h["llm_provider"], h["speech_to_text"], h["sms_dry_run"])
 ' <<<"$health")
+# "ok", "off", "error: <what to fix>" or "unchecked: <why>" (checked at startup).
+voice=$(env -u PYTHONPATH "$ROOT/server/.venv/bin/python" -c '
+import json, sys
+print(json.load(sys.stdin).get("voice", "off"))
+' <<<"$health")
 
 on() { [[ $1 == True ]] && printf '%son%s' "$GREEN" "$RESET" || printf 'off'; }
 
@@ -347,6 +352,12 @@ else
 	row "AI agents" "rule-based (no $provider key)"
 fi
 row "Speech-to-text" "$(on "$stt")"
+case $voice in
+ok) row "Voice" "$(on True) (ElevenLabs)" ;;
+off) row "Voice" "off: callers only hear that the line cannot take calls" ;;
+unchecked*) row "Voice" "${YELLOW}not checked: ${voice#unchecked: }${RESET}" ;;
+*) row "Voice" "${RED}${BOLD}NOT WORKING: ${voice#error: }${RESET}" ;;
+esac
 if [[ $dry_run == True ]]; then
 	row "SMS" "dry run (nothing is sent)"
 else

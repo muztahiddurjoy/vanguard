@@ -1,11 +1,14 @@
-"""Telephone audio helpers: G.711 μ-law, resampling and voice activity detection.
+"""Telephone audio helpers: G.711 μ-law, resampling, voice activity detection, tempo.
 
 Twilio streams the caller as μ-law at 8 kHz in 20 ms frames. Speech-to-text
 wants 16-bit PCM at 24 kHz and, for ``gpt-live-transcribe``, the caller's
 turns marked by the client, since that model has no voice detection of its
-own. Pure Python on purpose: a call is 50 small frames a second.
+own. The line's own voice can be sped up without raising its pitch
+(``TempoChanger``). Pure Python on purpose: a call is 50 small frames a second.
 """
 
+import math
+import operator
 import sys
 from array import array
 from collections import deque
@@ -141,6 +144,10 @@ class VoiceActivityDetector:
         floor = self._floor or 0.0
         return max(self.min_speech_rms, floor * self.NOISE_FACTOR)
 
+    def set_end_ms(self, end_ms: int) -> None:
+        """How much quiet ends a turn from now on (a turn in progress included)."""
+        self.end_frames = max(1, end_ms // FRAME_MS)
+
     def frame(self, samples: Sequence[int]) -> VadDecision:
         level = rms(samples)
         loud = level >= self.threshold
@@ -167,3 +174,115 @@ class VoiceActivityDetector:
             self._floor = level
         else:
             self._floor += (level - self._floor) * self.FLOOR_RISE
+
+
+def _clip16(value: float) -> int:
+    return max(-32768, min(32767, round(value)))
+
+
+class TempoChanger:
+    """Speech ``rate`` times faster (or slower) at the same pitch, chunk by chunk.
+
+    WSOLA: the output is laid down in 30 ms Hann windows every 15 ms, cut from
+    the input every ``rate`` x 15 ms. Each cut is moved by up to ``SEEK``
+    samples to where its waveform best continues the previous cut, so the
+    overlaps never break a pitch period (which is what makes a naive speed-up
+    warble). The first cut is kept whole, and ``flush()`` returns the rest of
+    the input once the stream has ended. ``rate`` may change between chunks.
+    """
+
+    WINDOW = 240  # 30 ms at 8 kHz
+    HOP = WINDOW // 2  # periodic Hann windows at half overlap add up to one
+    SEEK = 64  # 8 ms either way: half the pitch period of the deepest voices
+
+    def __init__(self, rate: float):
+        self.rate = rate
+        self._window = [
+            0.5 - 0.5 * math.cos(2 * math.pi * i / self.WINDOW) for i in range(self.WINDOW)
+        ]
+        self._reset()
+
+    def _reset(self) -> None:
+        self._input = array("h")  # input still needed; _start is its first sample's index
+        self._start = 0
+        self._nominal = 0.0  # where the next cut would start at exactly ``rate``
+        self._last: int | None = None  # where the last cut started
+        self._tail: list[float] = []  # the last cut's second half, faded out
+
+    @property
+    def rate(self) -> float:
+        return self._rate
+
+    @rate.setter
+    def rate(self, rate: float) -> None:
+        if not 0.5 <= rate <= 2.0:
+            raise ValueError("rate must be between 0.5 and 2")
+        self._rate = rate
+
+    def process(self, samples: Sequence[int]) -> array:
+        """The output ready so far, given the next 16-bit ``samples``."""
+        if self.rate == 1.0 and self._last is None and not self._input:
+            return array("h", samples)  # nothing in progress: nothing to change
+        self._input.extend(samples)
+        out = array("h")
+        while self._start + len(self._input) >= self._needed():
+            out.extend(self._cut())
+        return out
+
+    def flush(self) -> array:
+        """The rest of the output once the input has ended; the changer starts over."""
+        # From the middle of the last cut on, the input itself: its fade-in exactly
+        # completes the faded-out tail.
+        begin = 0 if self._last is None else self._last + self.HOP - self._start
+        rest = self._input[begin:]
+        self._reset()
+        return rest
+
+    def _needed(self) -> int:
+        """How far the input must reach before the next cut can be made."""
+        if self._last is None:
+            return self.WINDOW
+        return round(self._nominal) + self.SEEK + self.WINDOW
+
+    def _cut(self) -> list[int]:
+        hop, window = self.HOP, self._window
+        if self._last is None:
+            at = 0
+            head = [float(s) for s in self._input[:hop]]
+        else:
+            at = self._best_cut()
+            i = at - self._start
+            head = [
+                t + w * s
+                for t, w, s in zip(self._tail, window[:hop], self._input[i : i + hop], strict=True)
+            ]
+        i = at - self._start
+        second = self._input[i + hop : i + self.WINDOW]
+        self._tail = [w * s for w, s in zip(window[hop:], second, strict=True)]
+        self._last = at
+        self._nominal += self.rate * hop
+        keep = min(round(self._nominal) - self.SEEK, at + hop)
+        if keep > self._start:
+            del self._input[: keep - self._start]
+            self._start = keep
+        return [_clip16(v) for v in head]
+
+    def _best_cut(self) -> int:
+        """The start near the nominal one whose opening best continues the last cut."""
+        assert self._last is not None
+        hop = self.HOP
+        centre = round(self._nominal)
+        lo, hi = max(centre - self.SEEK, self._start), centre + self.SEEK
+        ref_at = self._last + hop - self._start
+        ref = self._input[ref_at : ref_at + hop]
+
+        def score(at: int, step: int) -> int:
+            i = at - self._start
+            return sum(map(operator.mul, ref[::step], self._input[i : i + hop : step]))
+
+        # Every other start on every other sample, then its neighbours in full.
+        coarse = max(range(lo, hi + 1, 2), key=lambda at: score(at, 2))
+        return max(
+            (at for at in (coarse - 1, coarse, coarse + 1) if lo <= at <= hi),
+            key=lambda at: score(at, 1),
+        )

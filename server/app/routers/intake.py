@@ -565,8 +565,10 @@ def finish_conversation(
             "identity": {
                 "filingFor": slots.get("filing_for") or "self",
                 "caller": state.get("identity"),
+                "callerVerifiedBy": state.get("identity_via"),
                 "applicant": state.get("applicant_status"),
                 "respondent": state.get("respondent_status"),
+                "respondentFoundBy": state.get("respondent_via"),
                 "callerSimRegistered": bool(state.get("caller_sim_registered")),
             },
         },

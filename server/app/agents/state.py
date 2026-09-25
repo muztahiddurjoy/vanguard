@@ -7,6 +7,9 @@ wins, as no key here declares a reducer).
 from typing import Any, Literal, TypedDict
 
 AgentKey = Literal["intake", "risk", "safety", "jurisdiction"]
+# What the caller's opening account is: something legal aid may help with, clearly
+# not (a wrong number, a question about an existing application), or not said yet.
+OpeningKind = Literal["case", "other", "unclear"]
 Weight = Literal["high", "medium", "low"]
 
 
@@ -54,8 +57,17 @@ class IntakeState(TypedDict, total=False):
     caller_phone: str | None
     # The caller's latest utterance (speech-to-text or typed).
     utterance: str
-    # Collected answers, keyed by slot name.
+    # Collected answers, keyed by slot name. "" means asked but not known.
     slots: dict[str, Any]
+    # What the caller said while we listened, before any question: their account of
+    # what happened, which becomes the "problem" once it sounds like a case.
+    story: str
+    # How often each slot has been asked without an answer ("problem": turns listened).
+    asks: dict[str, int]
+    # The model's reading of the latest turn (None without a model): what kind of call
+    # the account is, and whether it says someone is in danger right now.
+    opening_kind: OpeningKind | None
+    danger_now: bool
     # Everything the caller said: [{"at", "topic", "text"}]; kept as the case's call notes.
     notes: list[dict[str, str]]
     # The slot we last asked about, so a bare answer ("Rangpur") fills it.
@@ -64,9 +76,15 @@ class IntakeState(TypedDict, total=False):
     # NID checks: "pending" | "verified" | "failed" | "unavailable" for the caller;
     # the applicant and respondent statuses add "unverified", "not_found", "none", ...
     identity: str
+    # How a verified caller was confirmed: "answers" (the security questions), "sim"
+    # (the SIM they called from is theirs) or "sim_family" (it is a relative's).
+    identity_via: str
     verify_attempts: int
     applicant_status: str
     respondent_status: str
+    # How the respondent was found: "match" (name, father's name and district) or
+    # "family" (on the applicant's NID record, when the caller did not know the rest).
+    respondent_via: str
     # Registry records (Citizen as JSON) once matched.
     caller_record: dict[str, Any]
     applicant_record: dict[str, Any]

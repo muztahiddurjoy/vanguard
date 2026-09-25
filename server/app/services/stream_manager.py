@@ -7,8 +7,14 @@ Caller audio (μ-law 8 kHz) goes to a speech-to-text ``Transcriber``; each
 final utterance is one T5 turn; the reply is spoken back through ElevenLabs,
 whose ``ulaw_8000`` output Twilio plays as-is.
 
-- Barge-in: when the caller starts speaking over a reply, playback is
-  cleared on Twilio and the TTS stream is cancelled.
+- Barge-in: when the caller starts speaking over a reply, the TTS stream is
+  cancelled and Twilio's queued audio cleared. Audio is generated faster than
+  it plays, so a reply counts as playing until Twilio echoes its ``mark``.
+- Patience: while an intake caller is saying what happened, before any
+  question, their turn ends after a longer pause (``STT_STORY_END_OF_TURN_MS``),
+  so a story told with pauses is not answered halfway through.
+- Emergency: the 999 line is spoken at once and the application created while
+  it plays; the tracking number follows. Nothing is looked up first.
 - Ending: after the closing line has actually finished playing (Twilio echoes
   our ``mark``), the socket is closed and Twilio moves on to the TwiML after
   ``<Connect>``, which hangs up.
@@ -50,6 +56,12 @@ NO_SPEECH_INPUT = {
     "আবেদন করতে আপনার ইউনিয়ন ডিজিটাল সেন্টারে যান।",
     "en": "Sorry, we cannot take applications by phone right now. If you are in danger, call 999. "
     "To apply, please visit your Union Digital Centre.",
+}
+
+# A turn the caller spoke was lost with the speech-to-text session (it was reopened).
+SAY_AGAIN = {
+    "bn": "দুঃখিত, শেষ কথাটা শুনতে পাইনি। আরেকবার বলবেন?",
+    "en": "Sorry, I did not catch that. Could you say it again?",
 }
 
 STT_FAILED = {
@@ -105,6 +117,8 @@ class StreamManager:
         self._speak_task: asyncio.Task[None] | None = None
         self._listen_task: asyncio.Task[None] | None = None
         self._marks: dict[str, asyncio.Event] = {}
+        # The latest reply's mark until Twilio echoes it: its audio may still be playing.
+        self._playing: str | None = None
         self._reply_count = 0
         # True between the intake greeting and _finish: a hang-up then is a cut call.
         self._conversation_open = False
@@ -127,8 +141,10 @@ class StreamManager:
                     if self.transcriber and media.get("track", "inbound") == "inbound":
                         await self.transcriber.feed(base64.b64decode(media["payload"]))
                 elif event == "mark":
-                    done = self._marks.get(message["mark"]["name"])
-                    if done:
+                    name = message["mark"]["name"]
+                    if name == self._playing:
+                        self._playing = None
+                    if done := self._marks.get(name):
                         done.set()
                 elif event == "stop":
                     break
@@ -171,6 +187,7 @@ class StreamManager:
                 caller_phone=self.caller,
             )
             self._conversation_open = True
+            self._set_patience(state)
         self._listen_task = asyncio.create_task(self._listen())
         await self._speak(state["reply"])
 
@@ -179,6 +196,16 @@ class StreamManager:
         if self._helpline is None:
             self._helpline = helpline()
         return self._helpline
+
+    def _set_patience(self, state: Any) -> None:
+        """A story has pauses: wait longer for the end of a turn until it has been told."""
+        if self.transcriber is None:
+            return
+        settings = get_settings()
+        story = state.get("asking") == "problem"
+        self.transcriber.set_end_of_turn(
+            settings.stt_story_end_of_turn_ms if story else settings.stt_end_of_turn_ms
+        )
 
     def _lookup(self, token: str) -> dict[str, Any] | None:
         with self.session_factory() as db:
@@ -192,13 +219,14 @@ class StreamManager:
         self._reply_count += 1
         mark = f"reply-{self._reply_count}"
         self._marks[mark] = asyncio.Event()
+        self._playing = mark
         self._speak_task = asyncio.create_task(self._play(text, mark))
         return mark
 
     async def _play(self, text: str, mark: str) -> None:
         assert self.tts is not None
         try:
-            async with contextlib.aclosing(self.tts.stream(text)) as audio:
+            async with contextlib.aclosing(self.tts.stream(text, self.language)) as audio:
                 async for chunk in audio:
                     await self._send(
                         {
@@ -208,17 +236,22 @@ class StreamManager:
                         }
                     )
         except TTSError as exc:
-            log.error("TTS failed on call %s: %s", self.call_sid, exc)
+            log.error("The line could not speak on call %s: %s", self.call_sid, exc)
+        except Exception:
+            # Never silently: the caller hears nothing, so the reason must be in the log.
+            log.exception("The line could not speak on call %s", self.call_sid)
         await self._send({"event": "mark", "streamSid": self.stream_sid, "mark": {"name": mark}})
 
     async def _stop_speaking(self, *, clear: bool) -> None:
+        """Stop generating the reply; with ``clear``, also silence what Twilio has queued."""
         task, self._speak_task = self._speak_task, None
         if task and not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-            if clear:
-                await self._send({"event": "clear", "streamSid": self.stream_sid})
+        if clear and self._playing is not None:
+            self._playing = None
+            await self._send({"event": "clear", "streamSid": self.stream_sid})
 
     async def _wait_played(self, mark: str) -> None:
         if self._speak_task:
@@ -240,6 +273,9 @@ class StreamManager:
             if event.kind == "speech_started":
                 await self._stop_speaking(clear=True)  # barge-in
                 continue
+            if event.kind == "repeat":
+                await self._speak(SAY_AGAIN[self.language])
+                continue
             if event.kind == "error":
                 # We can no longer hear the caller: say so rather than fall silent.
                 await self._say_and_hang_up(STT_FAILED[self.language])
@@ -257,7 +293,12 @@ class StreamManager:
                 reply = state["reply"]
             else:
                 state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
+                self._set_patience(state)
                 reply = state["reply"]
+                if state.get("emergency"):
+                    log.debug("call %s: replying %r", self.call_sid, reply)
+                    await self._emergency(state)
+                    return
                 if state.get("complete"):
                     await asyncio.to_thread(self._finish, state)
                     reply = with_token(reply, self.tracking_token, self.language)
@@ -266,6 +307,23 @@ class StreamManager:
                 await self._say_and_hang_up(reply)
                 return
             await self._speak(reply)
+
+    async def _emergency(self, state: Any) -> None:
+        """The 999 line at once; the application is created while it plays.
+
+        Its tracking number follows without a pause, and then the call ends.
+        """
+        mark = await self._speak(state["reply"])
+        await asyncio.to_thread(self._finish, state)
+        if token_line := with_token("", self.tracking_token, self.language):
+            # Once the 999 line is fully sent, the number is queued right behind it:
+            # Twilio plays in order, so there is no silence for the caller to hang up in.
+            if self._speak_task:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._speak_task
+            mark = await self._speak(token_line)
+        await self._wait_played(mark)
+        await self.ws.close()
 
     def _finish(self, state: Any, *, dropped: bool = False) -> None:
         from app.routers.intake import finish_conversation
@@ -299,6 +357,9 @@ class StreamManager:
                 await self._listen_task
         if self.transcriber:
             await self.transcriber.close()
+        if self.tts is not None:
+            await self._stop_speaking(clear=False)  # a reply the listener started meanwhile
+            await self.tts.aclose()
         if self._conversation_open and self.call_sid:
             state = await asyncio.to_thread(self.intake.state, self.call_sid)
             await asyncio.to_thread(self._finish, state, dropped=True)

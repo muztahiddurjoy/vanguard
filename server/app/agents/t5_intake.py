@@ -1,23 +1,32 @@
 """T5 intake: the conversational agent on the legal aid hotline (and at UDCs).
 
-One turn = one utterance in, one reply out. Each turn the graph
+The call opens with a short greeting and then listens: nothing is asked until
+the caller has said what happened, because a frightened caller, or one in
+danger, needs to be heard before any form is filled in. One turn = one
+utterance in, one reply out. Each turn the graph
 
-1. ``extract``: pulls answers out of the utterance (rules first; Claude, if
-   configured, for free-form speech) and keeps a note of what was said;
+1. ``extract``: pulls answers out of the utterance (rules first; the model,
+   if configured, for free-form speech) and keeps a note of what was said;
 2. ``check_danger``: listens for immediate danger and for signs that the
    caller is being held;
-3. ``resolve``: checks the NID registry once enough is known: the caller's
+3. ``listen``: while the caller is saying what happened, decides whether it
+   sounds like a case yet; until it does, it only encourages them to go on;
+4. ``resolve``: checks the NID registry once enough is known: the caller's
    identity, the relative they are applying for, and the person the
    complaint is against;
-4. ``respond``: asks the next question.
+5. ``respond``: asks the next question, skipping anything already said.
 
 A caller cannot read out a 10- or 17-digit NID on a call, so they give their
 name and answer security questions only they should know (father's name,
-permanent district and date of birth, as on their NID). They may apply for
-themselves or for their father, mother, brother or sister: the relative is
-confirmed through the registry's parent links. When the registry cannot
-confirm someone, intake carries on and the application is marked unverified;
-nobody is turned away.
+permanent district and date of birth, as on their NID). When they cannot
+answer, or their answers match no one twice, the registry is searched
+instead: the SIM they are calling from is registered to an NID, and if the
+name they gave is that person's, or a family member's on their NID record
+(a wife calling on her husband's phone), they are confirmed. They may apply
+for themselves or for their father, mother, brother or sister: the relative
+is confirmed through the registry's parent links. When the registry cannot
+confirm someone, intake carries on and the application is marked
+unverified; nobody is turned away.
 
 The questions are short and plain because callers may be frightened, may be
 calling for someone else, and may be overheard. Conversation state is kept by
@@ -45,11 +54,18 @@ from app.agents.spoken import (
     name_similarity,
     parse_date,
     say_digits,
+    sound_words,
     words,
     yes_or_no,
 )
-from app.agents.state import IntakeState
-from app.agents.t8_triage import PHONE_MONITORED, categorize_by_rules, find_hostage_sign
+from app.agents.state import IntakeState, OpeningKind
+from app.agents.t8_triage import (
+    PHONE_MONITORED,
+    categorize_by_rules,
+    find_hostage_sign,
+    has_risk_sign,
+)
+from app.config import get_settings
 from app.database import utcnow
 from app.services.adnsms import normalize_bd_mobile
 from app.services.nid_registry import Citizen, NidRegistry, default_registry
@@ -57,7 +73,9 @@ from app.services.nid_registry import Citizen, NidRegistry, default_registry
 FilingFor = Literal["self", "father", "mother", "sibling", "other"]
 
 # Asked in this order; a slot is skipped once filled or when not needed (see ``needed``).
+# "problem" is not a question: it is what the caller says after the greeting.
 SLOTS = (
+    "problem",
     "filing_for",
     "caller_name",
     "father_name",
@@ -65,7 +83,6 @@ SLOTS = (
     "date_of_birth",
     "name",
     "district",
-    "problem",
     "respondent_name",
     "respondent_father_name",
     "respondent_district",
@@ -76,7 +93,15 @@ SLOTS = (
 IDENTITY_SLOTS = ("father_name", "permanent_district", "date_of_birth")
 REQUIRED = {"name", "phone", "district", "problem"}
 MAX_TURNS = 24
+# Turns spent listening for what happened before we either take it as it is or give up.
+MAX_LISTENS = 3
+# An account this long (not counting "hello"s) is taken as a case even with no keywords.
+STORY_WORDS = 6
 MAX_VERIFY_ATTEMPTS = 2
+# A question not understood this many times is not asked again: it is recorded as
+# not known (or as below), and an officer follows up.
+MAX_ASKS = 2
+GIVEN_UP: dict[str, Any] = {"filing_for": "self", "notify_respondent": False}
 # Name similarity (0-100) for accepting a relative found through NID parent links.
 FAMILY_MATCH = 85
 
@@ -107,7 +132,6 @@ QUESTIONS: dict[str, Text] = {
         "What is your date of birth according to your NID?",
         "এনআইডি অনুযায়ী আপনার জন্ম তারিখ কত?",
     ),
-    "problem": _t("Briefly, what has happened?", "সংক্ষেপে বলুন, কী সমস্যা হয়েছে?"),
     "respondent_name": _t(
         "Who is the complaint against? Tell me their name, or say 'no one'.",
         "অভিযোগটি কার বিরুদ্ধে? তাঁর নাম বলুন, কেউ না থাকলে বলুন 'কেউ না'।",
@@ -161,6 +185,36 @@ RELATION_WORDS: dict[str, Text] = {
     "sibling": _t("brother or sister", "ভাই বা বোন"),
 }
 SIBLING_WORDS: dict[str, Text] = {"male": _t("brother", "ভাই"), "female": _t("sister", "বোন")}
+
+GREETING = _t(
+    "Legal aid. I'm listening, tell me what happened.", "লিগ্যাল এইড। আমি শুনছি, বলুন কী হয়েছে।"
+)
+# The caller has not said what happened yet ("hello?", a fragment).
+KEEP_LISTENING = _t("I'm listening. Tell me, what happened?", "আমি শুনছি। বলুন, কী হয়েছে?")
+HEARD = _t(
+    "Thank you for telling me. I will ask a few short questions.",
+    "বুঝেছি, ধন্যবাদ। কয়েকটি ছোট প্রশ্ন করব।",
+)
+# The model heard something that is not a legal problem (a wrong number, a question
+# about an application already made): say what the line is for, and keep listening.
+NOT_LEGAL = _t(
+    "This line takes applications for legal aid, for problems like family, land, work or "
+    "violence. To ask about an application you made, call {helpline}. "
+    "If you need legal help, tell me what happened.",
+    "এই লাইনে আইনি সহায়তার আবেদন নেওয়া হয়, যেমন পরিবার, জমি, কাজ বা নির্যাতনের সমস্যায়। "
+    "আগের আবেদনের খোঁজ নিতে {helpline} নম্বরে ফোন করুন। আইনি সহায়তা দরকার হলে বলুন, কী হয়েছে।",
+)
+CLOSING_NOT_LEGAL = _t(
+    "Thank you for calling. If you need legal help, call this number again. "
+    "To ask about an application you made, call {helpline}.",
+    "ফোন করার জন্য ধন্যবাদ। আইনি সহায়তা দরকার হলে এই নম্বরে আবার ফোন করুন। "
+    "আগের আবেদনের খোঁজ নিতে {helpline} নম্বরে ফোন করুন।",
+)
+CLOSING_UNHEARD = _t(
+    "Sorry, I could not understand what happened. Please call again. "
+    "If you are in danger, call 999.",
+    "দুঃখিত, কী হয়েছে বুঝতে পারিনি। আবার ফোন করুন। বিপদে থাকলে ৯৯৯ নম্বরে ফোন করুন।",
+)
 
 VERIFIED = _t(
     "Thank you, {name}. Your identity is confirmed.", "ধন্যবাদ, {name}। আপনার পরিচয় নিশ্চিত হয়েছে।"
@@ -219,6 +273,14 @@ HOSTAGE_ACK = _t(
     "আপনাকে এখন আটকে রাখা হলে যত দ্রুত সম্ভব ৯৯৯ নম্বরে ফোন করুন। আমরা এই নম্বরে ফোন করব না।",
 )
 
+# What people say on a line before they say anything: none of it is an account.
+FILLER_WORDS = {
+    "hello", "hallo", "helo", "hi", "yes", "yeah", "ok", "okay", "hmm", "um", "uh", "ah",
+    "sir", "madam", "can", "you", "hear", "me", "is", "anyone", "there",
+    "হ্যালো", "হ্যাঁ", "হ্যা", "জি", "জ্বি", "আচ্ছা", "শুনছেন", "শুনতে", "পাচ্ছেন", "পারছেন",
+    "স্যার", "ম্যাডাম", "আপা", "ভাই", "আসসালামু", "আলাইকুম", "সালাম", "নমস্কার", "কেউ", "আছেন",
+}  # fmt: skip
+
 TOKEN_LINE = _t(
     "Your tracking number is {digits}. Please note it down.",
     "আপনার ট্র্যাকিং নম্বর {digits}। নম্বরটি লিখে রাখুন।",
@@ -259,6 +321,30 @@ _RESPONDENT_FILLER = {
     "complaint", "factory", "company", "আমার", "তার", "তাঁর", "ওর", "বিরুদ্ধে", "নাম", "অভিযোগ",
     "কারখানার", "কোম্পানির",
 }  # fmt: skip
+
+
+def substance(text: str) -> int:
+    """How many words of ``text`` say something ("hello, can you hear me?" says nothing)."""
+    return sum(1 for w in words(text) if w not in FILLER_WORDS)
+
+
+def names_a_problem(text: str) -> bool:
+    """A problem legal aid knows (land, wages, dowry, ...) or a warning sign."""
+    return (
+        categorize_by_rules(text)[0] is not None
+        or has_risk_sign(text)
+        or has_any(text, DANGER_TERMS)
+    )
+
+
+def sounds_like_case(text: str) -> bool:
+    """Whether the caller has said what happened, by rules alone.
+
+    Either a known problem or warning sign, or simply an account of some
+    length. "I need help" or "my husband" is not yet: the caller is encouraged
+    to go on rather than questioned.
+    """
+    return substance(text) >= STORY_WORDS or names_a_problem(text)
 
 
 def filing_for_from(utterance: str) -> FilingFor | None:
@@ -316,9 +402,6 @@ def extract_by_rules(utterance: str, asking: str | None) -> dict[str, Any]:
                 found["date_of_birth"] = born.isoformat()
             elif unknown:
                 found["date_of_birth"] = ""
-        case "problem":
-            if len(utterance.split()) >= 3:
-                found["problem"] = utterance.strip()
         case "respondent_name":
             if unknown or has_word(utterance, NO_ONE):
                 found["respondent_name"] = ""
@@ -334,9 +417,7 @@ def extract_by_rules(utterance: str, asking: str | None) -> dict[str, Any]:
         case "safe_to_call":
             found["safe_to_call"] = utterance.strip()
     # Where the applicant lives, when it comes up while we ask about them.
-    if asking in (None, "district", "name", "problem", "phone") and (
-        district := find_district(utterance)
-    ):
+    if asking in (None, "district", "name", "phone") and (district := find_district(utterance)):
         found["district"] = district
     return found
 
@@ -371,6 +452,24 @@ class LLMSlots(BaseModel):
     )
     safe_to_call: str | None = Field(None, description="When it is safe to call back")
     phone_monitored: bool | None = Field(None, description="Someone checks their phone")
+    danger_now: bool | None = Field(
+        None,
+        description="True only if someone is in danger right now or about to be hurt "
+        "(being beaten now, the abuser is there now, threatened with death now); "
+        "not for harm that happened before",
+    )
+
+
+class LLMOpening(LLMSlots):
+    """The caller's account before any question: the details, and what kind of call it is."""
+
+    kind: OpeningKind = Field(
+        description="'case': a problem a legal aid office may help with (family, marriage, "
+        "dowry, violence, land, property, work or wages, money, harassment, custody, a court "
+        "or police matter), however vaguely told; 'other': clearly not a legal problem, a "
+        "wrong number, or a question about an application already made; 'unclear': they "
+        "have not yet said what happened (greetings, 'can you hear me', a fragment)"
+    )
 
 
 EXTRACT_SYSTEM = (
@@ -378,6 +477,11 @@ EXTRACT_SYSTEM = (
     "(Bangla, English or mixed, transcribed from speech). The caller may apply for "
     "themselves or for a relative. Return only details the caller actually stated in this "
     "turn; leave the rest null. Never guess names, dates or numbers."
+)
+OPENING_SYSTEM = (
+    f"{EXTRACT_SYSTEM} This is the caller's own account, given before any question. "
+    "Also say what kind of call it is (when in doubt it is a case: nobody who may need "
+    "help is turned away) and whether anyone is in danger right now."
 )
 
 
@@ -429,12 +533,31 @@ def _join(*parts: str | None) -> str:
     return " ".join(p for p in parts if p)
 
 
+def _categorized(slots: dict[str, Any]) -> None:
+    if slots.get("problem") and "category" not in slots:
+        category, confidence = categorize_by_rules(slots["problem"])
+        if category:
+            slots["category"] = category
+            slots["category_confidence"] = confidence
+
+
 def _citizen(raw: dict[str, Any] | None) -> Citizen | None:
     return Citizen.model_validate(raw) if raw else None
 
 
 def _name_in(c: Citizen, lang: Lang) -> str:
     return c.name.bn if lang == "bn" else c.name.en
+
+
+def _named(said: str, c: Citizen) -> bool:
+    """Whether ``said`` names this relative: closely, or by part of their name ("Jalal").
+
+    Only for the handful of people on one NID record, never a registry-wide search.
+    """
+    if name_similarity(said, c.name.en, c.name.bn) >= FAMILY_MATCH:
+        return True
+    given = set(sound_words(said))
+    return bool(given) and any(given <= set(sound_words(n)) for n in (c.name.en, c.name.bn))
 
 
 def build_intake_graph(
@@ -446,17 +569,36 @@ def build_intake_graph(
         utterance = state.get("utterance", "")
         slots = dict(state.get("slots") or {})
         asking = state.get("asking")
-        found = extract_by_rules(utterance, asking)
+        # While we listen, everything said so far is read together as one account,
+        # and never as the answer to a question. A "hello" adds nothing to it.
+        listening = asking == "problem"
+        story = state.get("story", "")
+        new_words = substance(utterance) > 0 if listening else bool(utterance.strip())
+        if listening and new_words:
+            story = _join(story, utterance.strip())
+        found = extract_by_rules(story, None) if listening else extract_by_rules(utterance, asking)
 
-        if llm is not None and utterance.strip():
-            context = f"We had just asked about: {asking}." if asking else ""
+        # The model's reading of this turn, when there is one. Not when the rules already
+        # hear immediate danger: the 999 line must not wait for it.
+        danger_now, kind = False, None
+        if llm is not None and new_words and not has_any(utterance, DANGER_TERMS):
+            if listening:
+                context = "The caller is saying what happened, in their own words."
+            else:
+                context = f"We had just asked about: {asking}." if asking else ""
+            said = story if listening else utterance
             result = llm.structured(
-                system=EXTRACT_SYSTEM,
-                content=f"{context}\n<utterance>\n{utterance}\n</utterance>",
-                schema=LLMSlots,
+                system=OPENING_SYSTEM if listening else EXTRACT_SYSTEM,
+                content=f"{context}\n<utterance>\n{said}\n</utterance>",
+                schema=LLMOpening if listening else LLMSlots,
             )
             if result is not None:
-                for key, value in _llm_values(result.model_dump(exclude_none=True)).items():
+                values = result.model_dump(exclude_none=True)
+                danger_now = bool(values.pop("danger_now", False))
+                kind = values.pop("kind", None) if listening else None
+                for key, value in _llm_values(values).items():
+                    if listening and key == "problem":
+                        continue  # the caller's own words are kept, not a summary
                     # Rules win: their answers are validated formats.
                     found.setdefault(key, value)
 
@@ -467,11 +609,7 @@ def build_intake_graph(
             if key in IDENTITY_SLOTS and verified_already:
                 continue
             slots[key] = value
-        if "problem" in slots and "category" not in slots:
-            category, confidence = categorize_by_rules(slots["problem"])
-            if category:
-                slots["category"] = category
-                slots["category_confidence"] = confidence
+        _categorized(slots)
 
         notes = list(state.get("notes") or [])
         if utterance.strip():
@@ -482,11 +620,18 @@ def build_intake_graph(
                     "text": utterance.strip(),
                 }
             )
-        return {"slots": slots, "notes": notes, "turns": state.get("turns", 0) + 1}
+        return {
+            "slots": slots,
+            "notes": notes,
+            "turns": state.get("turns", 0) + 1,
+            "story": story,
+            "danger_now": danger_now,
+            "opening_kind": kind,
+        }
 
     def check_danger(state: IntakeState) -> IntakeState:
         utterance = state.get("utterance", "")
-        emergency = has_any(utterance, DANGER_TERMS)
+        emergency = has_any(utterance, DANGER_TERMS) or bool(state.get("danger_now"))
         held = find_hostage_sign(utterance) is not None
         update: IntakeState = {
             "emergency": emergency,
@@ -496,34 +641,106 @@ def build_intake_graph(
             update["ack"] = HOSTAGE_ACK[state.get("language", "bn")]
         return update
 
+    def listen(state: IntakeState) -> IntakeState:
+        """Hear the caller out: ask nothing until what they said sounds like a case."""
+        utterance = state.get("utterance", "")
+        if state.get("asking") != "problem" or not utterance.strip():
+            return {}
+        story = state.get("story", "")
+        if state.get("emergency"):
+            # No time for anything else, but what they said is the application's account.
+            slots = {**(state.get("slots") or {}), "problem": story}
+            _categorized(slots)
+            return {"slots": slots} if story else {}
+        lang = state.get("language", "bn")
+        asks = dict(state.get("asks") or {})
+        asks["problem"] = heard = asks.get("problem", 0) + 1
+        # The model decides when it has read the account, but a problem the rules
+        # know is never turned away.
+        kind = state.get("opening_kind")
+        told = sounds_like_case(story) if kind is None else kind == "case" or names_a_problem(story)
+        # After a few tries a short account is taken as it is: an officer can follow up.
+        if told or (heard >= MAX_LISTENS and kind != "other" and substance(story) >= 3):
+            slots = {**(state.get("slots") or {}), "problem": story}
+            _categorized(slots)
+            return {"slots": slots, "asks": asks, "ack": _join(state.get("ack"), HEARD[lang])}
+        helpline = say_digits(get_settings().helpline_number, lang)
+        if heard >= MAX_LISTENS:
+            closing = CLOSING_NOT_LEGAL if kind == "other" else CLOSING_UNHEARD
+            reply = closing[lang].format(helpline=helpline)
+            return {"asks": asks, "reply": reply, "complete": True, "asking": None, "ack": ""}
+        nudge = NOT_LEGAL if kind == "other" else KEEP_LISTENING
+        return {"asks": asks, "ack": nudge[lang].format(helpline=helpline)}
+
+    def confirmed(state: IntakeState, caller: Citizen, via: str, lang: Lang) -> IntakeState:
+        phone = state.get("caller_phone")
+        return {
+            "identity": "verified",
+            "identity_via": via,
+            "caller_record": caller.model_dump(mode="json"),
+            "caller_sim_registered": bool(phone and phone in caller.phones),
+            "ack": VERIFIED[lang].format(name=_name_in(caller, lang)),
+        }
+
     def verify_caller(state: IntakeState, slots: dict[str, Any], lang: Lang) -> IntakeState:
-        """Match the caller's name and security answers to exactly one NID record."""
-        born = parse_date(slots["date_of_birth"]) if slots["date_of_birth"] else None
-        matches: list[Citizen] | None = []
-        if registry is not None and slots["father_name"] and slots["permanent_district"] and born:
-            matches = registry.match(
-                name=slots["caller_name"],
-                father_name=slots["father_name"],
-                permanent_district=slots["permanent_district"],
-                date_of_birth=born,
-            )
+        """Match the caller's name and security answers to exactly one NID record.
+
+        A caller who cannot answer, or whose answers match no one twice, is
+        looked up through the SIM they are calling from instead.
+        """
+        assert registry is not None
+        # Some answers may still be missing: one the caller could not give is enough.
+        born = parse_date(slots.get("date_of_birth") or "")
+        answered = slots.get("father_name") and slots.get("permanent_district") and born
+        if not (slots["caller_name"] and answered):
+            return caller_by_sim(state, slots["caller_name"], lang)
+        matches = registry.match(
+            name=slots["caller_name"],
+            father_name=slots["father_name"],
+            permanent_district=slots["permanent_district"],
+            date_of_birth=born,
+        )
         if matches is None:
             return {"identity": "unavailable", "ack": REGISTRY_DOWN[lang]}
         if len(matches) == 1:
-            caller = matches[0]
-            caller_phone = state.get("caller_phone")
-            return {
-                "identity": "verified",
-                "caller_record": caller.model_dump(mode="json"),
-                "caller_sim_registered": bool(caller_phone and caller_phone in caller.phones),
-                "ack": VERIFIED[lang].format(name=_name_in(caller, lang)),
-            }
+            return confirmed(state, matches[0], "answers", lang)
         attempts = state.get("verify_attempts", 0) + 1
         if attempts < MAX_VERIFY_ATTEMPTS:
             for key in IDENTITY_SLOTS:
                 slots.pop(key, None)
             return {"verify_attempts": attempts, "ack": RETRY[lang]}
-        return {"identity": "failed", "verify_attempts": attempts, "ack": NOT_VERIFIED[lang]}
+        return {"verify_attempts": attempts, **caller_by_sim(state, slots["caller_name"], lang)}
+
+    def caller_by_sim(state: IntakeState, name: str, lang: Lang) -> IntakeState:
+        """Whether the caller is who their phone is registered to, or in that person's family."""
+        assert registry is not None
+        phone = state.get("caller_phone")
+        not_verified: IntakeState = {"identity": "failed", "ack": NOT_VERIFIED[lang]}
+        if not (phone and name):
+            return not_verified
+        nid = registry.sim_owner(phone)
+        owner = registry.citizen(nid) if nid else None
+        if nid is None or (nid and owner is None):
+            return {"identity": "unavailable", "ack": REGISTRY_DOWN[lang]}
+        if owner is None:
+            return not_verified  # the SIM is not registered to anyone
+        if name_similarity(name, owner.name.en, owner.name.bn) >= FAMILY_MATCH:
+            return confirmed(state, owner, "sim", lang)
+        family = registry.family(owner.nid)
+        if family is None:
+            return {"identity": "unavailable", "ack": REGISTRY_DOWN[lang]}
+        relatives = [
+            family.father,
+            family.mother,
+            family.spouse,
+            *family.siblings,
+            *family.children,
+        ]
+        scored = [(name_similarity(name, c.name.en, c.name.bn), c) for c in relatives if c]
+        score, best = max(scored, key=lambda sc: sc[0], default=(0.0, None))
+        if best is None or score < FAMILY_MATCH:
+            return not_verified
+        return confirmed(state, best, "sim_family", lang)
 
     def find_relative(caller: Citizen, filing: str, said: str, lang: Lang) -> IntakeState:
         """Follow the caller's NID parent links to the relative they named."""
@@ -549,32 +766,68 @@ def build_intake_graph(
             "ack": FAMILY_FOUND[lang].format(relation=relation, name=_name_in(best, lang)),
         }
 
+    def respondent_found(respondent: Citizen, via: str) -> IntakeState:
+        return {
+            "respondent_status": "found" if respondent.phones else "no_phone",
+            "respondent_via": via,
+            "respondent_record": respondent.model_dump(mode="json"),
+        }
+
     def find_respondent(state: IntakeState, slots: dict[str, Any]) -> IntakeState:
+        """Match the respondent by name, father's name and district.
+
+        When the caller does not know those, or they match no one, the respondent
+        is looked for among the applicant's relatives on their NID record.
+        """
         father, district = slots["respondent_father_name"], slots["respondent_district"]
         if registry is None:
             return {"respondent_status": "unavailable"}
-        if not (father and district):
-            return {"respondent_status": "not_found"}
-        matches = registry.match(
-            name=slots["respondent_name"], father_name=father, district=district
-        )
-        if matches is None:
-            return {"respondent_status": "unavailable"}
         caller = _citizen(state.get("caller_record"))
-        if len(matches) != 1 or (caller and matches[0].nid == caller.nid):
+        caller_nid = caller.nid if caller else None
+        if father and district:
+            matches = registry.match(
+                name=slots["respondent_name"], father_name=father, district=district
+            )
+            if matches is None:
+                return {"respondent_status": "unavailable"}
+            if len(matches) == 1 and matches[0].nid != caller_nid:
+                return respondent_found(matches[0], "match")
+        applicant = _citizen(state.get("applicant_record"))
+        relation = slots.get("respondent_relation")
+        # An employer, a neighbour or an uncle is not on the applicant's NID record.
+        if applicant is None or relation not in (None, "husband", "wife", "brother"):
             return {"respondent_status": "not_found"}
-        return {
-            "respondent_status": "found" if matches[0].phones else "no_phone",
-            "respondent_record": matches[0].model_dump(mode="json"),
-        }
+        family = registry.family(applicant.nid)
+        if family is None:
+            return {"respondent_status": "unavailable"}
+        candidates: list[Citizen | None]
+        if relation in ("husband", "wife"):
+            candidates = [family.spouse]
+        elif relation == "brother":
+            candidates = list(family.siblings)
+        else:
+            candidates = [family.spouse, family.father, family.mother, *family.siblings]
+            candidates += family.children
+        said = slots["respondent_name"]
+        named = [c for c in candidates if c and c.nid != caller_nid and _named(said, c)]
+        if len(named) != 1:
+            return {"respondent_status": "not_found"}
+        return respondent_found(named[0], "family")
 
     def resolve(state: IntakeState) -> IntakeState:
-        if state.get("emergency"):
+        slots = dict(state.get("slots") or {})
+        # Nothing is looked up before the caller has said what happened.
+        if state.get("emergency") or "problem" not in slots:
             return {}
         lang = state.get("language", "bn")
-        slots = dict(state.get("slots") or {})
         acks = [state.get("ack") or ""]
         update: IntakeState = {}
+
+        asking, asks = state.get("asking"), dict(state.get("asks") or {})
+        if asking in SLOTS and asking not in slots and state.get("utterance", "").strip():
+            asks[asking] = asks.get(asking, 0) + 1
+            if asks[asking] >= MAX_ASKS:
+                slots[asking] = GIVEN_UP.get(asking, "")
 
         def merge(part: IntakeState) -> None:
             if ack := part.pop("ack", None):
@@ -582,10 +835,17 @@ def build_intake_graph(
             update.update(part)
             state.update(part)  # later steps in this turn see the result
 
-        if state.get("identity") == "pending" and all(
-            k in slots for k in ("caller_name", *IDENTITY_SLOTS)
+        # Once every security answer is in, or one of them is not known.
+        answers = [slots.get(k) for k in IDENTITY_SLOTS]
+        if (
+            state.get("identity") == "pending"
+            and "caller_name" in slots
+            and (None not in answers or "" in answers)
         ):
             merge(verify_caller(state, slots, lang))
+            if state.get("identity") == "pending":  # asked again: each question starts over
+                for key in IDENTITY_SLOTS:
+                    asks.pop(key, None)
 
         filing = slots.get("filing_for")
         caller = _citizen(state.get("caller_record"))
@@ -615,7 +875,12 @@ def build_intake_graph(
             slots["name"] = applicant.name.en
             slots.setdefault("district", applicant.present_address.district.en)
             slots.setdefault("upazila", applicant.present_address.upazila.en)
-        if filing == "self" and state.get("caller_phone"):
+        # The number they call from is their contact number only once we know it is
+        # theirs, or cannot check: a phone registered to someone else may be the abuser's.
+        identity = state.get("identity")
+        checked = identity in ("verified", "failed")
+        own_phone = identity != "pending" and (not checked or state.get("caller_sim_registered"))
+        if filing == "self" and state.get("caller_phone") and own_phone:
             slots.setdefault("phone", state["caller_phone"])
 
         if state.get("respondent_status") == "pending" and "respondent_name" in slots:
@@ -624,7 +889,7 @@ def build_intake_graph(
             elif "respondent_father_name" in slots and "respondent_district" in slots:
                 merge(find_respondent(state, slots))
 
-        return {**update, "slots": slots, "ack": _join(*acks)}
+        return {**update, "slots": slots, "asks": asks, "ack": _join(*acks)}
 
     def respond(state: IntakeState) -> IntakeState:
         lang = state.get("language", "bn")
@@ -639,17 +904,25 @@ def build_intake_graph(
             closing = CLOSING_NO_CONTACT if state.get("hostage") else CLOSING
             return {"reply": _join(ack, closing[lang]), "complete": True, "asking": None, "ack": ""}
         nxt = missing[0]
+        if nxt == "problem":
+            # Still listening: the greeting, then only encouragement to go on.
+            return {"reply": ack or GREETING[lang], "complete": False, "asking": nxt, "ack": ""}
         reply = _join(ack, question(nxt, slots, lang))
         return {"reply": reply, "complete": False, "asking": nxt, "ack": ""}
 
     graph = StateGraph(IntakeState)
     graph.add_node("extract", extract)
     graph.add_node("check_danger", check_danger)
+    graph.add_node("listen", listen)
     graph.add_node("resolve", resolve)
     graph.add_node("respond", respond)
     graph.add_edge(START, "extract")
     graph.add_edge("extract", "check_danger")
-    graph.add_edge("check_danger", "resolve")
+    graph.add_edge("check_danger", "listen")
+    # Listening can end the call when nothing was said that we could act on.
+    graph.add_conditional_edges(
+        "listen", lambda s: END if s.get("complete") else "resolve", ["resolve", END]
+    )
     graph.add_edge("resolve", "respond")
     graph.add_edge("respond", END)
     return graph.compile(checkpointer=checkpointer)
@@ -688,7 +961,7 @@ class IntakeConversation:
         language: str = "bn",
         caller_phone: str | None = None,
     ) -> IntakeState:
-        """Open a conversation and return the first question.
+        """Open a conversation and return the greeting.
 
         ``caller_phone`` is the caller ID on phone calls: used as the contact
         number when someone applies for themselves, and checked against the
@@ -706,6 +979,8 @@ class IntakeConversation:
                 "utterance": "",
                 "slots": {},
                 "notes": [],
+                "story": "",
+                "asks": {},
                 "turns": 0,
                 "caller_phone": phone,
                 "identity": "pending" if self.registry is not None else "unavailable",

@@ -40,6 +40,7 @@ describe("toLegalCase", () => {
       filingFor: "mother",
       applicantVerified: true,
       callerVerified: true,
+      callerVerifiedBy: "answers",
       callerSimRegistered: true,
     })
     expect(c.respondent).toEqual({
@@ -54,6 +55,22 @@ describe("toLegalCase", () => {
     expect(c.activity.map((e) => e.type)).toEqual(["received", "aiTriage"])
   })
 
+  it("maps a caller confirmed through a relative's SIM, not the security questions", () => {
+    const c = toLegalCase(list.find((l) => l.applicant?.name === "Moyuri Akter")!)
+    expect(c.identity).toEqual({
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: true,
+      callerVerifiedBy: "simFamily",
+      callerSimRegistered: false,
+    })
+    // Her husband, found on her NID record by his first name.
+    expect(c.respondent).toMatchObject({
+      name: { en: "Jalal Uddin", bn: "জালাল উদ্দিন" },
+      nidVerified: true,
+    })
+  })
+
   it("maps case detail history and call notes", () => {
     const c = toLegalCase(detail)
     expect(c.activity.map((e) => e.type)).toEqual([
@@ -63,7 +80,11 @@ describe("toLegalCase", () => {
       "noticeHeld",
     ])
     expect(c.activity[2]).toMatchObject({ type: "identityChecked", verified: true })
-    expect(c.callNotes?.[0]).toMatchObject({ topic: "filing_for", text: "for my mother" })
+    // The line listens first: what happened is the first thing on record.
+    expect(c.callNotes?.[0]).toMatchObject({
+      topic: "problem",
+      text: "My mother's former husband Kamal Hossain has not paid her maintenance",
+    })
     expect(c.callNotes).toHaveLength(13)
     expect(c.applicant.phone).toBe("01811223344") // detail carries the full number
   })

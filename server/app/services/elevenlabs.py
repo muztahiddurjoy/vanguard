@@ -1,20 +1,46 @@
-"""ElevenLabs streaming TTS over WebSocket, producing μ-law 8 kHz for telephony.
+"""ElevenLabs streaming TTS over HTTP, producing μ-law 8 kHz for telephony.
 
 ``ulaw_8000`` is exactly what Twilio media streams play, so audio chunks can
-be forwarded to the call without transcoding. One WebSocket is opened per
-reply: replies are short, and a fresh connection keeps barge-in (cancelling
-a reply mid-sentence) simple.
+be forwarded to the call without transcoding. Each reply is one streamed
+``POST /v1/text-to-speech/{voice}/stream``; the call's replies share one HTTP
+connection, and closing the stream mid-reply (barge-in) cancels it.
+
+HTTP rather than the WebSocket input-streaming endpoint because that one
+rejects the models that speak Bangla (``eleven_v3`` and newer): we always
+have the whole reply before speaking, so nothing is lost. The call's language
+is sent as ``language_code`` so the model does not guess (a model without
+Bangla reads Bangla script with a Hindi accent).
+
+``eleven_v3`` usually starts speaking within about a second but now and then
+stalls for 5-10 s before the first audio. A caller would hear dead air, so a
+reply with no audio after ``ELEVENLABS_FIRST_AUDIO_TIMEOUT_S`` is requested
+once more (without a limit the second time).
+
+Twilio plays audio the moment it arrives, and ``eleven_v3`` sends it in
+bursts: played as it comes, half of all replies had audible gaps (measured).
+So the first ``VOICE_START_BUFFER_S`` of each reply is held back and sent at
+once; waiting for it costs about 0.4 s, because the second burst usually
+brings it.
+
+``eleven_v3`` speaks slowly and ignores the API's ``voice_settings.speed``, so
+the audio is sped up here instead, ``VOICE_SPEED`` times at the same pitch,
+but only while more than ``CUSHION_S`` is already queued: a sped-up line
+drains Twilio's queue faster than a burst refills it.
 """
 
-import base64
-import json
-from collections.abc import AsyncGenerator, Callable
+import asyncio
+import contextlib
+import logging
+import time
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any, Protocol
-from urllib.parse import urlencode
 
-from websockets.asyncio.client import connect as ws_connect
+import httpx
 
 from app.config import Settings, get_settings
+from app.services.audio import SAMPLE_RATE, TempoChanger, ulaw_decode, ulaw_encode
+
+log = logging.getLogger(__name__)
 
 
 class TTSError(RuntimeError):
@@ -22,17 +48,27 @@ class TTSError(RuntimeError):
 
 
 class TextToSpeech(Protocol):
-    def stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    def stream(self, text: str, language: str | None = None) -> AsyncGenerator[bytes, None]:
         """Yield raw μ-law 8 kHz audio for ``text`` as it is generated."""
         ...
+
+    async def aclose(self) -> None: ...
 
 
 class ElevenLabsTTS:
     OUTPUT_FORMAT = "ulaw_8000"
+    # Audio queued at Twilio before a reply is sped up. With a 0.6 s start buffer,
+    # 16 recorded eleven_v3 replies had one gap (70 ms) and played 1.1x faster.
+    CUSHION_S = 1.0
 
-    def __init__(self, settings: Settings | None = None, connect: Callable[..., Any] | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.settings = settings or get_settings()
-        self._connect = connect or ws_connect
+        self._transport = transport
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def configured(self) -> bool:
@@ -40,28 +76,123 @@ class ElevenLabsTTS:
 
     def url(self) -> str:
         s = self.settings
-        query = urlencode({"model_id": s.elevenlabs_model_id, "output_format": self.OUTPUT_FORMAT})
-        base = s.elevenlabs_ws_base.rstrip("/")
-        return f"{base}/v1/text-to-speech/{s.elevenlabs_voice_id}/stream-input?{query}"
+        return (
+            f"{s.elevenlabs_base_url.rstrip('/')}/v1/text-to-speech/{s.elevenlabs_voice_id}/stream"
+        )
 
-    async def stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    def _http(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                headers={"xi-api-key": self.settings.elevenlabs_api_key},
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                transport=self._transport,
+            )
+        return self._client
+
+    async def stream(self, text: str, language: str | None = None) -> AsyncGenerator[bytes, None]:
         if not self.configured:
             raise TTSError("ElevenLabs is not configured")
-        headers = {"xi-api-key": self.settings.elevenlabs_api_key}
-        async with self._connect(self.url(), additional_headers=headers) as ws:
-            # Opening message primes the voice; "flush" asks for audio now; "" ends input.
-            await ws.send(
-                json.dumps(
-                    {"text": " ", "voice_settings": {"stability": 0.5, "similarity_boost": 0.8}}
-                )
+        body: dict[str, str] = {"text": text.strip(), "model_id": self.settings.elevenlabs_model_id}
+        if language:
+            body["language_code"] = language
+        timeout: float | None = self.settings.elevenlabs_first_audio_timeout_s or None
+        try:
+            for _ in range(2):
+                async with contextlib.AsyncExitStack() as stack:
+                    try:
+                        chunks, first = await asyncio.wait_for(self._start(stack, body), timeout)
+                    except TimeoutError:
+                        log.warning("ElevenLabs gave no audio in %.1fs; asking again", timeout)
+                        timeout = None
+                        continue
+                    async for chunk in self._playable(first, chunks):
+                        yield chunk
+                    return
+        except httpx.HTTPError as exc:
+            raise TTSError(f"ElevenLabs request failed: {exc}") from exc
+
+    async def _playable(
+        self, first: bytes, chunks: AsyncIterator[bytes]
+    ) -> AsyncGenerator[bytes, None]:
+        """The reply as Twilio should get it: sped up, its start held back to play smoothly."""
+        speed = self.settings.voice_speed
+        hold = int(self.settings.voice_start_buffer_s * SAMPLE_RATE)
+        tempo = TempoChanger(speed)
+        queued_until = 0.0  # when the audio sent so far will have played
+        held: bytes | None = b""  # the start of the reply, until there is enough of it
+
+        async def generated() -> AsyncIterator[bytes]:
+            if first:
+                yield first
+            async for chunk in chunks:
+                if chunk:
+                    yield chunk
+
+        async for chunk in generated():
+            now = time.monotonic()
+            if speed == 1.0:
+                out = chunk
+            else:
+                tempo.rate = speed if queued_until - now >= self.CUSHION_S else 1.0
+                out = ulaw_encode(tempo.process(ulaw_decode(chunk)))
+            if held is not None:
+                held += out
+                if len(held) < hold:
+                    continue
+                out, held = held, None
+            if out:
+                queued_until = max(queued_until, now) + len(out) / SAMPLE_RATE
+                yield out
+        if rest := (held or b"") + ulaw_encode(tempo.flush()):
+            yield rest
+
+    async def _start(
+        self, stack: contextlib.AsyncExitStack, body: dict[str, Any]
+    ) -> tuple[AsyncIterator[bytes], bytes]:
+        """Send the request and wait for the first audio; the stack owns the response."""
+        response = await stack.enter_async_context(
+            self._http().stream(
+                "POST", self.url(), params={"output_format": self.OUTPUT_FORMAT}, json=body
             )
-            await ws.send(json.dumps({"text": text.strip() + " ", "flush": True}))
-            await ws.send(json.dumps({"text": ""}))
-            async for raw in ws:
-                message = json.loads(raw)
-                if message.get("error") or (message.get("message") and "audio" not in message):
-                    raise TTSError(str(message.get("error") or message.get("message")))
-                if message.get("audio"):
-                    yield base64.b64decode(message["audio"])
-                if message.get("isFinal"):
-                    break
+        )
+        if response.status_code != 200:
+            detail = (await response.aread()).decode(errors="replace")[:300]
+            raise TTSError(f"ElevenLabs {response.status_code}: {detail}")
+        chunks = response.aiter_bytes()
+        return chunks, await anext(chunks, b"")
+
+    async def check(self) -> tuple[str, str]:
+        """Whether the line can speak, checked without spending any credit.
+
+        ("ok", ""), ("error", why) for a setting that must be fixed, or
+        ("unchecked", why) when ElevenLabs could not tell.
+        """
+        s = self.settings
+        base, model_id = s.elevenlabs_base_url.rstrip("/"), s.elevenlabs_model_id
+        try:
+            models = await self._http().get(f"{base}/v1/models", timeout=10.0)
+            if models.status_code in (401, 403):
+                return "error", f"ElevenLabs rejected the API key ({models.status_code})"
+            if models.status_code != 200:
+                return "unchecked", f"ElevenLabs answered {models.status_code} for its models"
+            model = next((m for m in models.json() if m.get("model_id") == model_id), None)
+            if model is None:
+                return "error", f"ElevenLabs has no model {model_id!r} for this account"
+            if "bn" not in {lang.get("language_id") for lang in model.get("languages", [])}:
+                return "error", (
+                    f"{model_id} does not speak Bangla (callers would hear a Hindi accent); "
+                    "set ELEVENLABS_MODEL_ID=eleven_v3"
+                )
+            voice = await self._http().get(f"{base}/v1/voices/{s.elevenlabs_voice_id}")
+            if voice.status_code in (400, 404):
+                return "error", f"ElevenLabs has no voice {s.elevenlabs_voice_id!r}"
+            if voice.status_code != 200:
+                return "unchecked", f"ElevenLabs answered {voice.status_code} for the voice"
+        except (httpx.HTTPError, ValueError) as exc:
+            return "unchecked", f"ElevenLabs could not be reached: {exc}"
+        return "ok", ""
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None

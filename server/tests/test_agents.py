@@ -6,11 +6,12 @@ from app.agents.spoken import (
     clean_name,
     find_district,
     find_phone,
+    name_similarity,
     parse_date,
     parse_safe_window,
     yes_or_no,
 )
-from app.agents.t5_intake import IntakeConversation, LLMSlots
+from app.agents.t5_intake import IntakeConversation, LLMOpening
 from app.agents.t6_document import LLMReading, run_document_review
 from app.agents.t7_settlement import LLMDraft, run_settlement_draft
 from tests.nid_fakes import FakeRegistry
@@ -51,6 +52,12 @@ def test_spoken_dates_names_and_answers():
     assert t5_intake.filing_for_from("for my mother-in-law") == "other"
     assert t5_intake.respondent_from("আমার স্বামী জালালের বিরুদ্ধে") == ("জালাল", "husband")
     assert yes_or_no("No, don't send it now") is False
+    # Speech-to-text spells Bangla names more than one way; different names stay apart.
+    assert name_similarity("মোয়ুরি আখতার", "Moyuri Akter", "ময়ূরী আক্তার") == 100
+    assert name_similarity("রাহিমা খাতুন", "রহিমা খাতুন") == 100
+    for said, other in (("মোয়ুরি আখতার", "শিরিন আক্তার"), ("রফিকুল ইসলাম", "রবিউল ইসলাম"),
+                        ("নাসরিন আক্তার", "নাসিমা আক্তার")):  # fmt: skip
+        assert name_similarity(said, other) < t5_intake.FAMILY_MATCH, (said, other)
 
 
 def talk(conv: IntakeConversation, sid: str, *utterances: str) -> dict:
@@ -60,16 +67,57 @@ def talk(conv: IntakeConversation, sid: str, *utterances: str) -> dict:
     return s
 
 
-def rafiq_verifies(conv: IntakeConversation, sid: str, filing: str) -> dict:
+WAGES = "My employer has not paid my wages for three months"
+LAND = "My mother's land deed was lost and nobody will help her"
+
+
+def rafiq_verifies(conv: IntakeConversation, sid: str, filing: str, story: str = LAND) -> dict:
     conv.start(sid, channel="hotline_16699", language="en", caller_phone="+8801811223344")
-    return talk(conv, sid, filing, "My name is Rafiqul Islam", "Mohammad Abdul Karim",
+    return talk(conv, sid, story, filing, "My name is Rafiqul Islam", "Mohammad Abdul Karim",
                 "Rangpur", "2 June 1994")  # fmt: skip
+
+
+def test_the_line_greets_then_listens_before_asking_anything():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    s = conv.start("g1", channel="hotline_16699", language="en", caller_phone="01811223344")
+    assert s["reply"] == t5_intake.GREETING["en"] and s["asking"] == "problem"
+    # "Hello?" or a fragment is not what happened yet: the line only encourages.
+    s = conv.turn("g1", "Hello? Can you hear me?")
+    assert (s["reply"], s["asking"]) == (t5_intake.KEEP_LISTENING["en"], "problem")
+    s = conv.turn("g1", "My husband")
+    assert s["asking"] == "problem" and "problem" not in s["slots"]
+    s = conv.turn("g1", "he beats me when he is drunk")
+    # The account is kept in the caller's own words; the hellos are not part of it.
+    assert s["slots"]["problem"] == "My husband he beats me when he is drunk"
+    assert s["slots"]["category"] == "domesticViolence"
+    assert s["reply"] == f"{t5_intake.HEARD['en']} {t5_intake.QUESTIONS['filing_for']['en']}"
+    assert [n["topic"] for n in s["notes"]] == ["problem"] * 3
+    assert s["identity"] == "pending"  # nothing is looked up before the account
+
+
+def test_a_caller_who_never_says_what_happened_is_asked_to_call_again():
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
+    conv.start("u1", channel="hotline_16699")
+    s = talk(conv, "u1", "হ্যালো", "হ্যালো, শুনতে পাচ্ছেন?")
+    assert s["complete"] is False and s["reply"] == t5_intake.KEEP_LISTENING["bn"]
+    s = conv.turn("u1", "হ্যালো")
+    assert s["complete"] is True and s["reply"] == t5_intake.CLOSING_UNHEARD["bn"]
+    assert "problem" not in s["slots"]
+
+
+def test_a_short_account_is_taken_as_it_is_after_three_tries():
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
+    conv.start("u2", channel="hotline_16699", language="en")
+    s = talk(conv, "u2", "help", "please", "my husband")
+    assert s["slots"]["problem"] == "help please my husband"
+    assert s["asking"] == "filing_for"
 
 
 def test_caller_applying_for_themselves_is_verified_and_the_respondent_found():
     registry = FakeRegistry()
     conv = IntakeConversation(use_default_llm=False, registry=registry)
-    s = conv.start("r1", channel="hotline_16699", language="en", caller_phone="+8801811223344")
+    conv.start("r1", channel="hotline_16699", language="en", caller_phone="+8801811223344")
+    s = conv.turn("r1", WAGES)
     assert s["asking"] == "filing_for"
     s = conv.turn("r1", "For myself")
     assert s["asking"] == "caller_name"
@@ -77,12 +125,13 @@ def test_caller_applying_for_themselves_is_verified_and_the_respondent_found():
     assert s["asking"] == "date_of_birth"
     s = conv.turn("r1", "2 June 1994")
     assert s["identity"] == "verified" and s["caller_sim_registered"] is True
-    # Where they live comes from the NID record, so the next question is the problem.
+    # What happened was heard first and where they live comes from the NID record,
+    # so the next question is who it is against.
     assert s["reply"] == (
-        "Thank you, Rafiqul Islam. Your identity is confirmed. Briefly, what has happened?"
+        "Thank you, Rafiqul Islam. Your identity is confirmed. "
+        + t5_intake.QUESTIONS["respondent_name"]["en"]
     )
-    s = talk(conv, "r1", "My employer has not paid my wages for three months",
-             "Kamal Hossain, the factory owner", "Abdul Hamid", "Gaibandha")  # fmt: skip
+    s = talk(conv, "r1", "Kamal Hossain, the factory owner", "Abdul Hamid", "Gaibandha")
     assert s["respondent_status"] == "found"
     assert s["slots"]["respondent_relation"] == "employer"
     assert s["asking"] == "notify_respondent"
@@ -98,7 +147,7 @@ def test_caller_applying_for_themselves_is_verified_and_the_respondent_found():
     assert slots["notify_respondent"] is True
     assert t5_intake.missing_required(slots) == []
     assert len(s["notes"]) == 11
-    assert s["notes"][5] == {**s["notes"][5], "topic": "problem"}
+    assert s["notes"][0] == {**s["notes"][0], "topic": "problem", "text": WAGES}
 
 
 def test_mother_is_confirmed_through_nid_parent_links():
@@ -109,11 +158,12 @@ def test_mother_is_confirmed_through_nid_parent_links():
     s = conv.turn("m1", "Rahima Khatun")
     assert s["applicant_status"] == "verified"
     assert s["reply"] == (
-        "We found your mother, Rahima Khatun, in the NID records. Briefly, what has happened?"
+        "We found your mother, Rahima Khatun, in the NID records. "
+        + t5_intake.QUESTIONS["respondent_name"]["en"]
     )
     assert s["applicant_record"]["nid"] == "4600000002"
     # The mother has no SMS number on the call, so the phone question is asked.
-    s = talk(conv, "m1", "My uncle took her land", "no one")
+    s = conv.turn("m1", "no one")
     assert s["asking"] == "phone"
     assert s["reply"] == t5_intake.QUESTIONS_OTHER["phone"]["en"]
 
@@ -123,18 +173,19 @@ def test_father_needs_no_extra_name_question():
     s = rafiq_verifies(conv, "f1", "for my father")
     assert s["applicant_status"] == "verified"
     assert s["applicant_record"]["nid"] == "4600000001"
-    assert s["asking"] == "problem"
+    assert s["asking"] == "respondent_name"
 
 
 def test_sister_in_bangla_and_a_stranger_is_not_accepted_as_a_sibling():
     conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
     conv.start("s1", channel="hotline_16699", caller_phone="01811223344")
-    s = talk(conv, "s1", "আমার বোনের জন্য", "আমি রফিকুল ইসলাম বলছি", "মোঃ আব্দুল করিম",
-             "রংপুর", "২ জুন ১৯৯৪", "শিরিন আক্তার")  # fmt: skip
+    s = talk(conv, "s1", "আমার বোনকে তার স্বামী মারধর করে", "আমার বোনের জন্য",
+             "আমি রফিকুল ইসলাম বলছি", "মোঃ আব্দুল করিম", "রংপুর", "২ জুন ১৯৯৪",
+             "শিরিন আক্তার")  # fmt: skip
     assert s["reply"].startswith("এনআইডি রেকর্ডে আপনার বোন শিরিন আক্তার-কে পাওয়া গেছে।")
 
     conv.start("s2", channel="hotline_16699", language="en")
-    s = talk(conv, "s2", "for my brother", "Rafiqul Islam", "Abdul Karim", "Rangpur",
+    s = talk(conv, "s2", LAND, "for my brother", "Rafiqul Islam", "Abdul Karim", "Rangpur",
              "02/06/1994", "Jalal Uddin")  # fmt: skip
     assert s["applicant_status"] == "not_found"
     assert s["reply"].startswith("We could not find your brother or sister")
@@ -144,7 +195,8 @@ def test_sister_in_bangla_and_a_stranger_is_not_accepted_as_a_sibling():
 def test_wrong_security_answers_get_one_retry_then_intake_continues_unverified():
     conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
     conv.start("w1", channel="hotline_16699", language="en")
-    s = talk(conv, "w1", "myself", "Rafiqul Islam", "Abdul Karim", "Rangpur", "3 June 1994")
+    s = talk(conv, "w1", WAGES, "myself", "Rafiqul Islam", "Abdul Karim", "Rangpur",
+             "3 June 1994")  # fmt: skip
     assert s["identity"] == "pending" and s["asking"] == "father_name"
     assert s["reply"].startswith(t5_intake.RETRY["en"])
     s = talk(conv, "w1", "Abdul Karim", "Rangpur", "I don't know")
@@ -152,6 +204,72 @@ def test_wrong_security_answers_get_one_retry_then_intake_continues_unverified()
     assert (
         s["reply"] == f"{t5_intake.NOT_VERIFIED['en']} {t5_intake.QUESTIONS_SELF['district']['en']}"
     )
+
+
+def test_a_question_is_asked_twice_at_most_then_skipped():
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
+    conv.start("q1", channel="hotline_16699", language="en")
+    s = talk(conv, "q1", WAGES, "umm")
+    assert s["asking"] == "filing_for"  # asked again
+    s = conv.turn("q1", "what?")
+    # Not understood twice: taken as applying for themselves, which an officer can correct.
+    assert s["slots"]["filing_for"] == "self" and s["asking"] == "caller_name"
+    s = talk(conv, "q1", "Rafiqul Islam", "a village near the river", "far from here")
+    assert s["slots"]["district"] == "" and s["asking"] == "respondent_name"
+
+
+def test_caller_who_cannot_answer_is_found_through_the_sim_they_call_from():
+    registry = FakeRegistry()
+    conv = IntakeConversation(use_default_llm=False, registry=registry)
+    conv.start("x1", channel="hotline_16699", language="en", caller_phone="01811223344")
+    s = talk(conv, "x1", WAGES, "for myself", "Rafiqul Islam", "I don't know")
+    # One unknown answer is enough: the other security questions are not asked.
+    assert (s["identity"], s["identity_via"]) == ("verified", "sim")
+    assert s["caller_record"]["nid"] == "4600000003" and s["caller_sim_registered"] is True
+    assert s["reply"] == (
+        "Thank you, Rafiqul Islam. Your identity is confirmed. "
+        + t5_intake.QUESTIONS["respondent_name"]["en"]
+    )
+    assert registry.calls == ["sim_owner", "citizen"]
+
+
+def test_wife_calling_on_her_husbands_phone_is_found_through_his_nid_family():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    conv.start("x2", channel="hotline_16699", caller_phone="01722000333")  # Jalal's SIM
+    s = talk(
+        conv, "x2", "আমার স্বামী আমাকে প্রতিদিন মারধর করে", "আমার নিজের জন্য", "আমার নাম মোয়ুরি আখতার", "জানি না"
+    )  # fmt: skip (spelt as speech-to-text did)
+    assert (s["identity"], s["identity_via"]) == ("verified", "sim_family")
+    assert s["caller_record"]["nid"] == "4600000012"
+    assert s["caller_sim_registered"] is False  # the phone is his, not hers
+    # She does not know his father's name: he is found on her NID record by first name.
+    s = talk(conv, "x2", "আমার স্বামী জালালের বিরুদ্ধে", "জানি না", "রংপুর")
+    assert (s["respondent_status"], s["respondent_via"]) == ("found", "family")
+    assert s["respondent_record"]["nid"] == "4600000011"
+    # The phone she calls from is his: she is asked for a safe number instead.
+    s = conv.turn("x2", "না, এখন না")
+    assert s["asking"] == "phone" and "phone" not in s["slots"]
+    assert s["reply"] == t5_intake.QUESTIONS_SELF["phone"]["bn"]
+
+
+def test_a_respondent_who_is_not_family_is_not_looked_for_on_the_nid_record():
+    registry = FakeRegistry()
+    conv = IntakeConversation(use_default_llm=False, registry=registry)
+    rafiq_verifies(conv, "x4", "myself", story=WAGES)
+    s = talk(conv, "x4", "Kamal Hossain, the factory owner", "I don't know", "Gaibandha")
+    assert s["respondent_status"] == "not_found"
+    assert registry.calls == ["match"]  # the caller's check; no family lookup for an employer
+
+
+def test_wrong_answers_twice_then_a_sim_that_is_not_theirs_leaves_them_unverified():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    conv.start("x3", channel="hotline_16699", language="en", caller_phone="01911000001")
+    s = talk(conv, "x3", WAGES, "myself", "Rafiqul Islam", "Abdul Karim", "Rangpur",
+             "3 June 1994", "Abdul Karim", "Rangpur", "4 June 1994")  # fmt: skip
+    # Kamal's SIM, and Kamal's NID record has no Rafiqul Islam in his family.
+    assert (s["identity"], s["verify_attempts"]) == ("failed", 2)
+    assert s["reply"].startswith(t5_intake.NOT_VERIFIED["en"])
+    assert "caller_record" not in s
 
 
 def test_registry_outage_skips_verification_without_retrying():
@@ -166,13 +284,13 @@ def test_registry_outage_skips_verification_without_retrying():
 def test_without_a_registry_no_security_questions_are_asked():
     conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("n1", channel="udc", language="en")
-    s = talk(conv, "n1", "I am calling for my neighbour", "My name is Ripon", "Moyuri Akter")
+    s = talk(conv, "n1", "My neighbour's husband beats her and she has visible injuries",
+             "I am calling for my neighbour", "My name is Ripon", "Moyuri Akter")  # fmt: skip
     assert s["asking"] == "district"
+    assert s["slots"]["category"] == "domesticViolence"
     s = talk(conv, "n1", "01712-345318, she lives in Rangpur")
     assert (s["slots"]["phone"], s["slots"]["district"]) == ("01712345318", "Rangpur")
-    s = talk(conv, "n1", "Her husband beats her and she has visible injuries",
-             "Her husband Jalal Uddin", "I don't know", "Rangpur")  # fmt: skip
-    assert s["slots"]["category"] == "domesticViolence"
+    s = talk(conv, "n1", "Her husband Jalal Uddin", "I don't know", "Rangpur")
     assert s["slots"]["respondent_father_name"] == ""
     assert s["respondent_status"] == "unavailable"
     assert s["asking"] == "safe_to_call"
@@ -184,27 +302,28 @@ def test_conversations_are_isolated_by_session():
     conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("a", channel="udc")
     conv.start("b", channel="udc")
-    conv.turn("a", "নিজের জন্য")
-    assert conv.state("a")["slots"] == {"filing_for": "self"}
+    conv.turn("a", "আমার জমি দখল করে নিয়েছে")
+    assert conv.state("a")["slots"]["problem"] == "আমার জমি দখল করে নিয়েছে"
     assert conv.state("b")["slots"] == {}
 
 
-def test_danger_ends_the_call_with_emergency_guidance():
+def test_danger_in_the_first_words_ends_the_call_with_emergency_guidance():
     conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("c", channel="hotline_16699")
-    s = conv.turn("c", "ও এখনই আমাকে মেরে ফেলবে")
+    s = talk(conv, "c", "হ্যালো?", "ও এখনই আমাকে মেরে ফেলবে")
     assert s["emergency"] is True
     assert s["complete"] is True
     assert "৯৯৯" in s["reply"]
+    assert s["slots"]["problem"] == "ও এখনই আমাকে মেরে ফেলবে"  # the account, without the hello
 
 
 def test_hostage_sign_promises_no_callback_and_intake_carries_on():
     conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("h1", channel="hotline_16699", language="en")
-    s = talk(conv, "h1", "for myself", "Moyuri Akter")
     s = conv.turn("h1", "My husband has locked me in the room")
     assert s["hostage"] is True and s["complete"] is False
     assert s["reply"].startswith(t5_intake.HOSTAGE_ACK["en"])
+    assert s["asking"] == "filing_for"
     s = conv.turn("h1", "ও এখনই আমাকে মেরে ফেলবে")
     assert s["complete"] is True
     assert s["reply"] == t5_intake.HOSTAGE_EMERGENCY["en"]
@@ -213,7 +332,8 @@ def test_hostage_sign_promises_no_callback_and_intake_carries_on():
 def test_llm_extraction_fills_free_form_answers_but_rules_win_on_phone():
     # start() has an empty utterance and never calls the model, so one result is enough.
     llm = FakeLLM(
-        LLMSlots(
+        LLMOpening(
+            kind="case",
             filing_for="other",
             name="Moyuri Akter",
             phone="01999999999",
@@ -224,13 +344,67 @@ def test_llm_extraction_fills_free_form_answers_but_rules_win_on_phone():
     )
     conv = IntakeConversation(llm=llm, use_default_registry=False)
     conv.start("d", channel="hotline_16699", language="en")
-    s = conv.turn("d", "Calling about Moyuri Akter, 01712345318, her husband beats her")
+    said = "Calling about Moyuri Akter, 01712345318, her husband beats her"
+    s = conv.turn("d", said)
     assert s["slots"]["filing_for"] == "other"
     assert s["slots"]["phone"] == "01712345318"
     assert s["slots"]["name"] == "Moyuri Akter"
     assert s["slots"]["phone_monitored"] is True
+    assert s["slots"]["problem"] == said  # the caller's words, not the model's summary
     assert "date_of_birth" not in s["slots"]  # the model's answer failed validation
-    assert len(llm.calls) == 1
+    assert len(llm.calls) == 1 and llm.calls[0]["schema"] is LLMOpening
+    # Everything the caller asked is known, so the next question is what is not.
+    assert s["asking"] == "caller_name"
+
+
+def test_llm_hears_a_case_the_rules_cannot_place_and_danger_without_keywords():
+    conv = IntakeConversation(llm=FakeLLM(LLMOpening(kind="case")), use_default_registry=False)
+    conv.start("k1", channel="hotline_16699", language="en")
+    s = conv.turn("k1", "He cheated me")
+    assert s["slots"]["problem"] == "He cheated me" and s["asking"] == "filing_for"
+
+    llm = FakeLLM(LLMOpening(kind="case", danger_now=True))
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
+    conv.start("k2", channel="hotline_16699", language="en")
+    s = conv.turn("k2", "He is outside the door, he says tonight is my last night")
+    assert s["emergency"] is True and s["complete"] is True
+    assert s["reply"] == t5_intake.EMERGENCY["en"]
+
+
+def test_llm_cannot_turn_away_a_problem_the_rules_know():
+    conv = IntakeConversation(llm=FakeLLM(LLMOpening(kind="unclear")), use_default_registry=False)
+    conv.start("k3", channel="hotline_16699")
+    s = conv.turn("k3", "যৌতুক")
+    assert s["slots"]["problem"] == "যৌতুক" and s["slots"]["category"] == "dowryHarassment"
+
+
+def test_not_a_legal_matter_is_pointed_to_the_helpline_then_the_call_ends():
+    other = LLMOpening(kind="other")
+    conv = IntakeConversation(llm=FakeLLM(other, other, other), use_default_registry=False)
+    conv.start("o1", channel="hotline_16699", language="en")
+    s = conv.turn("o1", "I want to know what is happening with my application")
+    assert s["asking"] == "problem" and s["complete"] is False
+    assert s["reply"] == t5_intake.NOT_LEGAL["en"].format(helpline="1 6 4 3 0")
+    s = talk(conv, "o1", "My application", "The application I made last month")
+    assert s["complete"] is True
+    assert s["reply"] == t5_intake.CLOSING_NOT_LEGAL["en"].format(helpline="1 6 4 3 0")
+    assert "problem" not in s["slots"]
+
+
+def test_danger_the_rules_hear_is_not_kept_waiting_for_the_model():
+    llm = FakeLLM(LLMOpening(kind="case"))
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
+    conv.start("e1", channel="hotline_16699")
+    s = conv.turn("e1", "ও এখনই আমাকে মেরে ফেলবে")
+    assert s["emergency"] is True and llm.calls == []
+
+
+def test_a_hello_is_not_sent_to_the_model():
+    llm = FakeLLM()
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
+    conv.start("o2", channel="hotline_16699")
+    conv.turn("o2", "হ্যালো, শুনতে পাচ্ছেন?")
+    assert llm.calls == []
 
 
 # --- T6 documents ----------------------------------------------------------

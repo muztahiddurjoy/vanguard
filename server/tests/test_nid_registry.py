@@ -67,6 +67,7 @@ def test_unreachable_or_failing_registry_is_none_not_no_match():
     assert registry(down).match(name="x", father_name="y", district="Rangpur") is None
     assert registry(broken).family("1") is None
     assert registry(broken).sim_owner("01811223344") is None
+    assert registry(broken).citizen("1") is None
 
 
 def test_family_and_sim_lookups():
@@ -76,6 +77,8 @@ def test_family_and_sim_lookups():
             return httpx.Response(200, json={"mother": mother, "siblings": []})
         if request.url.path == "/v1/sims/01811223344":
             return httpx.Response(200, json={"msisdn": "01811223344", "nid": "4613300001"})
+        if request.url.path == "/v1/citizens/4613300001":
+            return httpx.Response(200, json=citizen("4613300001", "Rafiqul Islam"))
         return httpx.Response(404, json={"detail": "not found"})
 
     reg = registry(handler)
@@ -85,3 +88,6 @@ def test_family_and_sim_lookups():
     assert reg.sim_owner("01811223344") == "4613300001"
     assert reg.sim_owner("01999999999") == ""
     assert reg.family("999").siblings == []  # type: ignore[union-attr]
+    owner = reg.citizen("4613300001")
+    assert owner is not None and owner.name.en == "Rafiqul Islam"
+    assert reg.citizen("999") is None
