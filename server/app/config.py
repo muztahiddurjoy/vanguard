@@ -94,8 +94,10 @@ class Settings(BaseSettings):
     # voice webhook is /telephony/voice?line=helpline.
     helpline_number: str = "16430"
 
-    # T1 alert thresholds
+    # T1 alert thresholds: a panel lawyer reports at least this often, and within
+    # HEARING_REPORT_HOURS of each hearing.
     lawyer_inactivity_days: int = 14
+    hearing_report_hours: int = 72
     # T2: a case referred this many times (or bounced back to an office it
     # already left) is escalated instead of being passed on again.
     referral_escalation_hops: int = 2

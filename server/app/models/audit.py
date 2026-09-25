@@ -49,6 +49,10 @@ class AuditAction(StrEnum):
     MEDIATION_SCHEDULED = "mediation.scheduled"
     LAWYER_ASSIGNED = "lawyer.assigned"
     LAWYER_REMINDED = "lawyer.reminded"
+    LAWYER_UPDATE = "lawyer.update"
+    CASE_ESCALATED = "case.escalated"
+    EVIDENCE_VIEWED = "evidence.viewed"
+    EVIDENCE_ACKNOWLEDGED = "evidence.acknowledged"
     SYNC_APPLIED = "sync.applied"
 
 

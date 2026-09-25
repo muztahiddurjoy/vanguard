@@ -39,6 +39,13 @@ from app.models import (
 from app.models.case import PRIORITY_RANK
 from app.routers import current_actor, require_api_token
 from app.services import notices, safe_contact
+from app.services.court_progress import (
+    latest_stage,
+    missed_updates,
+    next_hearing_view,
+    update_due_at,
+    update_view,
+)
 from app.services.panel import get_lawyer
 
 router = APIRouter(prefix="/dlao", tags=["dlao"], dependencies=[Depends(require_api_token)])
@@ -79,18 +86,11 @@ def mask_phone(phone: str | None) -> str | None:
 def live_flags(case: Case, now: datetime) -> list[str]:
     """Stored flags plus the ones that depend on the clock (T1)."""
     flags = list(case.flags or [])
-    settings = get_settings()
     is_open = case.status in OPEN_STATUSES
     if is_open and case.due_at and as_utc(case.due_at) < now and "overdue" not in flags:
         flags.append("overdue")
-    if (
-        is_open
-        and case.lawyer_id
-        and case.lawyer_last_update_at
-        and now - as_utc(case.lawyer_last_update_at)
-        > timedelta(days=settings.lawyer_inactivity_days)
-        and "lawyerInactivity" not in flags
-    ):
+    # Fortnightly reports, and one within days of every hearing (services.court_progress).
+    if is_open and missed_updates(case, now) > 0 and "lawyerInactivity" not in flags:
         flags.append("lawyerInactivity")
     return flags
 
@@ -136,6 +136,18 @@ def party_view(party: Any, *, full_phone: bool) -> dict[str, Any]:
         view["motherName"] = party.mother_name
         view["dateOfBirth"] = party.date_of_birth.isoformat() if party.date_of_birth else None
     return view
+
+
+def lawyer_view(case: Case, now: datetime) -> dict[str, Any]:
+    due = update_due_at(case)
+    return {
+        "id": case.lawyer_id,
+        "lastUpdateAt": (
+            as_utc(case.lawyer_last_update_at).isoformat() if case.lawyer_last_update_at else None
+        ),
+        "missedUpdates": missed_updates(case, now),
+        "updateDueAt": due.isoformat() if due else None,
+    }
 
 
 def track_view(case: Case) -> dict[str, Any] | None:
@@ -230,16 +242,9 @@ def case_view(
         "doNotCall": {"reason": case.do_not_call_reason} if case.do_not_call_reason else None,
         "identity": identity_view(case),
         "notices": case.notices or {},
-        "lawyer": (
-            {
-                "id": case.lawyer_id,
-                "lastUpdateAt": as_utc(case.lawyer_last_update_at).isoformat()
-                if case.lawyer_last_update_at
-                else None,
-            }
-            if case.lawyer_id
-            else None
-        ),
+        "lawyer": lawyer_view(case, now) if case.lawyer_id else None,
+        "nextHearing": next_hearing_view(case),
+        "courtStage": latest_stage(case),
         "triage": ({**case.triage, "status": case.triage_status} if case.triage else None),
         "incidentId": case.incident_id,
     }
@@ -431,6 +436,7 @@ def get_case(
         for i in db.scalars(select(ChecklistItem).where(ChecklistItem.case_id == case.id))
     ]  # fmt: skip
     view["callNotes"] = case.call_notes or []
+    view["lawyerUpdates"] = [update_view(u) for u in case.lawyer_updates]
     view["referrals"] = [
         {
             "id": r.id,
