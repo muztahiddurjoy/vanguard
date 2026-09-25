@@ -55,6 +55,78 @@ export const PANEL_LAWYERS: PanelLawyer[] = [
 
 export const INITIAL_CASES: LegalCase[] = [
   {
+    // A hotline call cut short: the caller seemed to be held, so nobody may call back.
+    id: "APP-2026-034",
+    applicant: {
+      name: { en: "Parvin Akter", bn: "পারভীন আক্তার" },
+      phone: "01745-XXX-208",
+      village: { en: "Kholahati", bn: "খলাহাটি" },
+      upazila: { en: "Rangpur Sadar", bn: "রংপুর সদর" },
+      guardian: { en: "Not given (the call was cut)", bn: "জানা যায়নি (কল কেটে গেছে)" },
+      nidMasked: "—",
+    },
+    category: "domesticViolence",
+    priority: "critical",
+    queues: ["actionToday", "pendingTriage"],
+    flags: ["doNotCall", "callDropped", "sensitive"],
+    actions: ["reviewTriage"],
+    summary: {
+      en: "The caller said her husband has kept her locked in a room since yesterday and will not let her leave. The call was cut after about a minute, before the other questions.",
+      bn: "কলকারী জানান, তাঁর স্বামী গতকাল থেকে তাঁকে ঘরে আটকে রেখেছেন, বের হতে দিচ্ছেন না। প্রায় এক মিনিট পর, বাকি প্রশ্নের আগেই কলটি কেটে যায়।",
+    },
+    channel: "hotline",
+    receivedAt: hoursAgo(1),
+    dueAt: hoursAgo(-3),
+    triage: {
+      priority: "critical",
+      confidence: 0.62,
+      status: "pending",
+      generatedAt: hoursAgo(1),
+      factors: [
+        { key: "hostageSituation", detected: true, agent: "risk", weight: "high" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+        { key: "weaponThreat", detected: false, agent: "risk", weight: "high" },
+        { key: "childrenInHousehold", detected: false, agent: "safety", weight: "medium" },
+      ],
+      rationale: {
+        en: "Recommended CRITICAL: possibly held hostage.",
+        bn: "প্রস্তাবিত অগ্রাধিকার জরুরি: জিম্মি থাকার আশঙ্কা।",
+      },
+    },
+    activity: [
+      { type: "received", at: hoursAgo(1), channel: "hotline" },
+      { type: "aiTriage", at: hoursAgo(1), priority: "critical" },
+      { type: "doNotCallSet", at: hoursAgo(1), reason: "hostage" },
+      { type: "identityChecked", at: hoursAgo(1), verified: false },
+    ],
+    track: {
+      key: "sensitive",
+      status: "suggested",
+      reason: {
+        en: "Sensitive case: possibly held hostage, domestic violence.",
+        bn: "সংবেদনশীল মামলা: জিম্মি থাকার আশঙ্কা, পারিবারিক সহিংসতা।",
+      },
+    },
+    doNotCall: { reason: "hostage" },
+    identity: {
+      filingFor: "self",
+      applicantVerified: false,
+      callerVerified: false,
+      callerSimRegistered: false,
+    },
+    trackingToken: "5307-2291",
+    filerReceipt: { status: "blocked" },
+    callNotes: [
+      { at: hoursAgo(1), topic: "filing_for", text: "নিজের জন্য" },
+      { at: hoursAgo(1), topic: "caller_name", text: "আমার নাম পারভীন" },
+      {
+        at: hoursAgo(1),
+        topic: "father_name",
+        text: "আমার স্বামী কাল থেকে আমাকে ঘরে আটকে রেখেছে, বের হতে দিচ্ছে না",
+      },
+    ],
+  },
+  {
     id: "APP-2026-001",
     applicant: {
       name: { en: "Moyuri Akter", bn: "ময়ূরী আক্তার" },
@@ -103,6 +175,43 @@ export const INITIAL_CASES: LegalCase[] = [
     activity: [
       { type: "received", at: hoursAgo(20), channel: "proxy" },
       { type: "aiTriage", at: hoursAgo(19), priority: "high" },
+      { type: "noticeHeld", at: hoursAgo(19) },
+    ],
+    track: {
+      key: "sensitive",
+      status: "suggested",
+      reason: {
+        en: "Sensitive case: active violence, safe contact restricted, domestic violence.",
+        bn: "সংবেদনশীল মামলা: চলমান সহিংসতা, নিরাপদ যোগাযোগ সীমিত, পারিবারিক সহিংসতা।",
+      },
+    },
+    identity: {
+      filingFor: "other",
+      applicantVerified: false,
+      callerVerified: true,
+      callerSimRegistered: true,
+    },
+    trackingToken: "4821-0937",
+    filerReceipt: { status: "sent" },
+    respondent: {
+      name: { en: "Jalal Uddin", bn: "জালাল উদ্দিন" },
+      relation: { en: "husband", bn: "স্বামী" },
+      nidVerified: true,
+      notice: { status: "held", reasons: ["sensitive", "callerDidNotAgree"] },
+    },
+    callNotes: [
+      { at: hoursAgo(20), topic: "filing_for", text: "I am calling for my neighbour Moyuri." },
+      {
+        at: hoursAgo(20),
+        topic: "problem",
+        text: "Her husband beats her. Two days ago she had bruises all over her arms.",
+      },
+      { at: hoursAgo(20), topic: "notify_respondent", text: "No, please don't tell him yet." },
+      {
+        at: hoursAgo(20),
+        topic: "safe_to_call",
+        text: "Only on Tuesday between 2 and 4, when he goes to the market. He checks her phone.",
+      },
     ],
   },
   {
@@ -152,6 +261,22 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "lawyerUpdateMissed", at: daysAgo(20) },
       { type: "lawyerUpdateMissed", at: daysAgo(6) },
     ],
+    track: {
+      key: "mediation",
+      status: "confirmed",
+      reason: {
+        en: "Can be resolved through mediation: a dispute with cousins and no sign of violence.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: চাচাতো ভাইদের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।",
+      },
+    },
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: false,
+      callerSimRegistered: false,
+    },
+    trackingToken: "3107-5582",
+    filerReceipt: { status: "sent" },
   },
   {
     id: "APP-2026-012",
@@ -206,6 +331,14 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "aiTriage", at: daysAgo(2), priority: "high" },
       { type: "triageAccepted", at: daysAgo(1), priority: "high" },
     ],
+    track: {
+      key: "sensitive",
+      status: "confirmed",
+      reason: {
+        en: "Sensitive case: blackmail or extortion, cyber harassment.",
+        bn: "সংবেদনশীল মামলা: ব্ল্যাকমেইল বা চাঁদাবাজি, সাইবার হয়রানি।",
+      },
+    },
   },
   {
     id: "APP-2026-018",
@@ -283,6 +416,14 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "received", at: hoursAgo(26), channel: "hotline" },
       { type: "duplicateFlagged", at: hoursAgo(26), otherId: "APP-2026-018", score: 0.85 },
     ],
+    track: {
+      key: "sensitive",
+      status: "suggested",
+      reason: {
+        en: "Sensitive case: dowry harassment.",
+        bn: "সংবেদনশীল মামলা: যৌতুকের জন্য হয়রানি।",
+      },
+    },
   },
   {
     id: "APP-2026-027",
@@ -324,7 +465,45 @@ export const INITIAL_CASES: LegalCase[] = [
     },
     activity: [
       { type: "received", at: hoursAgo(9), channel: "hotline" },
+      { type: "identityChecked", at: hoursAgo(9), verified: true },
       { type: "aiTriage", at: hoursAgo(8), priority: "medium" },
+    ],
+    proxy: {
+      name: { en: "Arif Hossain", bn: "আরিফ হোসেন" },
+      relation: { en: "son", bn: "ছেলে" },
+    },
+    track: {
+      key: "mediation",
+      status: "suggested",
+      reason: {
+        en: "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।",
+      },
+    },
+    identity: {
+      filingFor: "mother",
+      applicantVerified: true,
+      callerVerified: true,
+      callerSimRegistered: true,
+    },
+    trackingToken: "7730-1946",
+    filerReceipt: { status: "sent" },
+    respondent: {
+      name: { en: "Sohrab Ali", bn: "সোহরাব আলী" },
+      relation: { en: "former husband", bn: "সাবেক স্বামী" },
+      nidVerified: true,
+      notice: { status: "sent" },
+    },
+    callNotes: [
+      { at: hoursAgo(9), topic: "filing_for", text: "আমার মায়ের জন্য" },
+      { at: hoursAgo(9), topic: "caller_name", text: "আমার নাম আরিফ হোসেন" },
+      {
+        at: hoursAgo(9),
+        topic: "problem",
+        text: "বাবা গত বছর মাকে তালাক দিয়েছেন। সালিশে দেনমোহর আর আমার ছোট বোনের খরচ দিতে বলা হয়েছিল, কিন্তু কিছুই দেননি।",
+      },
+      { at: hoursAgo(9), topic: "respondent_name", text: "সোহরাব আলী, আমার বাবা" },
+      { at: hoursAgo(9), topic: "notify_respondent", text: "হ্যাঁ, পাঠান" },
     ],
   },
   {
@@ -361,6 +540,14 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "received", at: daysAgo(41), channel: "walkIn" },
       { type: "lawyerAssigned", at: daysAgo(39), lawyerId: "LAW-15" },
     ],
+    track: {
+      key: "mediation",
+      status: "confirmed",
+      reason: {
+        en: "Can be resolved through mediation: a dispute with an employer and no sign of violence.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: মালিকের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।",
+      },
+    },
   },
   {
     id: "APP-2026-031",
@@ -403,5 +590,13 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "aiTriage", at: daysAgo(3), priority: "low" },
       { type: "triageAccepted", at: daysAgo(2), priority: "low" },
     ],
+    track: {
+      key: "mediation",
+      status: "confirmed",
+      reason: {
+        en: "Can be resolved through mediation: both families agreed to mediation first.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: দুই পরিবারই প্রথমে মধ্যস্থতায় সম্মত।",
+      },
+    },
   },
 ]

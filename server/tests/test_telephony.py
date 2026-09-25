@@ -125,9 +125,13 @@ def test_call_collects_intake_and_creates_application(db_engine):
         )
         for utterance in (
             "I am calling for my neighbour",
+            "My name is Ripon",
             "Moyuri Akter",
             "01712345318 in Rangpur",
             "Her husband beats her and she has visible injuries",
+            "Her husband Jalal Uddin",
+            "I don't know",
+            "Rangpur",
             "Tuesday 2 to 4 pm, he checks her phone",
         ):
             stt.say(utterance)
@@ -135,7 +139,7 @@ def test_call_collects_intake_and_creates_application(db_engine):
         return ws, tts, stt, manager
 
     ws, tts, stt, manager = asyncio.run(scenario())
-    assert tts.spoken[0].startswith("Are you calling for yourself")
+    assert tts.spoken[0].startswith("Are you applying for yourself")
     assert tts.spoken[-1].startswith("Thank you. Your application is recorded.")
     assert stt.fed == 160 and stt.closed
     assert ws.closed
@@ -148,6 +152,38 @@ def test_call_collects_intake_and_creates_application(db_engine):
     assert case.category == "domesticViolence"
     assert case.channel == "proxy"
     assert case.applicant is not None and case.applicant.safety_level == "restricted"
+
+
+def test_call_cut_mid_intake_is_recorded_and_marked_do_not_call(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            intake=IntakeConversation(use_default_llm=False, use_default_registry=False),
+            session_factory=factory,
+        )
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        for utterance in ("for myself", "Moyuri Akter", "Rangpur"):
+            stt.say(utterance)
+        stt.say("He hits me with a stick and says he will kill me")
+        await until(lambda: len(tts.spoken) == 5)  # greeting + one reply per utterance
+        ws.push({"event": "stop"})  # the line goes dead
+        await asyncio.wait_for(runner, 5)
+        return manager
+
+    manager = asyncio.run(scenario())
+    with factory() as db:
+        case = db.scalars(select(Case)).one()
+    assert manager.case_ref == case.application_id
+    assert {"callDropped", "doNotCall"} <= set(case.flags)
+    assert case.do_not_call_reason == "dangerCallCut"
+    assert case.applicant is not None and case.applicant.phone == "01712345318"  # caller ID
+    assert case.applicant.safety_level == "no_contact"
 
 
 def test_caller_barge_in_clears_playback(db_engine):

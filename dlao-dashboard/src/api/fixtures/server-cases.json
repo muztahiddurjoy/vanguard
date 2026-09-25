@@ -1,0 +1,896 @@
+{
+  "list": [
+    {
+      "id": "APP-2026-001",
+      "applicationId": "APP-2026-001",
+      "caseNumber": null,
+      "status": "application",
+      "outcome": null,
+      "category": null,
+      "priority": "critical",
+      "priorityChanged": false,
+      "queues": [
+        "actionToday",
+        "pendingTriage"
+      ],
+      "flags": [
+        "sensitive",
+        "doNotCall",
+        "callDropped"
+      ],
+      "channel": "online",
+      "summary": "for myself / My name is Parvin / My husband has locked me in the room",
+      "summaryBn": null,
+      "receivedAt": "2026-09-25T07:42:06.630158+00:00",
+      "dueAt": "2026-09-25T11:42:06.630158+00:00",
+      "currentOffice": "Rangpur",
+      "district": null,
+      "applicant": {
+        "id": 1,
+        "name": "Parvin",
+        "nameBn": null,
+        "phone": null,
+        "village": null,
+        "upazila": null,
+        "district": null,
+        "guardian": null,
+        "nidMasked": null,
+        "nidVerified": false,
+        "age": null,
+        "safetyLevel": "no_contact",
+        "provenance": "web_form",
+        "accessibility": [],
+        "safeContactWindows": []
+      },
+      "proxy": null,
+      "respondent": null,
+      "trackingToken": "6900-0616",
+      "track": {
+        "key": "sensitive",
+        "status": "suggested",
+        "aiKey": "sensitive",
+        "reason": {
+          "en": "Sensitive case: possibly held hostage.",
+          "bn": "সংবেদনশীল মামলা: জিম্মি থাকার আশঙ্কা।"
+        }
+      },
+      "doNotCall": {
+        "reason": "hostage"
+      },
+      "identity": {
+        "filingFor": "self",
+        "applicantVerified": false,
+        "callerVerified": false,
+        "callerSimRegistered": false
+      },
+      "notices": {
+        "filer": {
+          "status": "blocked",
+          "reason": "do_not_contact",
+          "at": "2026-09-25T07:42:06.645020+00:00"
+        },
+        "respondent": {
+          "status": "notFound",
+          "at": "2026-09-25T07:42:06.645035+00:00"
+        }
+      },
+      "lawyer": null,
+      "triage": {
+        "priority": "critical",
+        "confidence": 0.53,
+        "factors": [
+          {
+            "key": "activeViolence",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "weaponThreat",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "hostageSituation",
+            "detected": true,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": "locked me"
+          },
+          {
+            "key": "extortionThreat",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "onlineAbuse",
+            "detected": false,
+            "agent": "risk",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "childrenInHousehold",
+            "detected": false,
+            "agent": "safety",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "financialDependency",
+            "detected": false,
+            "agent": "safety",
+            "weight": "low",
+            "evidence": null
+          },
+          {
+            "key": "priorLegalAction",
+            "detected": false,
+            "agent": "intake",
+            "weight": "low",
+            "evidence": null
+          },
+          {
+            "key": "proxyReported",
+            "detected": false,
+            "agent": "intake",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "safeContactRestricted",
+            "detected": false,
+            "agent": "safety",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "outOfJurisdiction",
+            "detected": false,
+            "agent": "jurisdiction",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "hearingImminent",
+            "detected": false,
+            "agent": "intake",
+            "weight": "high",
+            "evidence": null
+          }
+        ],
+        "rationale": {
+          "en": "Recommended CRITICAL: possibly held hostage.",
+          "bn": "প্রস্তাবিত অগ্রাধিকার জরুরি: জিম্মি থাকার আশঙ্কা।"
+        },
+        "status": "pending",
+        "generatedAt": "2026-09-25T07:42:06.640903+00:00",
+        "category": null,
+        "categoryConfidence": 0.0,
+        "categorySource": "rules",
+        "complianceNotes": [
+          "Possibly held hostage: do not call or text the applicant's number."
+        ],
+        "recommendedSafetyLevel": "standard",
+        "track": {
+          "key": "sensitive",
+          "reason": {
+            "en": "Sensitive case: possibly held hostage.",
+            "bn": "সংবেদনশীল মামলা: জিম্মি থাকার আশঙ্কা।"
+          },
+          "source": "rules"
+        }
+      },
+      "incidentId": null
+    },
+    {
+      "id": "APP-2026-002",
+      "applicationId": "APP-2026-002",
+      "caseNumber": null,
+      "status": "application",
+      "outcome": null,
+      "category": "familyMaintenance",
+      "priority": "low",
+      "priorityChanged": false,
+      "queues": [
+        "pendingTriage"
+      ],
+      "flags": [
+        "proxyReported"
+      ],
+      "channel": "proxy",
+      "summary": "Her former husband Kamal Hossain has not paid maintenance",
+      "summaryBn": null,
+      "receivedAt": "2026-09-25T07:42:06.719836+00:00",
+      "dueAt": "2026-10-02T07:42:06.719836+00:00",
+      "currentOffice": "Rangpur",
+      "district": "Rangpur",
+      "applicant": {
+        "id": 2,
+        "name": "Rahima Khatun",
+        "nameBn": "রহিমা খাতুন",
+        "phone": "01811-XXX-344",
+        "village": "Balarhat",
+        "upazila": "Mithapukur",
+        "district": "Rangpur",
+        "guardian": "Nurul Haque",
+        "nidMasked": "•••• •••• 0002",
+        "nidVerified": true,
+        "age": 57,
+        "safetyLevel": "standard",
+        "provenance": "proxy_reported",
+        "accessibility": [],
+        "safeContactWindows": []
+      },
+      "proxy": {
+        "name": "Rafiqul Islam",
+        "nameBn": "রফিকুল ইসলাম",
+        "relation": "son",
+        "nidVerified": true
+      },
+      "respondent": {
+        "name": "Kamal Hossain",
+        "nameBn": "কামাল হোসেন",
+        "relation": null,
+        "nidVerified": true,
+        "registeredSims": 2
+      },
+      "trackingToken": "0303-1822",
+      "track": {
+        "key": "mediation",
+        "status": "suggested",
+        "aiKey": "mediation",
+        "reason": {
+          "en": "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+          "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।"
+        }
+      },
+      "doNotCall": null,
+      "identity": {
+        "filingFor": "mother",
+        "applicantVerified": true,
+        "callerVerified": true,
+        "callerSimRegistered": true
+      },
+      "notices": {
+        "filer": {
+          "status": "sent",
+          "variant": "full",
+          "dryRun": true,
+          "at": "2026-09-25T07:42:06.727666+00:00"
+        },
+        "respondent": {
+          "status": "held",
+          "reasons": [
+            "callerDidNotAgree"
+          ],
+          "at": "2026-09-25T07:42:06.728212+00:00"
+        }
+      },
+      "lawyer": null,
+      "triage": {
+        "priority": "low",
+        "confidence": 0.83,
+        "factors": [
+          {
+            "key": "activeViolence",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "weaponThreat",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "hostageSituation",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "extortionThreat",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "onlineAbuse",
+            "detected": false,
+            "agent": "risk",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "childrenInHousehold",
+            "detected": false,
+            "agent": "safety",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "financialDependency",
+            "detected": false,
+            "agent": "safety",
+            "weight": "low",
+            "evidence": null
+          },
+          {
+            "key": "priorLegalAction",
+            "detected": false,
+            "agent": "intake",
+            "weight": "low",
+            "evidence": null
+          },
+          {
+            "key": "proxyReported",
+            "detected": true,
+            "agent": "intake",
+            "weight": "medium",
+            "evidence": "reported on the applicant's behalf"
+          },
+          {
+            "key": "safeContactRestricted",
+            "detected": false,
+            "agent": "safety",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "outOfJurisdiction",
+            "detected": false,
+            "agent": "jurisdiction",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "hearingImminent",
+            "detected": false,
+            "agent": "intake",
+            "weight": "high",
+            "evidence": null
+          }
+        ],
+        "rationale": {
+          "en": "Recommended LOW: reported by someone else (access barrier).",
+          "bn": "প্রস্তাবিত অগ্রাধিকার নিম্ন: অন্য কেউ জানিয়েছেন।"
+        },
+        "status": "pending",
+        "generatedAt": "2026-09-25T07:42:06.724269+00:00",
+        "category": "familyMaintenance",
+        "categoryConfidence": 1.0,
+        "categorySource": "rules",
+        "complianceNotes": [
+          "Reported by a proxy: confirm consent with the applicant directly."
+        ],
+        "recommendedSafetyLevel": "standard",
+        "track": {
+          "key": "mediation",
+          "reason": {
+            "en": "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+            "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।"
+          },
+          "source": "rules"
+        }
+      },
+      "incidentId": null
+    },
+    {
+      "id": "APP-2026-003",
+      "applicationId": "APP-2026-003",
+      "caseNumber": null,
+      "status": "application",
+      "outcome": null,
+      "category": null,
+      "priority": "low",
+      "priorityChanged": false,
+      "queues": [
+        "pendingTriage"
+      ],
+      "flags": [],
+      "channel": "online",
+      "summary": "My cousins have occupied 22 decimals of my inherited farmland.",
+      "summaryBn": null,
+      "receivedAt": "2026-09-25T07:42:06.730536+00:00",
+      "dueAt": "2026-10-02T07:42:06.730536+00:00",
+      "currentOffice": "Rangpur",
+      "district": "Rangpur",
+      "applicant": {
+        "id": 5,
+        "name": "Abdul Malek",
+        "nameBn": null,
+        "phone": "01819-XXX-560",
+        "village": null,
+        "upazila": null,
+        "district": "Rangpur",
+        "guardian": null,
+        "nidMasked": null,
+        "nidVerified": false,
+        "age": null,
+        "safetyLevel": "standard",
+        "provenance": "web_form",
+        "accessibility": [],
+        "safeContactWindows": []
+      },
+      "proxy": null,
+      "respondent": {
+        "name": "Abdul Jalil",
+        "nameBn": null,
+        "relation": "cousin",
+        "nidVerified": false,
+        "registeredSims": 0
+      },
+      "trackingToken": "6912-1641",
+      "track": {
+        "key": "mediation",
+        "status": "suggested",
+        "aiKey": "mediation",
+        "reason": {
+          "en": "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+          "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।"
+        }
+      },
+      "doNotCall": null,
+      "identity": {
+        "filingFor": "self",
+        "applicantVerified": false,
+        "callerVerified": false,
+        "callerSimRegistered": false
+      },
+      "notices": {
+        "filer": {
+          "status": "sent",
+          "variant": "full",
+          "dryRun": true,
+          "at": "2026-09-25T07:42:06.736239+00:00"
+        },
+        "respondent": {
+          "status": "notFound",
+          "at": "2026-09-25T07:42:06.736260+00:00"
+        }
+      },
+      "lawyer": null,
+      "triage": {
+        "priority": "low",
+        "confidence": 0.5,
+        "factors": [
+          {
+            "key": "activeViolence",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "weaponThreat",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "hostageSituation",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "extortionThreat",
+            "detected": false,
+            "agent": "risk",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "onlineAbuse",
+            "detected": false,
+            "agent": "risk",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "childrenInHousehold",
+            "detected": false,
+            "agent": "safety",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "financialDependency",
+            "detected": false,
+            "agent": "safety",
+            "weight": "low",
+            "evidence": null
+          },
+          {
+            "key": "priorLegalAction",
+            "detected": false,
+            "agent": "intake",
+            "weight": "low",
+            "evidence": null
+          },
+          {
+            "key": "proxyReported",
+            "detected": false,
+            "agent": "intake",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "safeContactRestricted",
+            "detected": false,
+            "agent": "safety",
+            "weight": "high",
+            "evidence": null
+          },
+          {
+            "key": "outOfJurisdiction",
+            "detected": false,
+            "agent": "jurisdiction",
+            "weight": "medium",
+            "evidence": null
+          },
+          {
+            "key": "hearingImminent",
+            "detected": false,
+            "agent": "intake",
+            "weight": "high",
+            "evidence": null
+          }
+        ],
+        "rationale": {
+          "en": "Recommended LOW: no warning signs found.",
+          "bn": "প্রস্তাবিত অগ্রাধিকার নিম্ন: কোনো সতর্ক সংকেত পাওয়া যায়নি।"
+        },
+        "status": "pending",
+        "generatedAt": "2026-09-25T07:42:06.733954+00:00",
+        "category": null,
+        "categoryConfidence": 0.0,
+        "categorySource": "rules",
+        "complianceNotes": [],
+        "recommendedSafetyLevel": "standard",
+        "track": {
+          "key": "mediation",
+          "reason": {
+            "en": "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+            "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।"
+          },
+          "source": "rules"
+        }
+      },
+      "incidentId": null
+    }
+  ],
+  "detail": {
+    "id": "APP-2026-002",
+    "applicationId": "APP-2026-002",
+    "caseNumber": null,
+    "status": "application",
+    "outcome": null,
+    "category": "familyMaintenance",
+    "priority": "low",
+    "priorityChanged": false,
+    "queues": [
+      "pendingTriage"
+    ],
+    "flags": [
+      "proxyReported"
+    ],
+    "channel": "proxy",
+    "summary": "Her former husband Kamal Hossain has not paid maintenance",
+    "summaryBn": null,
+    "receivedAt": "2026-09-25T07:42:06.719836+00:00",
+    "dueAt": "2026-10-02T07:42:06.719836+00:00",
+    "currentOffice": "Rangpur",
+    "district": "Rangpur",
+    "applicant": {
+      "id": 2,
+      "name": "Rahima Khatun",
+      "nameBn": "রহিমা খাতুন",
+      "phone": "01811223344",
+      "village": "Balarhat",
+      "upazila": "Mithapukur",
+      "district": "Rangpur",
+      "guardian": "Nurul Haque",
+      "nidMasked": "•••• •••• 0002",
+      "nidVerified": true,
+      "age": 57,
+      "safetyLevel": "standard",
+      "provenance": "proxy_reported",
+      "accessibility": [],
+      "safeContactWindows": [],
+      "motherName": "Amena Begum",
+      "dateOfBirth": "1968-11-20"
+    },
+    "proxy": {
+      "name": "Rafiqul Islam",
+      "nameBn": "রফিকুল ইসলাম",
+      "relation": "son",
+      "nidVerified": true
+    },
+    "respondent": {
+      "name": "Kamal Hossain",
+      "nameBn": "কামাল হোসেন",
+      "relation": null,
+      "nidVerified": true,
+      "registeredSims": 2
+    },
+    "trackingToken": "0303-1822",
+    "track": {
+      "key": "mediation",
+      "status": "suggested",
+      "aiKey": "mediation",
+      "reason": {
+        "en": "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+        "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।"
+      }
+    },
+    "doNotCall": null,
+    "identity": {
+      "filingFor": "mother",
+      "applicantVerified": true,
+      "callerVerified": true,
+      "callerSimRegistered": true
+    },
+    "notices": {
+      "filer": {
+        "status": "sent",
+        "variant": "full",
+        "dryRun": true,
+        "at": "2026-09-25T07:42:06.727666+00:00"
+      },
+      "respondent": {
+        "status": "held",
+        "reasons": [
+          "callerDidNotAgree"
+        ],
+        "at": "2026-09-25T07:42:06.728212+00:00"
+      }
+    },
+    "lawyer": null,
+    "triage": {
+      "priority": "low",
+      "confidence": 0.83,
+      "factors": [
+        {
+          "key": "activeViolence",
+          "detected": false,
+          "agent": "risk",
+          "weight": "high",
+          "evidence": null
+        },
+        {
+          "key": "weaponThreat",
+          "detected": false,
+          "agent": "risk",
+          "weight": "high",
+          "evidence": null
+        },
+        {
+          "key": "hostageSituation",
+          "detected": false,
+          "agent": "risk",
+          "weight": "high",
+          "evidence": null
+        },
+        {
+          "key": "extortionThreat",
+          "detected": false,
+          "agent": "risk",
+          "weight": "high",
+          "evidence": null
+        },
+        {
+          "key": "onlineAbuse",
+          "detected": false,
+          "agent": "risk",
+          "weight": "medium",
+          "evidence": null
+        },
+        {
+          "key": "childrenInHousehold",
+          "detected": false,
+          "agent": "safety",
+          "weight": "medium",
+          "evidence": null
+        },
+        {
+          "key": "financialDependency",
+          "detected": false,
+          "agent": "safety",
+          "weight": "low",
+          "evidence": null
+        },
+        {
+          "key": "priorLegalAction",
+          "detected": false,
+          "agent": "intake",
+          "weight": "low",
+          "evidence": null
+        },
+        {
+          "key": "proxyReported",
+          "detected": true,
+          "agent": "intake",
+          "weight": "medium",
+          "evidence": "reported on the applicant's behalf"
+        },
+        {
+          "key": "safeContactRestricted",
+          "detected": false,
+          "agent": "safety",
+          "weight": "high",
+          "evidence": null
+        },
+        {
+          "key": "outOfJurisdiction",
+          "detected": false,
+          "agent": "jurisdiction",
+          "weight": "medium",
+          "evidence": null
+        },
+        {
+          "key": "hearingImminent",
+          "detected": false,
+          "agent": "intake",
+          "weight": "high",
+          "evidence": null
+        }
+      ],
+      "rationale": {
+        "en": "Recommended LOW: reported by someone else (access barrier).",
+        "bn": "প্রস্তাবিত অগ্রাধিকার নিম্ন: অন্য কেউ জানিয়েছেন।"
+      },
+      "status": "pending",
+      "generatedAt": "2026-09-25T07:42:06.724269+00:00",
+      "category": "familyMaintenance",
+      "categoryConfidence": 1.0,
+      "categorySource": "rules",
+      "complianceNotes": [
+        "Reported by a proxy: confirm consent with the applicant directly."
+      ],
+      "recommendedSafetyLevel": "standard",
+      "track": {
+        "key": "mediation",
+        "reason": {
+          "en": "Can be resolved through mediation: a dispute with the named respondent and no sign of violence.",
+          "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।"
+        },
+        "source": "rules"
+      }
+    },
+    "incidentId": null,
+    "activity": [
+      {
+        "at": "2026-09-25T07:42:06.722794+00:00",
+        "actor": "agent:t5:anonymous",
+        "action": "case.created",
+        "details": {
+          "applicationId": "APP-2026-002",
+          "channel": "proxy"
+        },
+        "justification": null
+      },
+      {
+        "at": "2026-09-25T07:42:06.724518+00:00",
+        "actor": "agent:t8",
+        "action": "triage.generated",
+        "details": {
+          "priority": "low",
+          "confidence": 0.83,
+          "category": "familyMaintenance",
+          "source": "rules",
+          "track": "mediation"
+        },
+        "justification": null
+      },
+      {
+        "at": "2026-09-25T07:42:06.726820+00:00",
+        "actor": "agent:t5:anonymous",
+        "action": "identity.checked",
+        "details": {
+          "filingFor": "mother",
+          "caller": "verified",
+          "applicant": "verified",
+          "respondent": "found",
+          "callerSimRegistered": true
+        },
+        "justification": null
+      },
+      {
+        "at": "2026-09-25T07:42:06.727863+00:00",
+        "actor": "agent:t5:anonymous",
+        "action": "notice.held",
+        "details": {
+          "notice": "respondent",
+          "reasons": [
+            "callerDidNotAgree"
+          ]
+        },
+        "justification": null
+      }
+    ],
+    "documents": [],
+    "checklist": [],
+    "callNotes": [
+      {
+        "at": "2026-09-25T07:42:06.659527+00:00",
+        "topic": "filing_for",
+        "text": "for my mother"
+      },
+      {
+        "at": "2026-09-25T07:42:06.665984+00:00",
+        "topic": "caller_name",
+        "text": "Rafiqul Islam"
+      },
+      {
+        "at": "2026-09-25T07:42:06.671949+00:00",
+        "topic": "father_name",
+        "text": "Md Abdul Karim"
+      },
+      {
+        "at": "2026-09-25T07:42:06.676993+00:00",
+        "topic": "permanent_district",
+        "text": "Rangpur"
+      },
+      {
+        "at": "2026-09-25T07:42:06.681816+00:00",
+        "topic": "date_of_birth",
+        "text": "2 June 1994"
+      },
+      {
+        "at": "2026-09-25T07:42:06.686528+00:00",
+        "topic": "name",
+        "text": "Rahima Khatun"
+      },
+      {
+        "at": "2026-09-25T07:42:06.691530+00:00",
+        "topic": "problem",
+        "text": "Her former husband Kamal Hossain has not paid maintenance"
+      },
+      {
+        "at": "2026-09-25T07:42:06.695960+00:00",
+        "topic": "respondent_name",
+        "text": "Kamal Hossain"
+      },
+      {
+        "at": "2026-09-25T07:42:06.700438+00:00",
+        "topic": "respondent_father_name",
+        "text": "Abdul Hamid"
+      },
+      {
+        "at": "2026-09-25T07:42:06.704906+00:00",
+        "topic": "respondent_district",
+        "text": "Gaibandha"
+      },
+      {
+        "at": "2026-09-25T07:42:06.709165+00:00",
+        "topic": "notify_respondent",
+        "text": "no, not now"
+      },
+      {
+        "at": "2026-09-25T07:42:06.713308+00:00",
+        "topic": "phone",
+        "text": "01811223344"
+      },
+      {
+        "at": "2026-09-25T07:42:06.717645+00:00",
+        "topic": "safe_to_call",
+        "text": "any time"
+      }
+    ],
+    "referrals": []
+  }
+}

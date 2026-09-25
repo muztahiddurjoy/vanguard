@@ -33,6 +33,8 @@ export type CaseCategory =
   | "dowryHarassment"
   | "labourDispute"
   | "childCustody"
+  /** Not sorted yet (the AI could not tell). */
+  | "other"
 
 export type CaseFlag =
   | "proxyReported"
@@ -43,6 +45,10 @@ export type CaseFlag =
   | "possibleDuplicate"
   | "overdue"
   | "escalated"
+  /** Never call or text the applicant: see LegalCase.doNotCall. */
+  | "doNotCall"
+  /** The phone call was cut before the AI finished its questions. */
+  | "callDropped"
 
 export type NextAction =
   | "reviewTriage"
@@ -54,7 +60,7 @@ export type NextAction =
   | "scheduleSafeCall"
   | "viewCase"
 
-export type IntakeChannel = "hotline" | "walkIn" | "online" | "proxy"
+export type IntakeChannel = "hotline" | "walkIn" | "online" | "proxy" | "udc"
 
 /** A weekly window in which the applicant can be contacted safely (local time). */
 export interface SafeContactWindow {
@@ -72,6 +78,7 @@ export type TriageFactorKey =
   | "safeContactRestricted"
   | "childrenInHousehold"
   | "weaponThreat"
+  | "hostageSituation"
   | "priorLegalAction"
   | "onlineAbuse"
   | "extortionThreat"
@@ -105,7 +112,61 @@ export interface Applicant {
   upazila: Localized
   guardian: Localized
   nidMasked: string
-  age: number
+  age?: number
+  /** Details matched to the National ID register. */
+  nidVerified?: boolean
+}
+
+/** How the case could be resolved. The AI marks it; the officer decides. */
+export type ResolutionTrack = "advice" | "mediation" | "sensitive"
+
+export const RESOLUTION_TRACKS: readonly ResolutionTrack[] = ["advice", "mediation", "sensitive"]
+
+export interface TrackMark {
+  key: ResolutionTrack
+  /** suggested = the AI's mark, not yet reviewed by an officer. */
+  status: "suggested" | "confirmed" | "changed"
+  /** What the AI marked, and why. */
+  aiKey?: ResolutionTrack
+  reason?: Localized
+}
+
+/** Why nobody may call or text the applicant. */
+export type DoNotCallReason = "hostage" | "dangerCallCut"
+
+/** Who the caller applied for. */
+export type FilingFor = "self" | "father" | "mother" | "sibling" | "other"
+
+export interface Identity {
+  filingFor: FilingFor
+  /** The applicant's details were matched to their National ID record. */
+  applicantVerified: boolean
+  /** The caller answered the NID security questions correctly. */
+  callerVerified: boolean
+  /** The caller phoned from a SIM registered under their own NID. */
+  callerSimRegistered: boolean
+}
+
+export type NoticeStatus = "sent" | "held" | "notFound" | "blocked" | "failed"
+
+export type NoticeHoldReason =
+  "callerDidNotAgree" | "doNotCall" | "sensitive" | "emergency" | "identityNotVerified"
+
+export interface Respondent {
+  name: Localized
+  relation?: Localized
+  /** Found in the National ID register, so their registered SIMs are known. */
+  nidVerified: boolean
+  /** The SMS asking them to visit the office. */
+  notice?: { status: NoticeStatus; reasons?: NoticeHoldReason[] }
+}
+
+/** Something the caller said, noted by the AI during the call. */
+export interface CallNote {
+  at: string
+  /** The question being answered, e.g. "problem"; "opening" before the first. */
+  topic: string
+  text: string
 }
 
 export interface Officer {
@@ -184,6 +245,17 @@ export type ActivityEvent =
   | { type: "overdueResolved"; at: string }
   | { type: "lawyerAssigned"; at: string; lawyerId: string }
   | { type: "safeCallScheduled"; at: string; scheduledFor: string }
+  | {
+      type: "trackReviewed"
+      at: string
+      to: ResolutionTrack
+      from?: ResolutionTrack
+      justification?: string
+    }
+  | { type: "doNotCallSet"; at: string; reason: DoNotCallReason }
+  | { type: "noticeHeld"; at: string }
+  | { type: "noticeReleased"; at: string; justification: string }
+  | { type: "identityChecked"; at: string; verified: boolean }
 
 export interface LegalCase {
   id: string
@@ -210,6 +282,15 @@ export interface LegalCase {
   duplicate?: DuplicateMatch
   triage?: TriageRecommendation
   activity: ActivityEvent[]
+  track?: TrackMark
+  doNotCall?: { reason: DoNotCallReason }
+  identity?: Identity
+  /** Given to whoever filed the case, to follow it on the helpline. */
+  trackingToken?: string
+  respondent?: Respondent
+  /** The SMS with the tracking number to whoever filed the case. */
+  filerReceipt?: { status: NoticeStatus }
+  callNotes?: CallNote[]
 }
 
 export function nextActionOf(c: LegalCase): NextAction {

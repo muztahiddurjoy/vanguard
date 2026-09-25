@@ -1,4 +1,7 @@
-"""Bridges one Twilio media stream to the T5 intake agent and ElevenLabs TTS.
+"""Bridges one Twilio media stream to a phone agent and ElevenLabs TTS.
+
+The agent is T5 intake on the application hotline, or the query helpline when
+the call came in on that line (the ``line`` stream parameter).
 
 Caller audio (μ-law 8 kHz) goes to a speech-to-text ``Transcriber``; each
 final utterance is one T5 turn; the reply is spoken back through ElevenLabs,
@@ -10,8 +13,9 @@ whose ``ulaw_8000`` output Twilio plays as-is.
   our ``mark``), the socket is closed and Twilio moves on to the TwiML after
   ``<Connect>``, which hangs up.
 - The application is created as soon as T5 says the conversation is complete
-  (see ``routers.intake.finish_conversation``), so a dropped call loses nothing
-  already collected.
+  (see ``routers.intake.finish_conversation``). If the call is cut before that,
+  it is created from what was said so far; a caller who seemed to be held, or
+  who was describing violence when the line went dead, is marked do-not-call.
 
 No speech-to-text provider ships with this service: implement ``Transcriber``
 and return it from ``build_transcriber``. Until then callers hear
@@ -29,8 +33,10 @@ from typing import Any, Literal, Protocol
 
 from sqlalchemy.orm import Session
 
-from app.agents.t5_intake import IntakeConversation, conversations
+from app.agents.helpline import HelplineConversation, helpline
+from app.agents.t5_intake import IntakeConversation, conversations, with_token
 from app.database import SessionLocal
+from app.services.case_status import lookup_token
 from app.services.elevenlabs import TextToSpeech, TTSError
 
 log = logging.getLogger(__name__)
@@ -80,25 +86,31 @@ class StreamManager:
         tts: TextToSpeech | None,
         transcriber_factory: Callable[[str], Transcriber | None] = build_transcriber,
         intake: IntakeConversation | None = None,
+        helpline_agent: HelplineConversation | None = None,
         session_factory: Callable[[], Session] = SessionLocal,
     ):
         self.ws = ws
         self.tts = tts
         self.transcriber_factory = transcriber_factory
         self.intake = intake or conversations()
+        self._helpline = helpline_agent
         self.session_factory = session_factory
 
         self.stream_sid: str | None = None
         self.call_sid: str | None = None
         self.caller: str | None = None
         self.language = "bn"
+        self.line = "intake"
         self.transcriber: Transcriber | None = None
         self.case_ref: str | None = None
+        self.tracking_token: str | None = None
 
         self._speak_task: asyncio.Task[None] | None = None
         self._listen_task: asyncio.Task[None] | None = None
         self._marks: dict[str, asyncio.Event] = {}
         self._reply_count = 0
+        # True between the intake greeting and _finish: a hang-up then is a cut call.
+        self._conversation_open = False
 
     # --- Twilio side ----------------------------------------------------------
 
@@ -134,6 +146,7 @@ class StreamManager:
         self.call_sid = start["callSid"]
         params = start.get("customParameters") or {}
         self.language = "en" if params.get("language") == "en" else "bn"
+        self.line = "helpline" if params.get("line") == "helpline" else "intake"
         self.caller = params.get("caller")
         self.transcriber = self.transcriber_factory(self.language)
 
@@ -147,11 +160,32 @@ class StreamManager:
             )
             return
 
-        state = await asyncio.to_thread(
-            self.intake.start, self.call_sid, channel="hotline_16699", language=self.language
-        )
+        state: Any
+        if self.line == "helpline":
+            state = await asyncio.to_thread(
+                self.helpline.start, self.call_sid, language=self.language
+            )
+        else:
+            state = await asyncio.to_thread(
+                self.intake.start,
+                self.call_sid,
+                channel="hotline_16699",
+                language=self.language,
+                caller_phone=self.caller,
+            )
+            self._conversation_open = True
         self._listen_task = asyncio.create_task(self._listen())
         await self._speak(state["reply"])
+
+    @property
+    def helpline(self) -> HelplineConversation:
+        if self._helpline is None:
+            self._helpline = helpline()
+        return self._helpline
+
+    def _lookup(self, token: str) -> dict[str, Any] | None:
+        with self.session_factory() as db:
+            return lookup_token(db, token)
 
     # --- speaking ---------------------------------------------------------------
 
@@ -212,24 +246,46 @@ class StreamManager:
             text = event.text.strip()
             if not text:
                 continue
-            state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
+            state: Any
+            if self.line == "helpline":
+                state = await asyncio.to_thread(
+                    self.helpline.turn, self.call_sid, text, self._lookup
+                )
+                reply = state["reply"]
+            else:
+                state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
+                reply = state["reply"]
+                if state.get("complete"):
+                    await asyncio.to_thread(self._finish, state)
+                    reply = with_token(reply, self.tracking_token, self.language)
             if state.get("complete"):
-                await asyncio.to_thread(self._finish, state)
-                await self._say_and_hang_up(state["reply"])
+                await self._say_and_hang_up(reply)
                 return
-            await self._speak(state["reply"])
+            await self._speak(reply)
 
-    def _finish(self, state: Any) -> None:
+    def _finish(self, state: Any, *, dropped: bool = False) -> None:
         from app.routers.intake import finish_conversation
 
         assert self.call_sid is not None
+        self._conversation_open = False
         with self.session_factory() as db:
             case = finish_conversation(
-                db, self.call_sid, state, actor="agent:t5:hotline", fallback_phone=self.caller
+                db,
+                self.call_sid,
+                state,
+                actor="agent:t5:hotline",
+                fallback_phone=self.caller,
+                dropped=dropped,
             )
             db.commit()
             self.case_ref = case.display_id if case else None
-        log.info("call %s finished; application %s", self.call_sid, self.case_ref)
+            self.tracking_token = case.tracking_token if case else None
+        log.info(
+            "call %s %s; application %s",
+            self.call_sid,
+            "was cut" if dropped else "finished",
+            self.case_ref,
+        )
 
     async def _shutdown(self) -> None:
         await self._stop_speaking(clear=False)
@@ -239,3 +295,6 @@ class StreamManager:
                 await self._listen_task
         if self.transcriber:
             await self.transcriber.close()
+        if self._conversation_open and self.call_sid:
+            state = await asyncio.to_thread(self.intake.state, self.call_sid)
+            await asyncio.to_thread(self._finish, state, dropped=True)

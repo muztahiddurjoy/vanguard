@@ -8,6 +8,15 @@ os.environ.update(
         "API_TOKEN": "",
         "ANTHROPIC_API_KEY": "",
         "SMS_DRY_RUN": "true",
+        # Environment variables beat .env, so blanking these keeps a developer's
+        # real gateway credentials out of tests that build Settings() directly.
+        "ADNSMS_API_KEY": "",
+        "ADNSMS_API_SECRET": "",
+        "ELEVENLABS_API_KEY": "",
+        "TWILIO_AUTH_TOKEN": "",
+        "NID_SERVER_URL": "",
+        "HELPLINE_NUMBER": "16430",
+        "SMS_ALLOWLIST": "",
         "OFFICE_DISTRICT": "Rangpur",
         "TWILIO_VALIDATE_SIGNATURES": "false",
         "UPLOAD_DIR": tempfile.mkdtemp(prefix="dlas-test-uploads-"),

@@ -12,6 +12,7 @@ Rules, by party safety level:
 - caution:    any time, neutral message only.
 - restricted: inside a safe window only, neutral message only; with no window
               on record, no contact at all.
+- no_contact: never (for example, a caller held hostage).
 
 A phone the party does not own (``no_own_phone``) is treated as shared: neutral
 message only. Every decision, allowed or blocked, is written to the audit
@@ -83,6 +84,7 @@ class ContactChannel(StrEnum):
 
 
 class BlockReason(StrEnum):
+    DO_NOT_CONTACT = "do_not_contact"
     NO_PHONE = "no_phone"
     NO_SAFE_WINDOW = "no_safe_window_on_record"
     OUTSIDE_WINDOW = "outside_safe_window"
@@ -99,14 +101,27 @@ class ContactDecision:
     neutral_only: bool = False
 
 
-def evaluate(party: Party, channel: ContactChannel, now: datetime | None = None) -> ContactDecision:
-    """Decide whether ``party`` may be contacted on ``channel`` at ``now``."""
+def evaluate(
+    party: Party,
+    channel: ContactChannel,
+    now: datetime | None = None,
+    *,
+    phone: str | None = None,
+) -> ContactDecision:
+    """Decide whether ``party`` may be contacted on ``channel`` at ``now``.
+
+    ``phone`` checks a specific number (e.g. one of several SIMs registered to
+    the party's NID) instead of ``party.phone``; the party's rules still apply.
+    """
     local_now = (now or utcnow()).astimezone(get_settings().tz)
     shared_phone = AccessibilityFlag.NO_OWN_PHONE in (party.accessibility_flags or [])
     level = SafetyLevel(party.safety_level)
     neutral_only = level != SafetyLevel.STANDARD or shared_phone
 
-    if not party.phone:
+    if level == SafetyLevel.NO_CONTACT:
+        return ContactDecision(False, BlockReason.DO_NOT_CONTACT, neutral_only=True)
+
+    if not (phone or party.phone):
         return ContactDecision(False, BlockReason.NO_PHONE, neutral_only=neutral_only)
 
     if level == SafetyLevel.RESTRICTED:
@@ -138,14 +153,17 @@ def contact_party(
     case_ref: str | None = None,
     now: datetime | None = None,
     sms_client: AdnSmsClient | None = None,
+    phone: str | None = None,
 ) -> ContactOutcome:
     """Send an SMS to a party if, and only as, the safe-contact rules allow.
 
     ``neutral_body`` is a message that reveals nothing about the case (e.g.
     "Your appointment is confirmed. Reply 1 to call back."). Parties who need
     one get it instead of ``body``; if none is given they get nothing.
+    ``phone`` sends to that number instead of ``party.phone``.
     """
-    decision = evaluate(party, ContactChannel.SMS, now)
+    number = phone or party.phone
+    decision = evaluate(party, ContactChannel.SMS, now, phone=number)
     variant: str | None = None
     if decision.allowed and decision.neutral_only:
         if neutral_body:
@@ -160,6 +178,8 @@ def contact_party(
         "case": case_ref,
         "safety_level": str(party.safety_level),
     }
+    if phone:
+        details["to"] = f"{phone[:5]}******"
     if not decision.allowed:
         record_audit(
             db,
@@ -176,8 +196,8 @@ def contact_party(
         return ContactOutcome(decision)
 
     text = neutral_body if variant == "neutral" else body
-    assert text is not None and party.phone is not None
-    result = (sms_client or AdnSmsClient()).send(party.phone, text)
+    assert text is not None and number is not None
+    result = (sms_client or AdnSmsClient()).send(number, text)
     record_audit(
         db,
         actor=actor,

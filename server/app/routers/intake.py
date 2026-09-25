@@ -8,6 +8,7 @@ and possible duplicates (T4) are queued for review.
 import base64
 import contextlib
 import uuid
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any, Literal
@@ -18,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents import t5_intake
+from app.agents.spoken import parse_safe_window
 from app.agents.state import DocumentState
 from app.agents.t6_document import run_document_review
 from app.config import get_settings
@@ -32,20 +34,30 @@ from app.models import (
     Document,
     DocumentKind,
     DocumentStatus,
+    DoNotCallReason,
     IntakeChannel,
     Party,
     PartyRole,
     Priority,
     Provenance,
     SafetyLevel,
+    new_tracking_token,
     next_reference,
     record_audit,
 )
 from app.routers import current_actor, require_api_token
-from app.routers.dlao import apply_triage, case_view, due_at_for, get_case_or_404
+from app.routers.dlao import (
+    apply_triage,
+    case_view,
+    due_at_for,
+    get_case_or_404,
+    mark_do_not_call,
+)
 from app.routers.duplicates import cases_of, find_duplicates_for
 from app.services.adnsms import normalize_bd_mobile
 from app.services.crypto import sha256_hex
+from app.services.nid_registry import Citizen
+from app.services.notices import send_intake_notices
 
 router = APIRouter(prefix="/intake", tags=["intake"], dependencies=[Depends(require_api_token)])
 
@@ -119,6 +131,31 @@ class UdcIntakeIn(IntakeIn):
     operator_id: str = Field(min_length=1, max_length=64)
 
 
+@dataclass
+class Identities:
+    """People matched in the NID registry during a call. Never taken from client input."""
+
+    applicant: Citizen | None = None
+    # The caller, when they apply for someone else.
+    filer: Citizen | None = None
+    respondent: Citizen | None = None
+
+
+def apply_citizen(party: Party, citizen: Citizen) -> None:
+    """Fill a party from their NID record, which replaces what was said on the call."""
+    party.name, party.name_bn = citizen.name.en, citizen.name.bn
+    party.guardian_name = citizen.father.name.en
+    party.mother_name = citizen.mother.name.en
+    party.date_of_birth = citizen.date_of_birth
+    party.age = citizen.age_on(utcnow().date())
+    home = citizen.present_address
+    party.village, party.upazila = home.village.en, home.upazila.en
+    party.district = home.district.en
+    party.set_nid(citizen.nid)
+    party.nid_verified = True
+    party.registered_phones = citizen.phones
+
+
 def create_application(
     db: Session,
     data: IntakeIn,
@@ -127,8 +164,15 @@ def create_application(
     provenance: Provenance,
     actor: str,
     extra: dict[str, Any] | None = None,
+    identities: Identities | None = None,
+    notify: bool = True,
 ) -> Case:
-    """Record parties and a new APP- application, then triage it. Caller commits."""
+    """Record parties and a new APP- application, triage it, and send the SMS notices.
+
+    ``notify=False`` leaves the notices to the caller, which must send them once
+    the case is fully marked (a do-not-call mark must come before any SMS).
+    Caller commits.
+    """
     if data.client_ref:
         existing = db.scalars(select(Case).where(Case.client_ref == data.client_ref)).first()
         if existing is not None:
@@ -162,12 +206,20 @@ def create_application(
         ),
     )
     applicant.set_nid(a.nid)
+    ids = identities or Identities()
+    if ids.applicant:
+        apply_citizen(applicant, ids.applicant)
     links = [CaseParty(party=applicant, role=PartyRole.APPLICANT)]
     if data.proxy:
         proxy = Party(name=data.proxy.name, phone=data.proxy.phone, provenance=provenance)
+        if ids.filer:
+            apply_citizen(proxy, ids.filer)
         links.append(CaseParty(party=proxy, role=PartyRole.PROXY, relation=data.proxy.relation))
     if data.respondent:
         respondent = Party(name=data.respondent.name, provenance=provenance)
+        if ids.respondent:
+            apply_citizen(respondent, ids.respondent)
+            respondent.phone = next(iter(respondent.registered_phones), None)
         links.append(
             CaseParty(
                 party=respondent, role=PartyRole.RESPONDENT, relation=data.respondent.relation
@@ -178,10 +230,11 @@ def create_application(
     now = utcnow()
     case = Case(
         application_id=next_reference(db, "APP", now.year),
+        tracking_token=new_tracking_token(db),
         channel=IntakeChannel.PROXY if data.proxy else channel,
         summary=data.narrative.strip(),
-        district=a.district,
-        upazila=a.upazila,
+        district=applicant.district,
+        upazila=applicant.upazila,
         current_office=settings.office_district,
         received_at=now,
         client_ref=data.client_ref,
@@ -208,6 +261,8 @@ def create_application(
     for review in find_duplicates_for(db, applicant):
         for linked in cases_of(db, review.party_a_id) + cases_of(db, review.party_b_id):
             linked.add_flag("possibleDuplicate")
+    if notify:
+        send_intake_notices(db, case, actor)
     return case
 
 
@@ -395,32 +450,70 @@ CONVERSATION_CHANNEL = {
 }
 
 
-def intake_from_slots(slots: dict[str, Any], session_id: str, last_utterance: str = "") -> IntakeIn:
-    """Turn T5 slots into the same payload the forms send.
+def filer_relation(filing: str, caller: Citizen | None) -> str:
+    """How the caller is related to the person they apply for."""
+    gender = caller.gender if caller else None
+    if filing in ("father", "mother"):
+        return {"male": "son", "female": "daughter"}.get(gender or "", "child")
+    if filing == "sibling":
+        return {"male": "brother", "female": "sister"}.get(gender or "", "sibling")
+    return "reported by phone"
 
-    Emergency calls may end before every slot is filled; they still become an
-    application, with placeholders an officer replaces on the callback.
+
+def intake_from_conversation(
+    state: t5_intake.IntakeState, session_id: str
+) -> tuple[IntakeIn, Identities]:
+    """Turn a T5 conversation into the payload the forms send, plus its NID matches.
+
+    Calls that end early (an emergency, a cut call) still become an application,
+    with placeholders an officer replaces on follow-up.
     """
-    window = t5_intake.parse_safe_window(slots.get("safe_to_call") or "")
-    problem = slots.get("problem") or f"Caller reported immediate danger: {last_utterance}"
+    slots = state.get("slots") or {}
+    filing = slots.get("filing_for") or "self"
+    caller = t5_intake.citizen_of(state, "caller_record")
+    notes = " / ".join(n["text"] for n in state.get("notes") or [])
+    last = state.get("utterance", "")
+    narrative = slots.get("problem") or notes or f"Caller reported immediate danger: {last}"
+    window = parse_safe_window(slots.get("safe_to_call") or "")
     proxy = (
-        ProxyIn(name="Caller (name not given)", relation="reported by phone")
-        if slots.get("is_proxy")
+        ProxyIn(
+            name=slots.get("caller_name") or "Caller (name not given)",
+            phone=state.get("caller_phone"),
+            relation=filer_relation(filing, caller),
+        )
+        if filing != "self"
         else None
     )
-    return IntakeIn(
+    respondent = (
+        RespondentIn(name=slots["respondent_name"], relation=slots.get("respondent_relation"))
+        if slots.get("respondent_name")
+        else None
+    )
+    data = IntakeIn(
         applicant=PartyIn(
-            name=slots.get("name") or "Unknown caller",
+            name=slots.get("name") or slots.get("caller_name") or "Unknown caller",
             phone=slots.get("phone"),
             district=slots.get("district"),
             upazila=slots.get("upazila"),
+            preferred_language=state.get("language", "bn"),
         ),
-        narrative=problem if len(problem) >= 10 else f"{problem} (reported by phone)",
+        narrative=narrative if len(narrative) >= 10 else f"{narrative} (reported by phone)",
         proxy=proxy,
+        respondent=respondent,
         safe_contact_windows=[SafeWindowIn(**window)] if window else [],
         phone_monitored=bool(slots.get("phone_monitored")),
         client_ref=f"conv:{session_id}",
     )
+    identities = Identities(
+        applicant=t5_intake.citizen_of(state, "applicant_record"),
+        filer=caller if filing != "self" else None,
+        respondent=t5_intake.citizen_of(state, "respondent_record"),
+    )
+    return data, identities
+
+
+# Violence described before a call was cut: calling back may alert whoever cut it.
+CUT_CALL_DANGER = {"activeViolence", "weaponThreat", "hostageSituation"}
 
 
 def finish_conversation(
@@ -429,32 +522,68 @@ def finish_conversation(
     state: t5_intake.IntakeState,
     actor: str,
     fallback_phone: str | None = None,
+    dropped: bool = False,
 ) -> Case | None:
-    """Create the application when the conversation ends.
+    """Create the application when the conversation ends, or when the call is cut.
 
-    A normal call needs every required slot. A call that ended in an emergency
-    always creates one, escalated and critical, so the callback happens; if the
-    caller never gave a number, ``fallback_phone`` (caller ID) is used.
+    A call creates one once the problem has been described, even if it was cut
+    before the last question (flagged ``callDropped``, with everything said so
+    far in the call notes). An emergency always creates one, escalated and
+    critical, so the callback happens; if the caller never gave a number,
+    ``fallback_phone`` (caller ID) is used. If the caller seemed to be held
+    (hostage), or the call was cut while they described violence, the
+    applicant is marked do-not-call instead: a callback could alert whoever is
+    with them. Calling this twice for one conversation returns the same case.
     """
+    client_ref = f"conv:{session_id}"
+    if existing := db.scalars(select(Case).where(Case.client_ref == client_ref)).first():
+        return existing
     slots = dict(state.get("slots") or {})
-    emergency = bool(state.get("emergency"))
-    if emergency and not slots.get("phone") and fallback_phone:
+    emergency, hostage = bool(state.get("emergency")), bool(state.get("hostage"))
+    cut_short = dropped and not state.get("complete")
+    if not state.get("complete") and not dropped:
+        return None
+    if not (emergency or hostage or slots.get("problem")):
+        return None  # nothing an officer could act on
+    if emergency and not hostage and not slots.get("phone") and fallback_phone:
         with contextlib.suppress(ValueError):
             slots["phone"] = normalize_bd_mobile(fallback_phone)
-    if not state.get("complete") or (t5_intake.missing_required(slots) and not emergency):
-        return None
     channel, provenance = CONVERSATION_CHANNEL.get(
         state.get("channel", "web"), CONVERSATION_CHANNEL["web"]
     )
-    data = intake_from_slots(slots, session_id, state.get("utterance", ""))
+    data, identities = intake_from_conversation({**state, "slots": slots}, session_id)
     case = create_application(
         db,
         data,
         channel=channel,
         provenance=provenance,
         actor=actor,
-        extra={"conversation": session_id, "safe_to_call_said": slots.get("safe_to_call")},
+        extra={
+            "conversation": session_id,
+            "safe_to_call_said": slots.get("safe_to_call"),
+            "notify_respondent": slots.get("notify_respondent"),
+            "identity": {
+                "filingFor": slots.get("filing_for") or "self",
+                "caller": state.get("identity"),
+                "applicant": state.get("applicant_status"),
+                "respondent": state.get("respondent_status"),
+                "callerSimRegistered": bool(state.get("caller_sim_registered")),
+            },
+        },
+        identities=identities,
+        notify=False,
     )
+    case.call_notes = list(state.get("notes") or [])
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.IDENTITY_CHECKED,
+        entity_type="case",
+        entity_id=case.id,
+        details=case.intake_data["identity"],
+    )
+    if cut_short:
+        case.add_flag("callDropped")
     if emergency:
         case.add_flag("escalated")
         case.priority = Priority.CRITICAL
@@ -467,7 +596,35 @@ def finish_conversation(
             entity_id=case.id,
             details={"priority": "critical", "reason": "caller reported immediate danger"},
         )
+    detected = {f["key"] for f in (case.triage or {}).get("factors", []) if f["detected"]}
+    if hostage:
+        mark_do_not_call(db, case, DoNotCallReason.HOSTAGE, actor=actor)
+    elif cut_short and CUT_CALL_DANGER & detected:
+        mark_do_not_call(db, case, DoNotCallReason.DANGER_CALL_CUT, actor=actor)
+    send_intake_notices(db, case, actor)
     return case
+
+
+# Security answers and contact details are not echoed back to the client.
+PRIVATE_SLOTS = {"phone", "father_name", "date_of_birth"}
+
+
+def turn_view(state: t5_intake.IntakeState, case: Case | None) -> dict[str, Any]:
+    lang = state.get("language", "bn")
+    return {
+        "reply": t5_intake.with_token(state["reply"], case.tracking_token if case else None, lang),
+        "asking": state.get("asking"),
+        "complete": state.get("complete", False),
+        "emergency": state.get("emergency", False),
+        "hostage": state.get("hostage", False),
+        "identity": {
+            "caller": state.get("identity"),
+            "applicant": state.get("applicant_status"),
+            "respondent": state.get("respondent_status"),
+        },
+        "slots": {k: v for k, v in (state.get("slots") or {}).items() if k not in PRIVATE_SLOTS},
+        "case": case_view(case) if case else None,
+    }
 
 
 @router.post("/conversations", status_code=status.HTTP_201_CREATED)
@@ -494,11 +651,18 @@ def conversation_turn(
     state = conv.turn(session_id, body.utterance)
     case = finish_conversation(db, session_id, state, actor=f"agent:t5:{actor}")
     db.commit()
-    return {
-        "reply": state["reply"],
-        "asking": state.get("asking"),
-        "complete": state.get("complete", False),
-        "emergency": state.get("emergency", False),
-        "slots": {k: v for k, v in (state.get("slots") or {}).items() if k != "phone"},
-        "case": case_view(case) if case else None,
-    }
+    return turn_view(state, case)
+
+
+@router.post("/conversations/{session_id}/end")
+def end_conversation(
+    session_id: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """The caller left before the end (the web or UDC equivalent of a cut call)."""
+    conv = t5_intake.conversations()
+    state = conv.state(session_id)
+    if not state:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown conversation")
+    case = finish_conversation(db, session_id, state, actor=f"agent:t5:{actor}", dropped=True)
+    db.commit()
+    return {"case": case_view(case) if case else None}

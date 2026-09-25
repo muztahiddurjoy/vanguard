@@ -5,6 +5,7 @@ import type {
   NextAction,
   Priority,
   QueueKey,
+  ResolutionTrack,
 } from "@/data/types"
 
 /** Overrides must be explained; this keeps "ok" or "n/a" out of the audit log. */
@@ -25,6 +26,27 @@ export type CaseAction =
   | { type: "resolveOverdue"; id: string; at: string }
   | { type: "assignLawyer"; id: string; lawyerId: string; at: string }
   | { type: "scheduleSafeCall"; id: string; scheduledFor: string; at: string }
+  | {
+      type: "reviewTrack"
+      id: string
+      to: ResolutionTrack
+      /** Required when the officer changes the AI's mark. */
+      justification?: string
+      at: string
+    }
+  | { type: "releaseNotice"; id: string; justification: string; at: string }
+  /** Cases fetched from the server replace what is shown. */
+  | { type: "load"; cases: LegalCase[] }
+  | { type: "replace"; legalCase: LegalCase }
+
+/** Confirming the AI's mark needs no reason; choosing another one does. */
+export function isValidTrackChange(
+  aiKey: ResolutionTrack | undefined,
+  to: ResolutionTrack | null | undefined,
+  justification: string,
+): boolean {
+  return !!to && (to === aiKey || justification.trim().length >= MIN_JUSTIFICATION_LENGTH)
+}
 
 export function isValidOverride(
   current: Priority,
@@ -167,5 +189,49 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
           scheduledFor: action.scheduledFor,
         }),
       )
+
+    case "reviewTrack":
+      return update(cases, action.id, (c) => {
+        if (!c.track) return c
+        const aiKey = c.track.aiKey ?? c.track.key
+        const justification = action.justification?.trim()
+        if (!isValidTrackChange(aiKey, action.to, justification ?? "")) return c
+        const flags = without(c.flags, "sensitive")
+        return log(
+          {
+            ...c,
+            track: {
+              ...c.track,
+              key: action.to,
+              aiKey,
+              status: action.to === aiKey ? "confirmed" : "changed",
+            },
+            flags: action.to === "sensitive" ? [...flags, "sensitive"] : flags,
+          },
+          {
+            type: "trackReviewed",
+            at: action.at,
+            from: c.track.key,
+            to: action.to,
+            ...(action.to !== aiKey && justification ? { justification } : {}),
+          },
+        )
+      })
+
+    case "releaseNotice":
+      return update(cases, action.id, (c) => {
+        if (!c.respondent?.notice || c.respondent.notice.status !== "held") return c
+        if (action.justification.trim().length < MIN_JUSTIFICATION_LENGTH) return c
+        return log(
+          { ...c, respondent: { ...c.respondent, notice: { status: "sent" } } },
+          { type: "noticeReleased", at: action.at, justification: action.justification.trim() },
+        )
+      })
+
+    case "load":
+      return action.cases
+
+    case "replace":
+      return update(cases, action.legalCase.id, () => action.legalCase)
   }
 }

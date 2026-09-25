@@ -3,8 +3,10 @@ import {
   Copy,
   EyeOff,
   Landmark,
+  PhoneMissed,
   PhoneOff,
   Send,
+  ShieldAlert,
   UserRoundX,
   UsersRound,
   type LucideIcon,
@@ -34,6 +36,8 @@ const FLAG: Record<CaseFlag, { tone: keyof typeof ICON_TONE; Icon: LucideIcon }>
   possibleDuplicate: { tone: "info", Icon: Copy },
   overdue: { tone: "danger", Icon: AlarmClock },
   escalated: { tone: "success", Icon: Send },
+  doNotCall: { tone: "danger", Icon: ShieldAlert },
+  callDropped: { tone: "warning", Icon: PhoneMissed },
 }
 
 export function FlagBadge({

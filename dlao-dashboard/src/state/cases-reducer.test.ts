@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { INITIAL_CASES } from "@/data/cases"
-import { casesReducer, isValidOverride } from "@/state/cases-reducer"
+import { casesReducer, isValidOverride, isValidTrackChange } from "@/state/cases-reducer"
 
 const AT = "2026-09-23T10:00:00.000Z"
 const byId = (cases: typeof INITIAL_CASES, id: string) => cases.find((c) => c.id === id)!
@@ -97,5 +97,69 @@ describe("casesReducer", () => {
     expect(c.dueAt).toBeUndefined()
     expect(c.flags).not.toContain("overdue")
     expect(c.queues).toEqual([])
+  })
+})
+
+describe("track review", () => {
+  it("confirms the AI's mark without a reason", () => {
+    const next = casesReducer(INITIAL_CASES, {
+      type: "reviewTrack",
+      id: "APP-2026-027",
+      to: "mediation",
+      at: AT,
+    })
+    const c = byId(next, "APP-2026-027")
+    expect(c.track).toMatchObject({ key: "mediation", aiKey: "mediation", status: "confirmed" })
+    expect(c.activity.at(-1)).toEqual({
+      type: "trackReviewed",
+      at: AT,
+      from: "mediation",
+      to: "mediation",
+    })
+  })
+
+  it("changes the mark only with a reason, and keeps the sensitive flag in step", () => {
+    const tooShort = casesReducer(INITIAL_CASES, {
+      type: "reviewTrack",
+      id: "APP-2026-034",
+      to: "mediation",
+      justification: "no",
+      at: AT,
+    })
+    expect(byId(tooShort, "APP-2026-034").track?.key).toBe("sensitive")
+
+    const next = casesReducer(INITIAL_CASES, {
+      type: "reviewTrack",
+      id: "APP-2026-034",
+      to: "mediation",
+      justification: "Police confirmed she is safe; the family asked for mediation.",
+      at: AT,
+    })
+    const c = byId(next, "APP-2026-034")
+    expect(c.track).toMatchObject({ key: "mediation", aiKey: "sensitive", status: "changed" })
+    expect(c.flags).not.toContain("sensitive")
+    expect(isValidTrackChange("sensitive", "sensitive", "")).toBe(true)
+  })
+})
+
+describe("respondent notice", () => {
+  it("is released only from held, with a reason", () => {
+    const held = byId(INITIAL_CASES, "APP-2026-001").respondent?.notice?.status
+    expect(held).toBe("held")
+    const tooShort = casesReducer(INITIAL_CASES, {
+      type: "releaseNotice",
+      id: "APP-2026-001",
+      justification: "ok",
+      at: AT,
+    })
+    expect(byId(tooShort, "APP-2026-001").respondent?.notice?.status).toBe("held")
+    const next = casesReducer(INITIAL_CASES, {
+      type: "releaseNotice",
+      id: "APP-2026-001",
+      justification: "She asked us in person to notify him; she is at her parents'.",
+      at: AT,
+    })
+    expect(byId(next, "APP-2026-001").respondent?.notice).toEqual({ status: "sent" })
+    expect(byId(next, "APP-2026-001").activity.at(-1)?.type).toBe("noticeReleased")
   })
 })

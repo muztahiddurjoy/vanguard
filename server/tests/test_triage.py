@@ -1,4 +1,10 @@
-from app.agents.t8_triage import LLMCategory, categorize_by_rules, run_triage
+from app.agents.t8_triage import (
+    LLMCategory,
+    LLMTrack,
+    categorize_by_rules,
+    find_hostage_sign,
+    run_triage,
+)
 
 MOYURI = (
     "Neighbour reports repeated physical assault by the husband, most recently two days ago "
@@ -86,19 +92,21 @@ def test_keyword_confidence_is_share_of_matches():
 
 
 class FakeLLM:
+    """Answers only the schema its result belongs to; records which schemas were asked."""
+
     def __init__(self, result):
         self.result = result
-        self.calls = 0
+        self.calls: list[str] = []
 
-    def structured(self, **_kw):
-        self.calls += 1
-        return self.result
+    def structured(self, **kw):
+        self.calls.append(kw["schema"].__name__)
+        return self.result if isinstance(self.result, kw["schema"]) else None
 
 
 def test_ambiguous_text_is_categorized_by_llm_when_available():
     llm = FakeLLM(LLMCategory(category="childCustody", confidence=0.8))
     rec = run_triage("আমি আমার মেয়েকে ফেরত চাই", office_district="Rangpur", llm=llm)
-    assert llm.calls == 1
+    assert llm.calls.count("LLMCategory") == 1
     assert rec["category"] == "childCustody"
     assert rec["categorySource"] == "llm"
 
@@ -106,19 +114,85 @@ def test_ambiguous_text_is_categorized_by_llm_when_available():
 def test_clear_text_does_not_call_llm():
     llm = FakeLLM(LLMCategory(category="other", confidence=0.9))
     rec = run_triage("unpaid wage at the factory", office_district="Rangpur", llm=llm)
-    assert llm.calls == 0
+    assert "LLMCategory" not in llm.calls
     assert rec["categorySource"] == "rules"
 
 
 def test_llm_failure_falls_back_to_rules():
     llm = FakeLLM(None)
     rec = run_triage("something happened", office_district="Rangpur", llm=llm)
-    assert llm.calls == 1
+    assert llm.calls == ["LLMCategory", "LLMTrack"]
     assert rec["categorySource"] == "rules"
     assert rec["priority"] == "low"
+    assert rec["track"]["source"] == "rules"
 
 
 def test_mentioning_a_husband_is_not_domestic_violence():
     rec = triage("My husband left and stopped paying maintenance for our two children.")
     assert rec["category"] == "familyMaintenance"
     assert "activeViolence" not in detected(rec)
+
+
+# --- hostage and the advice / mediation / sensitive mark ------------------------
+
+
+def test_hostage_is_critical_sensitive_and_says_do_not_call():
+    rec = triage("আমার স্বামী আমাকে আটকে রেখেছে, ঘর থেকে বের হতে দিচ্ছে না।")
+    assert "hostageSituation" in detected(rec)
+    assert rec["priority"] == "critical"
+    assert rec["track"]["key"] == "sensitive"
+    assert rec["track"]["reason"]["en"].startswith("Sensitive case: possibly held hostage")
+    assert any("do not call" in n for n in rec["complianceNotes"])
+
+
+def test_withheld_wages_are_not_a_hostage_situation():
+    assert find_hostage_sign("মালিক তিন মাসের বেতন আটকে রেখেছে") is None
+    rec = triage("কারখানার মালিক তিন মাসের বেতন আটকে রেখেছে।")
+    assert rec["category"] == "labourDispute"
+    assert rec["track"]["key"] == "mediation"
+    assert find_hostage_sign("He locked me in the room and will not let me leave") == "locked me"
+
+
+def test_violence_marks_the_case_sensitive():
+    rec = triage(MOYURI)
+    assert rec["track"] == {
+        "key": "sensitive",
+        "reason": {
+            "en": "Sensitive case: active violence, safe contact restricted, domestic violence.",
+            "bn": "সংবেদনশীল মামলা: চলমান সহিংসতা, নিরাপদ যোগাযোগ সীমিত, পারিবারিক সহিংসতা।",
+        },
+        "source": "rules",
+    }
+
+
+def test_dispute_with_another_side_is_marked_for_mediation():
+    rec = triage("My uncle is occupying my father's land. The deed and khatian are in my name.")
+    assert rec["track"]["key"] == "mediation"
+    assert "uncle" in rec["track"]["reason"]["en"]
+    # A respondent recorded at intake counts as the other side too.
+    rec = triage("The boundary of our plot was moved last month.", has_respondent=True)
+    assert rec["track"]["key"] == "mediation"
+    assert "the named respondent" in rec["track"]["reason"]["en"]
+
+
+def test_question_with_no_other_side_is_marked_for_advice():
+    rec = triage("I want to know how to register my marriage. What documents do I need?")
+    assert rec["track"]["key"] == "advice"
+    assert rec["track"]["reason"]["en"].endswith("asking for information.")
+
+
+def test_llm_chooses_between_advice_and_mediation():
+    llm = FakeLLM(LLMTrack(track="advice", reason_en="Only needs advice.", reason_bn="পরামর্শ।"))
+    rec = run_triage("unpaid wage at the factory", office_district="Rangpur", llm=llm)
+    assert rec["track"] == {
+        "key": "advice",
+        "reason": {"en": "Only needs advice.", "bn": "পরামর্শ।"},
+        "source": "llm",
+    }
+
+
+def test_llm_is_not_asked_to_mark_a_sensitive_case():
+    llm = FakeLLM(LLMTrack(track="advice", reason_en="x", reason_bn="x"))
+    rec = run_triage(MOYURI, office_district="Rangpur", llm=llm)
+    assert "LLMTrack" not in llm.calls
+    assert rec["track"]["key"] == "sensitive"

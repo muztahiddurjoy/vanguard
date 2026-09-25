@@ -1,6 +1,8 @@
 import { EyeOff } from "lucide-react"
 
 import { CaseFlags } from "@/components/case/case-flags"
+import { DoNotCallLine } from "@/components/case/do-not-call"
+import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
 import { SafeContactLine } from "@/components/case/safe-contact-line"
 import { NextActionButton } from "@/components/queue/next-action-button"
@@ -91,9 +93,20 @@ export function CaseRow({
           {sensitive ? t.queue.sensitive : caseReason(c, i18n)}
         </p>
 
-        {c.safeContact && <SafeContactLine window={c.safeContact} className="w-fit" />}
-        {/* The safe-contact line already states the restriction. */}
-        <CaseFlags legalCase={c} hide={c.safeContact ? ["restrictedContact"] : []} />
+        {c.doNotCall ? (
+          <DoNotCallLine reason={c.doNotCall.reason} className="w-fit" />
+        ) : (
+          c.safeContact && <SafeContactLine window={c.safeContact} className="w-fit" />
+        )}
+        {c.track && <TrackBadge track={c.track} />}
+        {/* The line above already states the contact restriction. */}
+        <CaseFlags
+          legalCase={c}
+          hide={[
+            ...(c.safeContact || c.doNotCall ? (["restrictedContact"] as const) : []),
+            ...(c.doNotCall ? (["doNotCall"] as const) : []),
+          ]}
+        />
       </div>
 
       <NextActionButton legalCase={c} onAction={onAction} className="w-full sm:w-56" />

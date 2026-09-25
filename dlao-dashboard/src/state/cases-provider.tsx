@@ -1,11 +1,16 @@
-import { useCallback, useMemo, useReducer, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react"
+import { toast } from "sonner"
 
+import { fetchCase, fetchCases, saveAction } from "@/api/cases"
+import { apiEnabled } from "@/api/client"
+import { useAuth } from "@/auth/use-auth"
 import { CaseDetailDialog, type CaseTab } from "@/components/case-detail/case-detail-dialog"
 import { DuplicateReviewDialog } from "@/components/duplicate/duplicate-review-dialog"
 import { INITIAL_CASES } from "@/data/cases"
 import type { LegalCase, NextAction } from "@/data/types"
-import { CasesContext } from "@/state/cases-context"
-import { casesReducer } from "@/state/cases-reducer"
+import { useI18n } from "@/i18n/use-i18n"
+import { CasesContext, type CasesSync } from "@/state/cases-context"
+import { casesReducer, type CaseAction } from "@/state/cases-reducer"
 
 type DialogState = (
   { kind: "case"; id: string; tab: CaseTab } | { kind: "duplicate"; id: string }
@@ -18,21 +23,77 @@ type DialogState = (
 /**
  * Owns the case data for the signed-in session and the two case dialogs, so
  * any page (Home, Work queue, All cases, Lawyers…) can open a case.
+ *
+ * With a backend (VITE_API_URL) the cases come from the server: opening a case
+ * fetches its full history and call notes, and officer decisions are saved
+ * there. A decision is shown at once; if the server refuses it, the officer is
+ * told and the list is reloaded so the screen never disagrees with the record.
  */
 export function CasesProvider({ children }: { children: ReactNode }) {
-  const [cases, dispatch] = useReducer(casesReducer, INITIAL_CASES)
+  const live = apiEnabled()
+  const { t } = useI18n()
+  const officerId = useAuth().user?.id
+  const [cases, apply] = useReducer(casesReducer, live ? [] : INITIAL_CASES)
+  const [sync, setSync] = useState<CasesSync>(live ? "loading" : "ready")
   const [dialog, setDialog] = useState<DialogState | null>(null)
 
+  const reload = useCallback(() => {
+    fetchCases(officerId).then(
+      (list) => {
+        apply({ type: "load", cases: list })
+        setSync("ready")
+      },
+      () => setSync("error"),
+    )
+  }, [officerId])
+
+  useEffect(() => {
+    if (live) reload()
+  }, [live, reload])
+
+  const retry = useCallback(() => {
+    setSync("loading")
+    reload()
+  }, [reload])
+
+  const refresh = useCallback(
+    (id: string) => {
+      if (!live) return
+      fetchCase(id, officerId).then(
+        (legalCase) => apply({ type: "replace", legalCase }),
+        () => {}, // the list copy stays on screen
+      )
+    },
+    [live, officerId],
+  )
+
+  const dispatch = useCallback(
+    (action: CaseAction) => {
+      apply(action)
+      const saving = live ? saveAction(action, officerId) : null
+      saving?.then(
+        () => "id" in action && refresh(action.id),
+        () => {
+          toast.error(t.server.saveFailed)
+          reload()
+        },
+      )
+    },
+    [live, officerId, refresh, reload, t],
+  )
+
   const openCase = useCallback(
-    (c: LegalCase, tab?: CaseTab) =>
+    (c: LegalCase, tab?: CaseTab) => {
+      refresh(c.id)
       setDialog((d) => ({
         kind: "case",
         id: c.id,
         tab: tab ?? (c.triage?.status === "pending" ? "triage" : "details"),
         open: true,
         seq: (d?.seq ?? 0) + 1,
-      })),
-    [],
+      }))
+    },
+    [refresh],
   )
 
   const openDuplicate = useCallback(
@@ -56,8 +117,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const duplicateOf = current?.duplicate && cases.find((c) => c.id === current.duplicate!.otherId)
 
   const value = useMemo(
-    () => ({ cases, dispatch, openCase, runAction }),
-    [cases, openCase, runAction],
+    () => ({ cases, sync, retry, dispatch, openCase, runAction }),
+    [cases, sync, retry, dispatch, openCase, runAction],
   )
 
   return (

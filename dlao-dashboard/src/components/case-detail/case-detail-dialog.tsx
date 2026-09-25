@@ -2,11 +2,14 @@ import { useState } from "react"
 import { EyeOff } from "lucide-react"
 
 import { CaseFlags } from "@/components/case/case-flags"
+import { DoNotCallAlert } from "@/components/case/do-not-call"
+import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
 import { SafeContactAlert } from "@/components/case/safe-contact"
 import { ActivityLog } from "@/components/case-detail/activity-log"
 import { CaseDetails } from "@/components/case-detail/case-details"
 import { NextStepPanel } from "@/components/case-detail/next-step-panel"
+import { TrackReview } from "@/components/triage/track-review"
 import { TriagePanel } from "@/components/triage/triage-panel"
 import {
   Dialog,
@@ -64,7 +67,8 @@ export function CaseDetailDialog({
           <DialogDescription className="text-sm">
             {pick(c.applicant.village)}, {pick(c.applicant.upazila)} · {t.channel[c.channel]}
           </DialogDescription>
-          <CaseFlags legalCase={c} />
+          {c.track && <TrackBadge track={c.track} />}
+          <CaseFlags legalCase={c} hide={c.doNotCall ? ["doNotCall"] : []} />
           {sensitive && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <EyeOff aria-hidden className="size-4" />
@@ -73,7 +77,12 @@ export function CaseDetailDialog({
           )}
         </DialogHeader>
 
-        {c.safeContact && <SafeContactAlert window={c.safeContact} />}
+        {/* Do-not-call outranks any safe window: no time is safe. */}
+        {c.doNotCall ? (
+          <DoNotCallAlert reason={c.doNotCall.reason} />
+        ) : (
+          c.safeContact && <SafeContactAlert window={c.safeContact} />
+        )}
 
         <NextStepPanel
           legalCase={c}
@@ -101,7 +110,7 @@ export function CaseDetailDialog({
             ))}
           </TabsList>
 
-          <TabsContent value="triage" className="pt-5">
+          <TabsContent value="triage" className="flex flex-col gap-8 pt-5">
             <TriagePanel
               legalCase={c}
               onAccept={() => dispatch({ type: "acceptTriage", id: c.id, at: at() })}
@@ -109,9 +118,20 @@ export function CaseDetailDialog({
                 dispatch({ type: "overridePriority", id: c.id, to, justification, at: at() })
               }
             />
+            <TrackReview
+              legalCase={c}
+              onReview={(to, justification) =>
+                dispatch({ type: "reviewTrack", id: c.id, to, justification, at: at() })
+              }
+            />
           </TabsContent>
           <TabsContent value="details" className="pt-5">
-            <CaseDetails legalCase={c} />
+            <CaseDetails
+              legalCase={c}
+              onReleaseNotice={(justification) =>
+                dispatch({ type: "releaseNotice", id: c.id, justification, at: at() })
+              }
+            />
           </TabsContent>
           <TabsContent value="activity" className="pt-5">
             <ActivityLog legalCase={c} />

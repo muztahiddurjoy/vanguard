@@ -41,8 +41,21 @@ class Settings(BaseSettings):
     adnsms_api_secret: str = ""
     adnsms_base_url: str = "https://portal.adnsms.com"
     sms_dry_run: bool = True
+    # Comma-separated numbers. When set, only these get real SMS; any other
+    # number is a dry run. For testing with the dummy NID registry, whose
+    # fictional numbers may belong to real subscribers.
+    sms_allowlist: str = ""
 
     upload_dir: str = "./uploads"
+
+    # The NID registry (nid-server/). Empty: callers cannot be verified by phone
+    # and applications are recorded as unverified.
+    nid_server_url: str = ""
+    nid_server_api_key: str = ""
+
+    # The AI query helpline printed in SMS: point it at the number whose Twilio
+    # voice webhook is /telephony/voice?line=helpline.
+    helpline_number: str = "16430"
 
     # T1 alert thresholds
     lawyer_inactivity_days: int = 14
@@ -53,6 +66,12 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def sms_allowlist_numbers(self) -> set[str]:
+        from app.services.adnsms import normalize_bd_mobile
+
+        return {normalize_bd_mobile(n) for n in self.sms_allowlist.split(",") if n.strip()}
 
     @property
     def tz(self) -> ZoneInfo:

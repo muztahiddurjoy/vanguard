@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router"
 
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { SiteHeader } from "@/components/layout/site-header"
+import { SyncStatus } from "@/components/layout/sync-status"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useI18n } from "@/i18n/use-i18n"
 import { CasesProvider } from "@/state/cases-provider"
@@ -43,6 +44,7 @@ export function AppLayout() {
             className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8"
           >
             <div className="mx-auto w-full max-w-6xl">
+              <SyncStatus />
               <Outlet />
             </div>
           </div>

@@ -1,9 +1,19 @@
 import base64
+from datetime import date
 
 from app.agents import t5_intake, t6_document, t7_settlement
-from app.agents.t5_intake import IntakeConversation, LLMSlots, find_district, find_phone
+from app.agents.spoken import (
+    clean_name,
+    find_district,
+    find_phone,
+    parse_date,
+    parse_safe_window,
+    yes_or_no,
+)
+from app.agents.t5_intake import IntakeConversation, LLMSlots
 from app.agents.t6_document import LLMReading, run_document_review
 from app.agents.t7_settlement import LLMDraft, run_settlement_draft
+from tests.nid_fakes import FakeRegistry
 
 
 class FakeLLM:
@@ -25,48 +35,162 @@ def test_phone_and_district_extraction_handles_bangla():
     assert find_phone("no number") is None
     assert find_district("থাকেন রংপুর, পীরগাছা") == "Rangpur"
     assert find_district("I live in Cox's Bazar") == "Cox's Bazar"
+    assert find_district("Comilla") == "Cumilla"
 
 
-def test_intake_conversation_fills_slots_in_order():
-    conv = IntakeConversation(use_default_llm=False)
-    s = conv.start("call-1", channel="hotline_16699", language="en")
-    assert s["asking"] == "is_proxy"
-    assert s["reply"] == t5_intake.QUESTIONS["is_proxy"]["en"]
+def test_spoken_dates_names_and_answers():
+    assert parse_date("2 June 1994") == date(1994, 6, 2)
+    assert parse_date("১৫ই মার্চ ১৯৯০") == date(1990, 3, 15)
+    assert parse_date("02/06/1994") == date(1994, 6, 2)  # day first, as written in Bangladesh
+    assert parse_date("sometime in the nineties") is None
+    assert clean_name("My father's name is Md. Abdul Karim") == "Md. Abdul Karim"
+    assert clean_name("আমি রফিকুল ইসলাম বলছি") == "রফিকুল ইসলাম"
+    # "মা" (mother) is inside "আমার" (my): only whole words count.
+    assert t5_intake.filing_for_from("আমার জন্য") == "self"
+    assert t5_intake.filing_for_from("আমার মায়ের জন্য") == "mother"
+    assert t5_intake.filing_for_from("for my mother-in-law") == "other"
+    assert t5_intake.respondent_from("আমার স্বামী জালালের বিরুদ্ধে") == ("জালাল", "husband")
+    assert yes_or_no("No, don't send it now") is False
 
-    s = conv.turn("call-1", "I am calling for my neighbour")
-    assert s["slots"]["is_proxy"] is True
+
+def talk(conv: IntakeConversation, sid: str, *utterances: str) -> dict:
+    s: dict = {}
+    for u in utterances:
+        s = conv.turn(sid, u)
+    return s
+
+
+def rafiq_verifies(conv: IntakeConversation, sid: str, filing: str) -> dict:
+    conv.start(sid, channel="hotline_16699", language="en", caller_phone="+8801811223344")
+    return talk(conv, sid, filing, "My name is Rafiqul Islam", "Mohammad Abdul Karim",
+                "Rangpur", "2 June 1994")  # fmt: skip
+
+
+def test_caller_applying_for_themselves_is_verified_and_the_respondent_found():
+    registry = FakeRegistry()
+    conv = IntakeConversation(use_default_llm=False, registry=registry)
+    s = conv.start("r1", channel="hotline_16699", language="en", caller_phone="+8801811223344")
+    assert s["asking"] == "filing_for"
+    s = conv.turn("r1", "For myself")
+    assert s["asking"] == "caller_name"
+    s = talk(conv, "r1", "My name is Rafiqul Islam", "Mohammad Abdul Karim", "Rangpur")
+    assert s["asking"] == "date_of_birth"
+    s = conv.turn("r1", "2 June 1994")
+    assert s["identity"] == "verified" and s["caller_sim_registered"] is True
+    # Where they live comes from the NID record, so the next question is the problem.
+    assert s["reply"] == (
+        "Thank you, Rafiqul Islam. Your identity is confirmed. Briefly, what has happened?"
+    )
+    s = talk(conv, "r1", "My employer has not paid my wages for three months",
+             "Kamal Hossain, the factory owner", "Abdul Hamid", "Gaibandha")  # fmt: skip
+    assert s["respondent_status"] == "found"
+    assert s["slots"]["respondent_relation"] == "employer"
+    assert s["asking"] == "notify_respondent"
+    s = conv.turn("r1", "Yes, you can send it")
+    # The caller ID is their contact number, so the phone question is skipped.
+    assert s["asking"] == "safe_to_call"
+    s = conv.turn("r1", "Any time after 5 pm")
+    assert s["complete"] is True and s["reply"] == t5_intake.CLOSING["en"]
+    slots = s["slots"]
+    assert (slots["name"], slots["district"], slots["phone"]) == (
+        "Rafiqul Islam", "Rangpur", "01811223344",
+    )  # fmt: skip
+    assert slots["notify_respondent"] is True
+    assert t5_intake.missing_required(slots) == []
+    assert len(s["notes"]) == 11
+    assert s["notes"][5] == {**s["notes"][5], "topic": "problem"}
+
+
+def test_mother_is_confirmed_through_nid_parent_links():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    s = rafiq_verifies(conv, "m1", "I am calling for my mother")
     assert s["asking"] == "name"
+    assert s["reply"].endswith("What is your mother's name?")
+    s = conv.turn("m1", "Rahima Khatun")
+    assert s["applicant_status"] == "verified"
+    assert s["reply"] == (
+        "We found your mother, Rahima Khatun, in the NID records. Briefly, what has happened?"
+    )
+    assert s["applicant_record"]["nid"] == "4600000002"
+    # The mother has no SMS number on the call, so the phone question is asked.
+    s = talk(conv, "m1", "My uncle took her land", "no one")
+    assert s["asking"] == "phone"
+    assert s["reply"] == t5_intake.QUESTIONS_OTHER["phone"]["en"]
 
-    s = conv.turn("call-1", "Moyuri Akter")
-    assert s["slots"]["name"] == "Moyuri Akter"
 
-    # A phone and a district in one answer fill both slots.
-    s = conv.turn("call-1", "01712-345318, she lives in Rangpur")
-    assert s["slots"]["phone"] == "01712345318"
-    assert s["slots"]["district"] == "Rangpur"
+def test_father_needs_no_extra_name_question():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    s = rafiq_verifies(conv, "f1", "for my father")
+    assert s["applicant_status"] == "verified"
+    assert s["applicant_record"]["nid"] == "4600000001"
     assert s["asking"] == "problem"
 
-    s = conv.turn("call-1", "Her husband beats her and she has visible injuries")
-    assert s["slots"]["category"] == "domesticViolence"
-    assert s["asking"] == "safe_to_call"
 
-    s = conv.turn("call-1", "Tuesday 2 to 4 pm, he checks her phone")
-    assert s["complete"] is True
-    assert s["reply"] == t5_intake.CLOSING["en"]
-    assert t5_intake.missing_required(s["slots"]) == []
+def test_sister_in_bangla_and_a_stranger_is_not_accepted_as_a_sibling():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    conv.start("s1", channel="hotline_16699", caller_phone="01811223344")
+    s = talk(conv, "s1", "আমার বোনের জন্য", "আমি রফিকুল ইসলাম বলছি", "মোঃ আব্দুল করিম",
+             "রংপুর", "২ জুন ১৯৯৪", "শিরিন আক্তার")  # fmt: skip
+    assert s["reply"].startswith("এনআইডি রেকর্ডে আপনার বোন শিরিন আক্তার-কে পাওয়া গেছে।")
+
+    conv.start("s2", channel="hotline_16699", language="en")
+    s = talk(conv, "s2", "for my brother", "Rafiqul Islam", "Abdul Karim", "Rangpur",
+             "02/06/1994", "Jalal Uddin")  # fmt: skip
+    assert s["applicant_status"] == "not_found"
+    assert s["reply"].startswith("We could not find your brother or sister")
+    assert "applicant_record" not in s
+
+
+def test_wrong_security_answers_get_one_retry_then_intake_continues_unverified():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    conv.start("w1", channel="hotline_16699", language="en")
+    s = talk(conv, "w1", "myself", "Rafiqul Islam", "Abdul Karim", "Rangpur", "3 June 1994")
+    assert s["identity"] == "pending" and s["asking"] == "father_name"
+    assert s["reply"].startswith(t5_intake.RETRY["en"])
+    s = talk(conv, "w1", "Abdul Karim", "Rangpur", "I don't know")
+    assert s["identity"] == "failed"
+    assert (
+        s["reply"] == f"{t5_intake.NOT_VERIFIED['en']} {t5_intake.QUESTIONS_SELF['district']['en']}"
+    )
+
+
+def test_registry_outage_skips_verification_without_retrying():
+    registry = FakeRegistry(down=True)
+    conv = IntakeConversation(use_default_llm=False, registry=registry)
+    s = rafiq_verifies(conv, "d1", "myself")
+    assert s["identity"] == "unavailable"
+    assert s["reply"].startswith(t5_intake.REGISTRY_DOWN["en"])
+    assert registry.calls == ["match"]
+
+
+def test_without_a_registry_no_security_questions_are_asked():
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
+    conv.start("n1", channel="udc", language="en")
+    s = talk(conv, "n1", "I am calling for my neighbour", "My name is Ripon", "Moyuri Akter")
+    assert s["asking"] == "district"
+    s = talk(conv, "n1", "01712-345318, she lives in Rangpur")
+    assert (s["slots"]["phone"], s["slots"]["district"]) == ("01712345318", "Rangpur")
+    s = talk(conv, "n1", "Her husband beats her and she has visible injuries",
+             "Her husband Jalal Uddin", "I don't know", "Rangpur")  # fmt: skip
+    assert s["slots"]["category"] == "domesticViolence"
+    assert s["slots"]["respondent_father_name"] == ""
+    assert s["respondent_status"] == "unavailable"
+    assert s["asking"] == "safe_to_call"
+    s = conv.turn("n1", "Tuesday 2 to 4 pm, he checks her phone")
+    assert s["complete"] is True and s["reply"] == t5_intake.CLOSING["en"]
 
 
 def test_conversations_are_isolated_by_session():
-    conv = IntakeConversation(use_default_llm=False)
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("a", channel="udc")
     conv.start("b", channel="udc")
     conv.turn("a", "নিজের জন্য")
-    assert conv.state("a")["slots"] == {"is_proxy": False}
+    assert conv.state("a")["slots"] == {"filing_for": "self"}
     assert conv.state("b")["slots"] == {}
 
 
 def test_danger_ends_the_call_with_emergency_guidance():
-    conv = IntakeConversation(use_default_llm=False)
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("c", channel="hotline_16699")
     s = conv.turn("c", "ও এখনই আমাকে মেরে ফেলবে")
     assert s["emergency"] is True
@@ -74,23 +198,38 @@ def test_danger_ends_the_call_with_emergency_guidance():
     assert "৯৯৯" in s["reply"]
 
 
+def test_hostage_sign_promises_no_callback_and_intake_carries_on():
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
+    conv.start("h1", channel="hotline_16699", language="en")
+    s = talk(conv, "h1", "for myself", "Moyuri Akter")
+    s = conv.turn("h1", "My husband has locked me in the room")
+    assert s["hostage"] is True and s["complete"] is False
+    assert s["reply"].startswith(t5_intake.HOSTAGE_ACK["en"])
+    s = conv.turn("h1", "ও এখনই আমাকে মেরে ফেলবে")
+    assert s["complete"] is True
+    assert s["reply"] == t5_intake.HOSTAGE_EMERGENCY["en"]
+
+
 def test_llm_extraction_fills_free_form_answers_but_rules_win_on_phone():
     # start() has an empty utterance and never calls the model, so one result is enough.
     llm = FakeLLM(
         LLMSlots(
-            is_proxy=True,
+            filing_for="other",
             name="Moyuri Akter",
             phone="01999999999",
             problem="Husband beats her",
+            date_of_birth="not a date",
             phone_monitored=True,
         ),
     )
-    conv = IntakeConversation(llm=llm)
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
     conv.start("d", channel="hotline_16699", language="en")
     s = conv.turn("d", "Calling about Moyuri Akter, 01712345318, her husband beats her")
+    assert s["slots"]["filing_for"] == "other"
     assert s["slots"]["phone"] == "01712345318"
     assert s["slots"]["name"] == "Moyuri Akter"
     assert s["slots"]["phone_monitored"] is True
+    assert "date_of_birth" not in s["slots"]  # the model's answer failed validation
     assert len(llm.calls) == 1
 
 
@@ -222,15 +361,15 @@ def test_good_llm_draft_is_kept():
 
 
 def test_parse_safe_window_english_and_bangla():
-    assert t5_intake.parse_safe_window("Tuesday 2 to 4 pm") == {
+    assert parse_safe_window("Tuesday 2 to 4 pm") == {
         "day": 2,
         "start_hour": 14,
         "end_hour": 16,
     }
-    assert t5_intake.parse_safe_window("মঙ্গলবার দুপুর ২টা থেকে ৪টা") == {
+    assert parse_safe_window("মঙ্গলবার দুপুর ২টা থেকে ৪টা") == {
         "day": 2,
         "start_hour": 14,
         "end_hour": 16,
     }
-    assert t5_intake.parse_safe_window("sometime next week") is None
-    assert t5_intake.parse_safe_window("Monday or Tuesday 2-4 pm") is None
+    assert parse_safe_window("sometime next week") is None
+    assert parse_safe_window("Monday or Tuesday 2-4 pm") is None

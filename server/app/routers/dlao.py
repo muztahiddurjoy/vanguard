@@ -23,18 +23,22 @@ from app.models import (
     CaseStatus,
     ChecklistItem,
     Document,
+    DoNotCallReason,
     PartyRole,
     Priority,
     ReferralStatus,
     SafetyLevel,
+    Track,
+    TrackStatus,
     TriageStatus,
+    format_token,
     next_reference,
     record_audit,
     verify_chain,
 )
 from app.models.case import PRIORITY_RANK
 from app.routers import current_actor, require_api_token
-from app.services import safe_contact
+from app.services import notices, safe_contact
 
 router = APIRouter(prefix="/dlao", tags=["dlao"], dependencies=[Depends(require_api_token)])
 
@@ -110,7 +114,7 @@ def queues_for(case: Case, flags: list[str], now: datetime) -> list[str]:
 
 
 def party_view(party: Any, *, full_phone: bool) -> dict[str, Any]:
-    return {
+    view = {
         "id": party.id,
         "name": party.name,
         "nameBn": party.name_bn,
@@ -120,11 +124,43 @@ def party_view(party: Any, *, full_phone: bool) -> dict[str, Any]:
         "district": party.district,
         "guardian": party.guardian_name,
         "nidMasked": party.nid_masked,
+        "nidVerified": party.nid_verified,
         "age": party.age,
         "safetyLevel": party.safety_level,
         "provenance": party.provenance,
         "accessibility": party.accessibility_flags,
         "safeContactWindows": party.safe_contact_windows,
+    }
+    if full_phone:  # case detail only, which is access-logged
+        view["motherName"] = party.mother_name
+        view["dateOfBirth"] = party.date_of_birth.isoformat() if party.date_of_birth else None
+    return view
+
+
+def track_view(case: Case) -> dict[str, Any] | None:
+    if case.track is None:
+        return None
+    suggestion = (case.triage or {}).get("track") or {}
+    return {
+        "key": case.track,
+        "status": case.track_status,
+        # The AI's reason explains its own mark; after an officer's change it is history.
+        "aiKey": suggestion.get("key"),
+        "reason": suggestion.get("reason"),
+    }
+
+
+def identity_view(case: Case) -> dict[str, Any]:
+    """Whose identity was confirmed against the NID registry, and how the case was filed."""
+    recorded = dict((case.intake_data or {}).get("identity") or {})
+    applicant = case.applicant
+    return {
+        "filingFor": recorded.get(
+            "filingFor", "other" if case.party_with_role(PartyRole.PROXY) else "self"
+        ),
+        "applicantVerified": bool(applicant and applicant.nid_verified),
+        "callerVerified": recorded.get("caller") == "verified",
+        "callerSimRegistered": bool(recorded.get("callerSimRegistered")),
     }
 
 
@@ -138,7 +174,7 @@ def case_view(
     flags = live_flags(case, now)
     applicant = case.applicant
     proxy_link = next((cp for cp in case.parties if cp.role == PartyRole.PROXY), None)
-    respondent = case.party_with_role(PartyRole.RESPONDENT)
+    respondent_link = next((cp for cp in case.parties if cp.role == PartyRole.RESPONDENT), None)
     return {
         "id": case.display_id,
         "applicationId": case.application_id,
@@ -159,9 +195,31 @@ def case_view(
         "district": case.district,
         "applicant": party_view(applicant, full_phone=full_phone) if applicant else None,
         "proxy": (
-            {"name": proxy_link.party.name, "relation": proxy_link.relation} if proxy_link else None
+            {
+                "name": proxy_link.party.name,
+                "nameBn": proxy_link.party.name_bn,
+                "relation": proxy_link.relation,
+                "nidVerified": proxy_link.party.nid_verified,
+            }
+            if proxy_link
+            else None
         ),
-        "respondent": {"name": respondent.name} if respondent else None,
+        "respondent": (
+            {
+                "name": respondent_link.party.name,
+                "nameBn": respondent_link.party.name_bn,
+                "relation": respondent_link.relation,
+                "nidVerified": respondent_link.party.nid_verified,
+                "registeredSims": len(respondent_link.party.registered_phones or []),
+            }
+            if respondent_link
+            else None
+        ),
+        "trackingToken": format_token(case.tracking_token) if case.tracking_token else None,
+        "track": track_view(case),
+        "doNotCall": {"reason": case.do_not_call_reason} if case.do_not_call_reason else None,
+        "identity": identity_view(case),
+        "notices": case.notices or {},
         "lawyer": (
             {
                 "id": case.lawyer_id,
@@ -184,6 +242,41 @@ def by_urgency(view: dict[str, Any]) -> tuple[int, str, float]:
     return rank, due, -datetime.fromisoformat(view["receivedAt"]).timestamp()
 
 
+# Safety levels from least to most protective; triage only ever moves a party up.
+SAFETY_RANK = {
+    SafetyLevel.STANDARD: 0,
+    SafetyLevel.CAUTION: 1,
+    SafetyLevel.RESTRICTED: 2,
+    SafetyLevel.NO_CONTACT: 3,
+}
+
+
+def raise_safety(party: Any, level: SafetyLevel) -> bool:
+    """Make ``party`` at least as protected as ``level``; True if it changed."""
+    if SAFETY_RANK[SafetyLevel(party.safety_level)] >= SAFETY_RANK[level]:
+        return False
+    party.safety_level = level
+    return True
+
+
+def mark_do_not_call(db: Session, case: Case, reason: DoNotCallReason, actor: str) -> None:
+    """Block every call and SMS to the applicant and show why on the dashboard."""
+    if case.do_not_call_reason is not None:
+        return
+    case.do_not_call_reason = reason
+    case.add_flag("doNotCall")
+    if case.applicant is not None:
+        raise_safety(case.applicant, SafetyLevel.NO_CONTACT)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.SAFETY_CHANGED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"level": SafetyLevel.NO_CONTACT, "reason": reason},
+    )
+
+
 def apply_triage(db: Session, case: Case, actor: str) -> None:
     """Run T8 on the case narrative and store the recommendation."""
     applicant = case.applicant
@@ -199,6 +292,7 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
         is_proxy=case.party_with_role(PartyRole.PROXY) is not None,
         safety_level=str(applicant.safety_level) if applicant else "standard",
         next_hearing_days=days,
+        has_respondent=case.party_with_role(PartyRole.RESPONDENT) is not None,
     )
     case.triage = rec
     case.triage_status = TriageStatus.PENDING
@@ -216,7 +310,12 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
     if "outOfJurisdiction" in detected:
         case.add_flag("jurisdictionEscalation")
     if applicant and rec.get("recommendedSafetyLevel") == SafetyLevel.RESTRICTED:
-        applicant.safety_level = SafetyLevel.RESTRICTED
+        raise_safety(applicant, SafetyLevel.RESTRICTED)
+    # An officer's confirmed or changed track stands; a fresh AI mark replaces only a mark.
+    if case.track_status == TrackStatus.SUGGESTED:
+        case.track = Track(rec["track"]["key"])
+    if case.track == Track.SENSITIVE:
+        case.add_flag("sensitive")
     record_audit(
         db,
         actor=actor,
@@ -228,8 +327,11 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
             "confidence": rec["confidence"],
             "category": rec.get("category"),
             "source": rec.get("categorySource"),
+            "track": rec["track"]["key"],
         },
     )
+    if "hostageSituation" in detected:
+        mark_do_not_call(db, case, DoNotCallReason.HOSTAGE, actor=actor)
 
 
 # --- endpoints ------------------------------------------------------------
@@ -318,6 +420,7 @@ def get_case(
          "status": i.status, "documentId": i.document_id}
         for i in db.scalars(select(ChecklistItem).where(ChecklistItem.case_id == case.id))
     ]  # fmt: skip
+    view["callNotes"] = case.call_notes or []
     view["referrals"] = [
         {
             "id": r.id,
@@ -549,6 +652,111 @@ def close_case(
         entity_id=case.id,
         details={"outcome": body.outcome},
         justification=body.note.strip(),
+    )
+    db.commit()
+    return case_view(case)
+
+
+class TrackIn(BaseModel):
+    track: Track
+    # Needed when the officer changes the AI's mark, like a priority override.
+    justification: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/cases/{ref}/track")
+def review_track(
+    ref: str, body: TrackIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """The officer confirms the AI's advice/mediation/sensitive mark, or changes it."""
+    case = get_case_or_404(db, ref)
+    suggested = ((case.triage or {}).get("track") or {}).get("key")
+    changed = body.track != suggested
+    note = (body.justification or "").strip()
+    if changed and len(note) < 20:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Changing the AI's mark needs a justification of at least 20 characters",
+        )
+    previous = case.track
+    case.track = body.track
+    case.track_status = TrackStatus.CHANGED if changed else TrackStatus.CONFIRMED
+    if body.track == Track.SENSITIVE:
+        case.add_flag("sensitive")
+    else:
+        case.remove_flag("sensitive")
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.TRACK_REVIEWED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"from": previous, "to": body.track, "aiSuggested": suggested},
+        justification=note or None,
+    )
+    db.commit()
+    return case_view(case)
+
+
+class JustificationIn(BaseModel):
+    justification: str = Field(min_length=20, max_length=2000)
+
+
+@router.post("/cases/{ref}/respondent-notice")
+def release_respondent_notice(
+    ref: str,
+    body: JustificationIn,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    """Send a held "visit the office" SMS to the respondent, on the officer's judgement."""
+    case = get_case_or_404(db, ref)
+    if (case.notices or {}).get("respondent", {}).get("status") == "sent":
+        raise HTTPException(status.HTTP_409_CONFLICT, "The respondent has already been notified")
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.NOTICE_RELEASED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"notice": "respondent"},
+        justification=body.justification.strip(),
+    )
+    notice = notices.send_respondent_notice(db, case, actor, released_by_officer=True)
+    if notice["status"] == "notFound":
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "No registered number for the respondent; notify in person"
+        )
+    db.commit()
+    return case_view(case)
+
+
+class SafetyIn(BaseModel):
+    level: SafetyLevel
+    justification: str = Field(min_length=20, max_length=2000)
+
+
+@router.post("/cases/{ref}/safety")
+def set_safety(
+    ref: str, body: SafetyIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """Set how the applicant may be contacted; this is how an officer lifts do-not-call."""
+    case = get_case_or_404(db, ref)
+    if case.applicant is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Case has no applicant")
+    previous = case.applicant.safety_level
+    case.applicant.safety_level = body.level
+    if body.level != SafetyLevel.NO_CONTACT:
+        case.do_not_call_reason = None
+        case.remove_flag("doNotCall")
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.SAFETY_CHANGED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"from": previous, "to": body.level},
+        justification=body.justification.strip(),
     )
     db.commit()
     return case_view(case)
