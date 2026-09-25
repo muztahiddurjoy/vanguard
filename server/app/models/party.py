@@ -8,11 +8,21 @@ windows in which it is safe to reach them.
 import hashlib
 import hmac
 import re
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config import get_settings
@@ -73,6 +83,12 @@ class Party(Base):
     nid_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     nid_last4: Mapped[str | None] = mapped_column(String(4))
     guardian_name: Mapped[str | None] = mapped_column(String(200))
+    mother_name: Mapped[str | None] = mapped_column(String(200))
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    # True once the details were matched to a record in the NID registry.
+    nid_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Every SIM registered under their NID (from the registry), 01XXXXXXXXX.
+    registered_phones: Mapped[list[str]] = mapped_column(JSON, default=list)
     village: Mapped[str | None] = mapped_column(String(120))
     upazila: Mapped[str | None] = mapped_column(String(120))
     district: Mapped[str | None] = mapped_column(String(120))

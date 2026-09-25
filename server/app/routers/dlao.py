@@ -23,10 +23,13 @@ from app.models import (
     CaseStatus,
     ChecklistItem,
     Document,
+    DoNotCallReason,
     PartyRole,
     Priority,
     ReferralStatus,
     SafetyLevel,
+    Track,
+    TrackStatus,
     TriageStatus,
     next_reference,
     record_audit,
@@ -184,6 +187,31 @@ def by_urgency(view: dict[str, Any]) -> tuple[int, str, float]:
     return rank, due, -datetime.fromisoformat(view["receivedAt"]).timestamp()
 
 
+# Safety levels from least to most protective; triage only ever moves a party up.
+SAFETY_RANK = {
+    SafetyLevel.STANDARD: 0,
+    SafetyLevel.CAUTION: 1,
+    SafetyLevel.RESTRICTED: 2,
+    SafetyLevel.NO_CONTACT: 3,
+}
+
+
+def raise_safety(party: Any, level: SafetyLevel) -> bool:
+    """Make ``party`` at least as protected as ``level``; True if it changed."""
+    if SAFETY_RANK[SafetyLevel(party.safety_level)] >= SAFETY_RANK[level]:
+        return False
+    party.safety_level = level
+    return True
+
+
+def mark_do_not_call(case: Case, reason: DoNotCallReason) -> None:
+    """Block every call and SMS to the applicant and show why on the dashboard."""
+    case.do_not_call_reason = case.do_not_call_reason or reason
+    case.add_flag("doNotCall")
+    if case.applicant is not None:
+        raise_safety(case.applicant, SafetyLevel.NO_CONTACT)
+
+
 def apply_triage(db: Session, case: Case, actor: str) -> None:
     """Run T8 on the case narrative and store the recommendation."""
     applicant = case.applicant
@@ -199,6 +227,7 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
         is_proxy=case.party_with_role(PartyRole.PROXY) is not None,
         safety_level=str(applicant.safety_level) if applicant else "standard",
         next_hearing_days=days,
+        has_respondent=case.party_with_role(PartyRole.RESPONDENT) is not None,
     )
     case.triage = rec
     case.triage_status = TriageStatus.PENDING
@@ -216,7 +245,14 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
     if "outOfJurisdiction" in detected:
         case.add_flag("jurisdictionEscalation")
     if applicant and rec.get("recommendedSafetyLevel") == SafetyLevel.RESTRICTED:
-        applicant.safety_level = SafetyLevel.RESTRICTED
+        raise_safety(applicant, SafetyLevel.RESTRICTED)
+    if "hostageSituation" in detected:
+        mark_do_not_call(case, DoNotCallReason.HOSTAGE)
+    # An officer's confirmed or changed track stands; a fresh AI mark replaces only a mark.
+    if case.track_status == TrackStatus.SUGGESTED:
+        case.track = Track(rec["track"]["key"])
+    if case.track == Track.SENSITIVE:
+        case.add_flag("sensitive")
     record_audit(
         db,
         actor=actor,
@@ -228,6 +264,7 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
             "confidence": rec["confidence"],
             "category": rec.get("category"),
             "source": rec.get("categorySource"),
+            "track": rec["track"]["key"],
         },
     )
 

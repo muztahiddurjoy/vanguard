@@ -5,6 +5,7 @@ accepts it, it is promoted to a *case* (``DLAS-2026-045``) and keeps both IDs.
 Referrals (T2), group incidents (T3) and mediation sessions hang off a case.
 """
 
+import secrets
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -55,6 +56,27 @@ class TriageStatus(StrEnum):
     OVERRIDDEN = "overridden"
 
 
+class Track(StrEnum):
+    """How the case could be resolved. T8 marks it; an officer confirms or changes it."""
+
+    ADVICE = "advice"
+    MEDIATION = "mediation"
+    SENSITIVE = "sensitive"
+
+
+class TrackStatus(StrEnum):
+    SUGGESTED = "suggested"
+    CONFIRMED = "confirmed"
+    CHANGED = "changed"
+
+
+class DoNotCallReason(StrEnum):
+    # The caller said something suggesting they are being held.
+    HOSTAGE = "hostage"
+    # The call was cut while the caller was describing immediate danger.
+    DANGER_CALL_CUT = "dangerCallCut"
+
+
 class PartyRole(StrEnum):
     APPLICANT = "applicant"
     RESPONDENT = "respondent"
@@ -86,6 +108,18 @@ def next_reference(db: Session, prefix: str, year: int, width: int = 3) -> str:
     return f"{prefix}-{year}-{counter.value:0{width}d}"
 
 
+def new_tracking_token(db: Session) -> str:
+    """Eight random digits: easy to say on the phone and to type on any handset."""
+    while True:
+        token = f"{secrets.randbelow(10**8):08d}"
+        if db.scalars(select(Case.id).where(Case.tracking_token == token)).first() is None:
+            return token
+
+
+def format_token(token: str) -> str:
+    return f"{token[:4]}-{token[4:]}"
+
+
 class Case(Base):
     __tablename__ = "cases"
 
@@ -102,6 +136,17 @@ class Case(Base):
     triage_status: Mapped[TriageStatus] = mapped_column(String(20), default=TriageStatus.PENDING)
     # Dashboard CaseFlag values: proxyReported, restrictedContact, lawyerInactivity, …
     flags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    track: Mapped[Track | None] = mapped_column(String(20))
+    track_status: Mapped[TrackStatus] = mapped_column(String(20), default=TrackStatus.SUGGESTED)
+    # Set with the applicant's no_contact safety level; shown as a banner.
+    do_not_call_reason: Mapped[DoNotCallReason | None] = mapped_column(String(20))
+
+    # Given to whoever filed the case, to follow its progress on the helpline.
+    tracking_token: Mapped[str | None] = mapped_column(String(8), unique=True, index=True)
+    # What the caller said, turn by turn: [{"at", "topic", "text"}].
+    call_notes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # SMS notices: {"filer": {"status", "at"}, "respondent": {"status", "reasons", ...}}.
+    notices: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     channel: Mapped[IntakeChannel] = mapped_column(String(20))
     summary: Mapped[str] = mapped_column(Text, default="")

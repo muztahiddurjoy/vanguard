@@ -212,3 +212,25 @@ def test_t5_emergency_creates_critical_escalated_application(client):
 def test_unknown_conversation_is_404(client):
     r = client.post("/intake/conversations/nope/turns", json={"utterance": "hi"})
     assert r.status_code == 404
+
+
+def test_triage_marks_track_and_hostage_blocks_contact_without_lowering_it(client, db):
+    hostage = {
+        "applicant": {"name": "Shirin Akter", "phone": "01711000222", "district": "Rangpur"},
+        "narrative": "My sister says her husband locked her in the room and checks her phone.",
+        "proxy": {"name": "Rafiqul Islam", "relation": "brother"},
+    }
+    ref = client.post("/intake/web", json=hostage).json()["id"]
+    case = db.scalars(select(Case)).one()
+    assert case.track == "sensitive" and case.track_status == "suggested"
+    assert case.do_not_call_reason == "hostage"
+    assert {"doNotCall", "sensitive"} <= set(case.flags)
+    # The phone-monitoring sign recommends "restricted"; it must not lower no_contact.
+    assert case.applicant is not None and case.applicant.safety_level == "no_contact"
+    assert client.get(f"/dlao/cases/{ref}/contact-window").json()["reason"] == "do_not_contact"
+
+    case.track, case.track_status = "mediation", "changed"
+    db.commit()
+    client.post(f"/dlao/cases/{ref}/triage/rerun")
+    db.expire_all()
+    assert db.scalars(select(Case)).one().track == "mediation"
