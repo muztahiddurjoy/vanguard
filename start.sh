@@ -18,6 +18,7 @@ DASHBOARD_PORT=5173
 INSTALL=0
 NGROK=1
 DASHBOARD=1
+RESET_DB=0
 
 usage() {
 	cat <<EOF
@@ -31,6 +32,7 @@ kept in .logs/.
 Options:
   --no-ngrok     No tunnel: everything but real phone calls works
   --no-dashboard Backend only
+  --reset-db     Start with an empty database (the old one is kept as a backup)
   --install      Reinstall every dependency first
   -h, --help     Show this help
 EOF
@@ -41,6 +43,7 @@ while (($#)); do
 	--install) INSTALL=1 ;;
 	--no-ngrok) NGROK=0 ;;
 	--no-dashboard) DASHBOARD=0 ;;
+	--reset-db) RESET_DB=1 ;;
 	-h | --help) usage && exit 0 ;;
 	*) usage >&2 && exit 2 ;;
 	esac
@@ -152,6 +155,28 @@ for port in "${ports[@]}"; do
 	owner=$(port_owner "$port")
 	[[ -z $owner ]] || die "Port $port is already in use: $owner"
 done
+
+# --- Database ------------------------------------------------------------------
+
+# SQLite needs no server: the backend creates the file and its tables at startup.
+db_url=$(server_setting DATABASE_URL)
+db_url=${db_url:-sqlite:///./dlas.db}
+db_file=''
+if [[ $db_url == sqlite:///* ]]; then
+	db_file=${db_url#sqlite:///}
+	[[ $db_file == /* ]] || db_file=$ROOT/server/${db_file#./}
+fi
+
+if ((RESET_DB)); then
+	[[ -n $db_file ]] || die "--reset-db needs a SQLite DATABASE_URL (it is $db_url)."
+	if [[ -f $db_file ]]; then
+		backup=${db_file%.db}-$(date +%Y%m%d-%H%M%S).db
+		for suffix in '' -journal -wal -shm; do
+			[[ ! -f $db_file$suffix ]] || mv "$db_file$suffix" "$backup$suffix"
+		done
+		say "Moved the old database to ${backup#"$ROOT"/}"
+	fi
+fi
 
 mkdir -p "$LOG_DIR"
 
@@ -296,6 +321,11 @@ if ((DASHBOARD)); then
 fi
 row "Backend API" "http://localhost:$SERVER_PORT/docs"
 row "NID registry" "http://localhost:$NID_PORT/docs"
+if [[ -n $db_file ]]; then
+	row "Database" "SQLite, ${db_file#"$ROOT"/}"
+else
+	row "Database" "${db_url%%:*} (DATABASE_URL)"
+fi
 if [[ -n $public_url ]]; then
 	row "Public URL" "$public_url${inspector:+  (requests: http://$inspector)}"
 	row "Twilio" "hotline   POST $public_url/telephony/voice"
