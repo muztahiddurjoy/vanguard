@@ -285,6 +285,14 @@ operation that made the case.
    (`services/audio.py`, WSOLA), once a second of audio is queued: replies are about
    12% shorter. `eleven_v3_conversational` also speaks Bangla and starts about 0.6 s
    sooner; listen to it before switching `ELEVENLABS_MODEL_ID`.
+
+   At startup the server checks, without spending credit, that ElevenLabs accepts the
+   key, the voice and the model, and that the model speaks Bangla. `GET /health` reports
+   it as `voice` (`ok`, `off`, `error: <what to fix>` or `unchecked: <why>`), and
+   `start.sh` prints it. With a voice that is definitely broken, calls are answered with
+   Twilio's own spoken "cannot take applications by phone" message rather than silence.
+   A reply that cannot be spoken during a call is logged as "The line could not speak
+   on call ..." with the reason.
 3. Set `TWILIO_AUTH_TOKEN`. Signature checks are always on when
    `ENVIRONMENT=production`.
 4. Set `OPENAI_API_KEY` for speech-to-text. Without it, callers hear a short message
@@ -310,9 +318,13 @@ turns itself:
   quiet callers are missed.
 - `OPENAI_STT_DELAY` trades earlier text for accuracy (`minimal` … `xhigh`).
 
-If the session cannot open, is rejected (bad key, model or language), or drops, the
-caller hears that we cannot hear them and to call again (999 in danger), and the call
-ends as a cut call: what they said is filed. The reason is logged. Transcripts are
+A session lost for a passing reason (the service busy, the socket dropped) is opened
+again, up to three times per outage (after 0.3, 1 and 2 s). If a turn the caller had
+spoken went with it, the line says "দুঃখিত, শেষ কথাটা শুনতে পাইনি। আরেকবার বলবেন?" once
+they finish, and the call goes on. If the session is rejected for a setting (key, model
+or language), or cannot be opened again, the caller hears that we cannot hear them and
+to call again (999 in danger), and the call ends as a cut call: what they said is filed.
+The reason is logged. Transcripts are
 never logged, except at `LOG_LEVEL=DEBUG`, which is for local testing only.
 
 ### Test a call without a phone
@@ -333,7 +345,8 @@ LOG_LEVEL=DEBUG SMS_DRY_RUN=true .venv/bin/uvicorn app.main:app --port 8000
 ```
 
 Each turn plays once the previous reply has finished; the server log shows what was
-heard and what was replied. `GET /health` shows whether speech-to-text is on. An intake
+heard and what was replied. `GET /health` shows whether speech-to-text and the voice are
+on. An intake
 call that reaches the problem files a real application and its SMS notices.
 
 ## Configuration

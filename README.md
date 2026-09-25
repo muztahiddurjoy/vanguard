@@ -39,7 +39,8 @@ decision.
 
 This starts the NID registry, the backend with its SQLite database (`server/dlas.db`, created
 at startup), an ngrok tunnel for the phone lines and the dashboard, then prints their
-addresses and the Twilio webhooks. The first run installs the dependencies and creates
+addresses, the Twilio webhooks and whether the AI, speech-to-text and the voice are working
+(the voice is checked with ElevenLabs at startup). The first run installs the dependencies and creates
 `server/.env`. Each service's output is shown with its name and kept in `.logs/`. Ctrl-C
 stops everything, and so does any one service stopping.
 
