@@ -14,6 +14,7 @@ os.environ.update(
         "ADNSMS_API_SECRET": "",
         "ELEVENLABS_API_KEY": "",
         "TWILIO_AUTH_TOKEN": "",
+        "NID_SERVER_URL": "",
         "OFFICE_DISTRICT": "Rangpur",
         "TWILIO_VALIDATE_SIGNATURES": "false",
         "UPLOAD_DIR": tempfile.mkdtemp(prefix="dlas-test-uploads-"),

@@ -48,6 +48,15 @@ class Settings(BaseSettings):
 
     upload_dir: str = "./uploads"
 
+    # The NID registry (nid-server/). Empty: callers cannot be verified by phone
+    # and applications are recorded as unverified.
+    nid_server_url: str = ""
+    nid_server_api_key: str = ""
+
+    # The AI query helpline printed in SMS: point it at the number whose Twilio
+    # voice webhook is /telephony/voice?line=helpline.
+    helpline_number: str = "16430"
+
     # T1 alert thresholds
     lawyer_inactivity_days: int = 14
     # T2: a case referred this many times (or bounced back to an office it
