@@ -442,6 +442,37 @@ def test_elevenlabs_audio_plays_at_voice_speed_with_the_same_pitch():
     assert b"".join(normal) == tone and len(normal[0]) >= 0.6 * 8000
 
 
+def test_a_reply_that_cannot_be_spoken_is_logged_and_the_call_goes_on(db_engine, caplog):
+    class BrokenOnce(FakeTTS):
+        async def stream(self, text: str, language: str | None = None):
+            self.spoken.append(text)
+            if len(self.spoken) == 1:
+                raise ValueError("no audio")
+            yield b"\xff" * 160
+
+    async def scenario():
+        ws, tts, stt = FakeTwilio(), BrokenOnce(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            intake=IntakeConversation(use_default_llm=False, use_default_registry=False),
+            session_factory=sessionmaker(bind=db_engine),
+        )
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(ws.events("mark")) == 1)
+        stt.say("hello")
+        await until(lambda: len(ws.events("mark")) == 2)
+        ws.push({"event": "stop"})
+        await asyncio.wait_for(runner, 5)
+        return ws, tts
+
+    ws, tts = asyncio.run(scenario())
+    assert "could not speak on call CA123" in caplog.text and "no audio" in caplog.text
+    assert tts.spoken[1] == t5_intake.KEEP_LISTENING["en"] and len(ws.events("media")) == 1
+
+
 def test_elevenlabs_errors_raise_tts_error():
     def rejected(request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, json={"detail": {"code": "model_access_denied"}})

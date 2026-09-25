@@ -230,7 +230,10 @@ class StreamManager:
                         }
                     )
         except TTSError as exc:
-            log.error("TTS failed on call %s: %s", self.call_sid, exc)
+            log.error("The line could not speak on call %s: %s", self.call_sid, exc)
+        except Exception:
+            # Never silently: the caller hears nothing, so the reason must be in the log.
+            log.exception("The line could not speak on call %s", self.call_sid)
         await self._send({"event": "mark", "streamSid": self.stream_sid, "mark": {"name": mark}})
 
     async def _stop_speaking(self, *, clear: bool) -> None:
