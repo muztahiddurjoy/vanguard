@@ -907,6 +907,7 @@ export const bn: Messages = {
     hint: "মামলাটি প্রতিবার কোন অফিসে পাঠানো হয়েছে, আর সেই অফিস কী করেছে।",
     sentBack: (n) => `${n} বার ফেরত এসেছে`,
     office: (name) => `লিগ্যাল এইড অফিস, ${name}`,
+    hop: (from, to) => `${from} থেকে ${to}-এ`,
     status: {
       pending: "উত্তরের অপেক্ষা",
       accepted: "গ্রহণ করেছে",

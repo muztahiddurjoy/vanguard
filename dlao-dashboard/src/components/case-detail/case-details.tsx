@@ -1,5 +1,6 @@
 import { CallNotes } from "@/components/case-detail/call-notes"
 import { ProvenancePanel } from "@/components/case-detail/provenance-panel"
+import { ReferralHistory } from "@/components/case-detail/referral-history"
 import { RespondentPanel } from "@/components/case-detail/respondent-panel"
 import { PANEL_LAWYERS } from "@/data/cases"
 import type { LegalCase } from "@/data/types"
@@ -103,6 +104,7 @@ export function CaseDetails({
           ))}
         </dl>
       </section>
+      <ReferralHistory legalCase={c} />
       <RespondentPanel legalCase={c} onRelease={onReleaseNotice} />
       <CallNotes legalCase={c} />
     </div>

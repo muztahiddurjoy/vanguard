@@ -98,3 +98,30 @@ describe("court progress from the panel lawyer", () => {
     expect(within(dialog).queryByRole("tab", { name: "Court progress" })).not.toBeInTheDocument()
   })
 })
+
+describe("transfers between offices (ping-pong)", () => {
+  it("shows both bounces and escalates to the Chief Legal Aid Officer", async () => {
+    const { user, dialog } = await openCase("APP-2026-012", "Nabila")
+    const history = within(dialog).getByRole("region", { name: "Transfers between offices" })
+    expect(history).toHaveTextContent("Sent back 2 times")
+    const hops = within(history).getAllByRole("listitem")
+    expect(hops).toHaveLength(2)
+    expect(hops[0]).toHaveTextContent("From Rangpur to Dhaka")
+    expect(hops[0]).toHaveTextContent("Sent back")
+    expect(hops[1]).toHaveTextContent("Dhaka will act only on an order from the national office.")
+
+    expect(
+      within(dialog).getByText("Sent back twice: ask the Chief Legal Aid Officer to decide"),
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Escalate to Chief Officer" }))
+    expect(history).toHaveTextContent(
+      "Escalated to the Chief Legal Aid Officer. Their decision binds every office.",
+    )
+    await user.click(within(dialog).getByRole("tab", { name: "History" }))
+    expect(
+      within(dialog).getByText(
+        "Escalated to the Chief Legal Aid Officer after other offices sent it back",
+      ),
+    ).toBeInTheDocument()
+  })
+})

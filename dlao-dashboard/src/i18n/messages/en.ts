@@ -916,6 +916,7 @@ export const en = {
     hint: "Each time the case was sent to another office, and what that office did.",
     sentBack: (n: string) => `Sent back ${n} times`,
     office: (name: string) => `Legal aid office, ${name}`,
+    hop: (from: string, to: string) => `From ${from} to ${to}`,
     status: {
       pending: "Waiting for an answer",
       accepted: "Accepted",

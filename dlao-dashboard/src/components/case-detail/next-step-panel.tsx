@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from "react"
 import {
   AlarmClock,
+  ArrowLeftRight,
   CalendarClock,
   CircleCheck,
   CopyCheck,
@@ -8,6 +9,7 @@ import {
   Landmark,
   ListChecks,
   Send,
+  ShieldAlert,
   Sparkles,
   UserRoundX,
   type LucideIcon,
@@ -160,6 +162,28 @@ export function NextStepPanel({
       )
 
     case "escalateJurisdiction":
+      // Other offices keep sending it back: the Chief Legal Aid Officer decides (T2).
+      if ((c.timesReturned ?? 0) >= 2)
+        return (
+          <Step
+            tone="danger"
+            Icon={ArrowLeftRight}
+            title={t.followUp.chiefTitle}
+            action={
+              <Button
+                onClick={() => {
+                  dispatch({ type: "escalateJurisdiction", id: c.id, at: at() })
+                  toast.success(t.followUp.chiefToast(c.id))
+                }}
+              >
+                <ShieldAlert aria-hidden data-icon="inline-start" />
+                {t.followUp.chief}
+              </Button>
+            }
+          >
+            {t.followUp.chiefBody(f.num(c.timesReturned!))}
+          </Step>
+        )
       return (
         <Step
           tone="warning"
