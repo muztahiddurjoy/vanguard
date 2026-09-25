@@ -572,7 +572,6 @@ export const en = {
     category: "Type of case",
     channel: "How it was reported",
     received: "Received",
-    reportedBy: "Reported by",
     filedHow: "Who filed it",
     identity: "National ID check",
     trackingToken: "Tracking number",

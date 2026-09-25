@@ -565,7 +565,6 @@ export const bn: Messages = {
     category: "মামলার ধরন",
     channel: "কীভাবে জানানো হয়েছে",
     received: "আবেদনের সময়",
-    reportedBy: "যিনি জানিয়েছেন",
     filedHow: "কে আবেদন করেছেন",
     identity: "জাতীয় পরিচয়পত্র যাচাই",
     trackingToken: "ট্র্যাকিং নম্বর",

@@ -111,7 +111,13 @@ describe("filing for a relative, verified through NID", () => {
     await user.click(within(dialog).getByRole("tab", { name: "Case information" }))
     const value = (label: string) => within(dialog).getByText(label).nextElementSibling
     expect(value("Who filed it")).toHaveTextContent("By the caller, for their mother")
-    expect(value("Reported by")).toHaveTextContent("Arif Hossain (son)")
+    // Who spoke is kept apart from who the case is about, each with their own check.
+    const provenance = within(dialog).getByRole("region", {
+      name: "Who reported it, and who it is about",
+    })
+    expect(provenance).toHaveTextContent("Who reported itArif HossainsonIdentity confirmed")
+    expect(provenance).toHaveTextContent("Who the case is aboutJahanara ParvinAge 41")
+    expect(provenance).toHaveTextContent("The applicant agreed to this report being made for them.")
     expect(value("National ID check")).toHaveTextContent(
       "Confirmed with the National ID register · The caller answered the NID security questions · Called from a SIM registered to their own NID",
     )
