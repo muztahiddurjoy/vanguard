@@ -32,9 +32,10 @@ CATEGORIES = (
 # English terms match on word starts; Bangla terms match as substrings
 # (regex word boundaries are unreliable around Bangla vowel signs).
 CATEGORY_TERMS: dict[str, tuple[str, ...]] = {
+    # Abuse words only: "husband" or "in-laws" appear in every family matter.
     "domesticViolence": (
-        "beat", "beating", "assault", "hit me", "hits me", "husband", "in-laws", "abuse",
-        "violence", "injur", "slap", "মারধর", "নির্যাতন", "স্বামী", "শ্বশুর", "আঘাত", "মারে",
+        "beat", "beating", "assault", "hit me", "hits me", "abuse", "violence", "injur",
+        "slap", "মারধর", "নির্যাতন", "আঘাত", "মারে",
     ),
     "dowryHarassment": ("dowry", "যৌতুক"),
     "cyberHarassment": (

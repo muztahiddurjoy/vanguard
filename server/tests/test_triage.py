@@ -116,3 +116,9 @@ def test_llm_failure_falls_back_to_rules():
     assert llm.calls == 1
     assert rec["categorySource"] == "rules"
     assert rec["priority"] == "low"
+
+
+def test_mentioning_a_husband_is_not_domestic_violence():
+    rec = triage("My husband left and stopped paying maintenance for our two children.")
+    assert rec["category"] == "familyMaintenance"
+    assert "activeViolence" not in detected(rec)
