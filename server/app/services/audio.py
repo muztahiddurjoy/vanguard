@@ -144,6 +144,10 @@ class VoiceActivityDetector:
         floor = self._floor or 0.0
         return max(self.min_speech_rms, floor * self.NOISE_FACTOR)
 
+    def set_end_ms(self, end_ms: int) -> None:
+        """How much quiet ends a turn from now on (a turn in progress included)."""
+        self.end_frames = max(1, end_ms // FRAME_MS)
+
     def frame(self, samples: Sequence[int]) -> VadDecision:
         level = rms(samples)
         loud = level >= self.threshold

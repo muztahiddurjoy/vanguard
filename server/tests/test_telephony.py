@@ -92,6 +92,7 @@ class ScriptedTranscriber:
         self.queue: asyncio.Queue[TranscriptEvent | None] = asyncio.Queue()
         self.fed = 0
         self.closed = False
+        self.end_of_turn: list[int] = []
 
     async def feed(self, ulaw: bytes) -> None:
         self.fed += len(ulaw)
@@ -99,6 +100,9 @@ class ScriptedTranscriber:
     async def events(self):
         while (event := await self.queue.get()) is not None:
             yield event
+
+    def set_end_of_turn(self, ms: int) -> None:
+        self.end_of_turn.append(ms)
 
     async def close(self) -> None:
         self.closed = True
@@ -167,6 +171,8 @@ def test_call_collects_intake_and_creates_application(db_engine):
 
     ws, tts, stt, manager = asyncio.run(scenario())
     assert tts.spoken[0] == "Legal aid. I'm listening, tell me what happened."
+    # The story gets the longer pause; the questions after it, the usual one.
+    assert stt.end_of_turn[:2] == [1200, 700] and set(stt.end_of_turn[2:]) == {700}
     assert tts.spoken[-1].startswith("Thank you. Your application is recorded.")
     assert stt.fed == 160 and stt.closed
     assert set(tts.languages) == {"en"} and tts.closed

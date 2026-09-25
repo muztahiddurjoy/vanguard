@@ -52,6 +52,10 @@ class Transcriber(Protocol):
 
     def events(self) -> AsyncIterator[TranscriptEvent]: ...
 
+    def set_end_of_turn(self, ms: int) -> None:
+        """How much of the caller's silence ends their turn from now on."""
+        ...
+
     async def close(self) -> None: ...
 
 
@@ -149,6 +153,9 @@ class OpenAITranscriber:
     async def events(self) -> AsyncIterator[TranscriptEvent]:
         while (event := await self._events.get()) is not None:
             yield event
+
+    def set_end_of_turn(self, ms: int) -> None:
+        self._vad.set_end_ms(ms)
 
     async def close(self) -> None:
         self._closing = True

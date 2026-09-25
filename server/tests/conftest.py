@@ -22,6 +22,7 @@ os.environ.update(
         "OPENAI_STT_MODEL": "gpt-live-transcribe",
         "OPENAI_STT_DELAY": "low",
         "STT_END_OF_TURN_MS": "700",
+        "STT_STORY_END_OF_TURN_MS": "1200",
         "STT_MIN_SPEECH_RMS": "500",
         "LOG_LEVEL": "INFO",
         "TWILIO_AUTH_TOKEN": "",

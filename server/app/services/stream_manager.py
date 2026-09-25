@@ -10,6 +10,9 @@ whose ``ulaw_8000`` output Twilio plays as-is.
 - Barge-in: when the caller starts speaking over a reply, the TTS stream is
   cancelled and Twilio's queued audio cleared. Audio is generated faster than
   it plays, so a reply counts as playing until Twilio echoes its ``mark``.
+- Patience: while an intake caller is saying what happened, before any
+  question, their turn ends after a longer pause (``STT_STORY_END_OF_TURN_MS``),
+  so a story told with pauses is not answered halfway through.
 - Ending: after the closing line has actually finished playing (Twilio echoes
   our ``mark``), the socket is closed and Twilio moves on to the TwiML after
   ``<Connect>``, which hangs up.
@@ -176,6 +179,7 @@ class StreamManager:
                 caller_phone=self.caller,
             )
             self._conversation_open = True
+            self._set_patience(state)
         self._listen_task = asyncio.create_task(self._listen())
         await self._speak(state["reply"])
 
@@ -184,6 +188,16 @@ class StreamManager:
         if self._helpline is None:
             self._helpline = helpline()
         return self._helpline
+
+    def _set_patience(self, state: Any) -> None:
+        """A story has pauses: wait longer for the end of a turn until it has been told."""
+        if self.transcriber is None:
+            return
+        settings = get_settings()
+        story = state.get("asking") == "problem"
+        self.transcriber.set_end_of_turn(
+            settings.stt_story_end_of_turn_ms if story else settings.stt_end_of_turn_ms
+        )
 
     def _lookup(self, token: str) -> dict[str, Any] | None:
         with self.session_factory() as db:
@@ -265,6 +279,7 @@ class StreamManager:
                 reply = state["reply"]
             else:
                 state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
+                self._set_patience(state)
                 reply = state["reply"]
                 if state.get("complete"):
                     await asyncio.to_thread(self._finish, state)

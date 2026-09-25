@@ -47,8 +47,10 @@ class Settings(BaseSettings):
     openai_realtime_url: str = "wss://api.openai.com/v1/realtime?intent=transcription"
 
     # Our own voice activity detection on call audio (gpt-live-transcribe has none).
-    # A turn ends after this much silence.
+    # A turn ends after this much silence; while the caller is telling what happened
+    # (before any question), after the longer pause, since a story has pauses in it.
     stt_end_of_turn_ms: int = 700
+    stt_story_end_of_turn_ms: int = 1200
     # Loudness (RMS of 16-bit samples) below which audio never counts as speech.
     # Raise it if line noise interrupts the replies; lower it for quiet callers.
     stt_min_speech_rms: int = 500

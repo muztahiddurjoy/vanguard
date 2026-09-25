@@ -98,6 +98,14 @@ def test_short_pauses_inside_a_turn_do_not_end_it():
     assert "end" not in decisions
 
 
+def test_a_longer_end_of_turn_waits_out_a_pause_in_a_story():
+    story = tone(20, 5) + tone(4000, 10) + tone(20, 50) + tone(4000, 10)  # a 1 s pause
+    assert "end" in run(VoiceActivityDetector(end_ms=700), story)
+    patient = VoiceActivityDetector(end_ms=700)
+    patient.set_end_ms(1200)
+    assert "end" not in run(patient, story)
+
+
 def test_learns_the_floor_from_the_first_frame():
     # Calls open with silence while the greeting plays; a loud first frame is
     # taken as the floor until a quieter one arrives.
