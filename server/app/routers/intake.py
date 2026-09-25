@@ -6,6 +6,7 @@ and possible duplicates (T4) are queued for review.
 """
 
 import base64
+import contextlib
 import uuid
 from datetime import date
 from pathlib import Path
@@ -423,15 +424,23 @@ def intake_from_slots(slots: dict[str, Any], session_id: str, last_utterance: st
 
 
 def finish_conversation(
-    db: Session, session_id: str, state: t5_intake.IntakeState, actor: str
+    db: Session,
+    session_id: str,
+    state: t5_intake.IntakeState,
+    actor: str,
+    fallback_phone: str | None = None,
 ) -> Case | None:
     """Create the application when the conversation ends.
 
     A normal call needs every required slot. A call that ended in an emergency
-    always creates one, escalated and critical, so the callback happens.
+    always creates one, escalated and critical, so the callback happens; if the
+    caller never gave a number, ``fallback_phone`` (caller ID) is used.
     """
-    slots = state.get("slots") or {}
+    slots = dict(state.get("slots") or {})
     emergency = bool(state.get("emergency"))
+    if emergency and not slots.get("phone") and fallback_phone:
+        with contextlib.suppress(ValueError):
+            slots["phone"] = normalize_bd_mobile(fallback_phone)
     if not state.get("complete") or (t5_intake.missing_required(slots) and not emergency):
         return None
     channel, provenance = CONVERSATION_CHANNEL.get(
