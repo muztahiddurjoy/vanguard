@@ -77,6 +77,8 @@ class SettlementState(TypedDict, total=False):
     terms: list[str]
     language: Literal["bn", "en"]
     risk_flags: list[str]
+    # Officer confirmed safety despite recorded violence (audited by the router).
+    risk_acknowledged: bool
     draft: str
     draft_source: Literal["template", "llm"]
     issues: list[str]
