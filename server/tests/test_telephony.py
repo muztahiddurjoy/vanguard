@@ -11,8 +11,13 @@ from app.config import get_settings
 from app.models import Case
 from app.routers import telephony
 from app.services.elevenlabs import ElevenLabsTTS, TTSError
-from app.services.speech_to_text import TranscriptEvent
-from app.services.stream_manager import NO_SPEECH_INPUT, StreamManager
+from app.services.speech_to_text import OpenAITranscriber, TranscriptEvent
+from app.services.stream_manager import (
+    NO_SPEECH_INPUT,
+    STT_FAILED,
+    StreamManager,
+    build_transcriber,
+)
 
 # --- fakes ------------------------------------------------------------------------
 
@@ -223,6 +228,46 @@ def test_without_speech_to_text_caller_hears_fallback_and_call_ends():
     ws, tts = asyncio.run(scenario())
     assert tts.spoken == [NO_SPEECH_INPUT["bn"]]
     assert ws.closed
+
+
+def test_speech_to_text_failing_mid_call_apologises_and_files_what_was_said(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            intake=IntakeConversation(use_default_llm=False, use_default_registry=False),
+            session_factory=factory,
+        )
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        for utterance in ("for myself", "Moyuri Akter", "Rangpur"):
+            stt.say(utterance)
+        stt.say("My landlord took my land and will not give it back")
+        await until(lambda: len(tts.spoken) == 5)
+        stt.queue.put_nowait(TranscriptEvent("error", "the transcription session closed"))
+        await asyncio.wait_for(runner, 5)
+        return ws, tts, manager
+
+    ws, tts, manager = asyncio.run(scenario())
+    assert tts.spoken[-1] == STT_FAILED["en"]
+    assert ws.closed
+    with factory() as db:
+        case = db.scalars(select(Case)).one()
+    assert manager.case_ref == case.application_id
+    assert "callDropped" in case.flags
+    assert "doNotCall" not in case.flags
+
+
+def test_transcriber_is_openai_when_a_key_is_set(monkeypatch):
+    s = get_settings()
+    assert build_transcriber("bn") is None
+    monkeypatch.setattr(s, "openai_api_key", "sk-test")
+    stt = build_transcriber("en")
+    assert isinstance(stt, OpenAITranscriber) and stt.language == "en"
 
 
 # --- ElevenLabs client ------------------------------------------------------------
