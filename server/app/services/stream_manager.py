@@ -7,8 +7,9 @@ Caller audio (μ-law 8 kHz) goes to a speech-to-text ``Transcriber``; each
 final utterance is one T5 turn; the reply is spoken back through ElevenLabs,
 whose ``ulaw_8000`` output Twilio plays as-is.
 
-- Barge-in: when the caller starts speaking over a reply, playback is
-  cleared on Twilio and the TTS stream is cancelled.
+- Barge-in: when the caller starts speaking over a reply, the TTS stream is
+  cancelled and Twilio's queued audio cleared. Audio is generated faster than
+  it plays, so a reply counts as playing until Twilio echoes its ``mark``.
 - Ending: after the closing line has actually finished playing (Twilio echoes
   our ``mark``), the socket is closed and Twilio moves on to the TwiML after
   ``<Connect>``, which hangs up.
@@ -105,6 +106,8 @@ class StreamManager:
         self._speak_task: asyncio.Task[None] | None = None
         self._listen_task: asyncio.Task[None] | None = None
         self._marks: dict[str, asyncio.Event] = {}
+        # The latest reply's mark until Twilio echoes it: its audio may still be playing.
+        self._playing: str | None = None
         self._reply_count = 0
         # True between the intake greeting and _finish: a hang-up then is a cut call.
         self._conversation_open = False
@@ -127,8 +130,10 @@ class StreamManager:
                     if self.transcriber and media.get("track", "inbound") == "inbound":
                         await self.transcriber.feed(base64.b64decode(media["payload"]))
                 elif event == "mark":
-                    done = self._marks.get(message["mark"]["name"])
-                    if done:
+                    name = message["mark"]["name"]
+                    if name == self._playing:
+                        self._playing = None
+                    if done := self._marks.get(name):
                         done.set()
                 elif event == "stop":
                     break
@@ -192,6 +197,7 @@ class StreamManager:
         self._reply_count += 1
         mark = f"reply-{self._reply_count}"
         self._marks[mark] = asyncio.Event()
+        self._playing = mark
         self._speak_task = asyncio.create_task(self._play(text, mark))
         return mark
 
@@ -212,13 +218,15 @@ class StreamManager:
         await self._send({"event": "mark", "streamSid": self.stream_sid, "mark": {"name": mark}})
 
     async def _stop_speaking(self, *, clear: bool) -> None:
+        """Stop generating the reply; with ``clear``, also silence what Twilio has queued."""
         task, self._speak_task = self._speak_task, None
         if task and not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-            if clear:
-                await self._send({"event": "clear", "streamSid": self.stream_sid})
+        if clear and self._playing is not None:
+            self._playing = None
+            await self._send({"event": "clear", "streamSid": self.stream_sid})
 
     async def _wait_played(self, mark: str) -> None:
         if self._speak_task:

@@ -29,10 +29,13 @@ from app.services.stream_manager import (
 class FakeTwilio:
     """Plays Twilio: queues inbound events and echoes our marks once 'played'."""
 
-    def __init__(self):
+    def __init__(self, *, echo_marks: bool = True):
         self.incoming: asyncio.Queue[str | None] = asyncio.Queue()
         self.sent: list[dict] = []
         self.closed = False
+        # False: the audio is still "playing" until finish_playing() echoes the marks.
+        self.echo_marks = echo_marks
+        self.held: list[dict] = []
 
     async def receive_text(self) -> str:
         item = await self.incoming.get()
@@ -44,7 +47,15 @@ class FakeTwilio:
         msg = json.loads(data)
         self.sent.append(msg)
         if msg["event"] == "mark":
-            await self.incoming.put(json.dumps({"event": "mark", "mark": msg["mark"]}))
+            self.held.append(msg["mark"])
+        # Twilio echoes queued marks at once when it clears the audio.
+        if self.echo_marks or msg["event"] == "clear":
+            self.finish_playing()
+
+    def finish_playing(self) -> None:
+        for mark in self.held:
+            self.incoming.put_nowait(json.dumps({"event": "mark", "mark": mark}))
+        self.held = []
 
     async def close(self, code: int = 1000) -> None:
         self.closed = True
@@ -169,6 +180,35 @@ def test_call_collects_intake_and_creates_application(db_engine):
     assert case.category == "domesticViolence"
     assert case.channel == "proxy"
     assert case.applicant is not None and case.applicant.safety_level == "restricted"
+
+
+def test_barge_in_clears_a_reply_that_was_fully_sent_but_is_still_playing(db_engine):
+    async def scenario(echo_marks: bool):
+        ws, tts, stt = FakeTwilio(echo_marks=echo_marks), FakeTTS(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            intake=IntakeConversation(use_default_llm=False),
+            session_factory=sessionmaker(bind=db_engine),
+        )
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        # ElevenLabs is done with the greeting: all its audio and the mark are sent.
+        await until(lambda: len(ws.events("mark")) == 1)
+        await asyncio.sleep(0.05)  # an echoed mark reaches the manager
+        stt.queue.put_nowait(TranscriptEvent("speech_started"))
+        await asyncio.sleep(0.05)
+        ws.push({"event": "stop"})
+        await asyncio.wait_for(runner, 5)
+        return ws
+
+    # Twilio is still playing it: the caller's voice silences it.
+    assert asyncio.run(scenario(echo_marks=False)).events("clear") == [
+        {"event": "clear", "streamSid": "MZ123"}
+    ]
+    # It has finished playing: there is nothing to clear.
+    assert asyncio.run(scenario(echo_marks=True)).events("clear") == []
 
 
 def test_call_cut_mid_intake_is_recorded_and_marked_do_not_call(db_engine):
