@@ -99,8 +99,10 @@ RISK_FACTORS: dict[str, FactorSpec] = {
 }  # fmt: skip
 
 PHONE_MONITORED = (
-    "monitors her phone", "monitors my phone", "checks her phone", "checks my phone",
-    "takes my phone", "takes her phone", "ফোন দেখে", "ফোন নিয়ে", "ফোন চেক",
+    "monitors her phone", "monitors his phone", "monitors my phone",
+    "checks her phone", "checks his phone", "checks my phone",
+    "takes her phone", "takes his phone", "takes my phone",
+    "ফোন দেখে", "ফোন নিয়ে", "ফোন চেক",
 )  # fmt: skip
 
 LABELS: dict[str, tuple[str, str]] = {

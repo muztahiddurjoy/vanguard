@@ -219,3 +219,18 @@ def test_good_llm_draft_is_kept():
         llm=FakeLLM(LLMDraft(draft=good)),
     )
     assert out["draft_source"] == "llm"
+
+
+def test_parse_safe_window_english_and_bangla():
+    assert t5_intake.parse_safe_window("Tuesday 2 to 4 pm") == {
+        "day": 2,
+        "start_hour": 14,
+        "end_hour": 16,
+    }
+    assert t5_intake.parse_safe_window("মঙ্গলবার দুপুর ২টা থেকে ৪টা") == {
+        "day": 2,
+        "start_hour": 14,
+        "end_hour": 16,
+    }
+    assert t5_intake.parse_safe_window("sometime next week") is None
+    assert t5_intake.parse_safe_window("Monday or Tuesday 2-4 pm") is None

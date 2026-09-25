@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.llm import StructuredLLM, default_llm
 from app.agents.state import IntakeState
-from app.agents.t8_triage import categorize_by_rules
+from app.agents.t8_triage import PHONE_MONITORED, categorize_by_rules
 
 # Asked in this order; a slot is skipped once filled.
 SLOTS = ("is_proxy", "name", "phone", "district", "problem", "safe_to_call")
@@ -60,9 +60,11 @@ CLOSING = {
     "en": "Thank you. Your application is recorded. "
     "The District Legal Aid Office will contact you at a safe time.",
 }
+# Promises only what always happens: the application is escalated for an urgent callback.
 EMERGENCY = {
-    "bn": "আপনি এখন বিপদে থাকলে ৯৯৯ নম্বরে ফোন করুন। আমরা আপনাকে একজন কর্মকর্তার সঙ্গে যুক্ত করছি।",
-    "en": "If you are in danger right now, call 999. We are connecting you to an officer.",
+    "bn": "আপনি এখন বিপদে থাকলে এখনই ৯৯৯ নম্বরে ফোন করুন। একজন কর্মকর্তা যত দ্রুত সম্ভব আপনাকে ফোন করবেন।",
+    "en": "If you are in danger right now, call 999 now. "
+    "An officer will call you back as soon as possible.",
 }
 
 DANGER_TERMS = (
@@ -133,6 +135,9 @@ def extract_by_rules(utterance: str, asking: str | None) -> dict[str, Any]:
         found["phone"] = phone
     if district := find_district(utterance):
         found["district"] = district
+    # A monitored phone changes how we may contact them, whenever it is mentioned.
+    if _has_any(utterance, PHONE_MONITORED):
+        found["phone_monitored"] = True
     if asking == "is_proxy":
         if _has_any(utterance, FOR_OTHER):
             found["is_proxy"] = True
@@ -276,3 +281,36 @@ def conversations() -> IntakeConversation:
 
 def missing_required(slots: dict[str, Any]) -> list[str]:
     return [s for s in SLOTS if s in REQUIRED and s not in slots]
+
+
+DAY_NAMES = {
+    # JS Date#getDay numbering (0 = Sunday), matching SafeWindow.
+    0: ("sunday", "রবিবার", "রোববার"),
+    1: ("monday", "সোমবার"),
+    2: ("tuesday", "মঙ্গলবার"),
+    3: ("wednesday", "বুধবার"),
+    4: ("thursday", "বৃহস্পতিবার"),
+    5: ("friday", "শুক্রবার"),
+    6: ("saturday", "শনিবার"),
+}
+AFTERNOON = ("pm", "p.m", "afternoon", "evening", "দুপুর", "বিকাল", "বিকেল", "সন্ধ্যা")
+
+
+def parse_safe_window(text: str) -> dict[str, int] | None:
+    """Best-effort parse of "Tuesday 2 to 4 pm" / "মঙ্গলবার দুপুর ২টা থেকে ৪টা".
+
+    Returns None unless a day and a sensible hour range are both clear; the
+    officer then sets the window by hand. Guessing wrong here could put a call
+    through while the abuser is home.
+    """
+    lowered = text.casefold().translate(_BN_DIGITS)
+    days = [d for d, names in DAY_NAMES.items() if any(n in lowered for n in names)]
+    hours = [int(h) for h in re.findall(r"(?<!\d)(\d{1,2})(?!\d)", lowered)]
+    if len(days) != 1 or len(hours) < 2:
+        return None
+    start, end = hours[0], hours[1]
+    if any(t in lowered for t in AFTERNOON):
+        start, end = (h + 12 if h < 12 else h for h in (start, end))
+    if not (0 <= start < end <= 24):
+        return None
+    return {"day": days[0], "start_hour": start, "end_hour": end}
