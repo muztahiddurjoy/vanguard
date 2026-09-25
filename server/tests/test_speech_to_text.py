@@ -3,6 +3,8 @@ import base64
 import json
 import math
 
+import pytest
+
 from app.config import Settings
 from app.services.audio import FRAME_SAMPLES, ulaw_encode
 from app.services.speech_to_text import PCM_RATE, OpenAITranscriber, TranscriptEvent
@@ -180,8 +182,41 @@ def test_transcripts_are_emitted_in_the_order_spoken():
     assert events[3:] == [TranscriptEvent("final", "first"), TranscriptEvent("final", "third")]
 
 
-def test_connection_failure_is_one_error_event():
+@pytest.fixture(autouse=True)
+def quick_reconnects(monkeypatch):
+    monkeypatch.setattr(OpenAITranscriber, "RECONNECT_DELAYS_S", (0.01, 0.01, 0.01))
+
+
+class Sessions:
+    """Opens the next scripted session on each connection (a working one when out)."""
+
+    def __init__(self, *fakes: FakeRealtime):
+        self.waiting = list(fakes)
+        self.opened: list[FakeRealtime] = []
+
+    async def connect(self, url: str, additional_headers: dict) -> FakeRealtime:
+        fake = self.waiting.pop(0) if self.waiting else FakeRealtime()
+        self.opened.append(fake)
+        return await fake.connect(url, additional_headers)
+
+
+class Busy(FakeRealtime):
+    """Turns the session down the way the Realtime API does when it is overloaded."""
+
+    async def send(self, data: str) -> None:
+        self.sent.append(json.loads(data))
+        if self.sent[-1]["type"] == "session.update":
+            error = {"type": "server_error", "code": "inference_service_unavailable_error",
+                     "message": "Service is temporarily unavailable."}  # fmt: skip
+            self.push({"type": "error", "error": error})
+
+
+def test_connection_failure_is_tried_again_then_one_error_event():
+    attempts = 0
+
     async def refuse(url, additional_headers):
+        nonlocal attempts
+        attempts += 1
         raise OSError("connection refused")
 
     async def scenario():
@@ -195,6 +230,23 @@ def test_connection_failure_is_one_error_event():
     # The connection is first awaited when the caller's turn is sent.
     assert events[0] == TranscriptEvent("speech_started")
     assert events[1].kind == "error" and "connection refused" in events[1].text
+    assert attempts == 1 + len(OpenAITranscriber.RECONNECT_DELAYS_S)
+
+
+def test_a_busy_service_at_the_start_of_a_call_is_tried_again():
+    async def scenario():
+        sessions = Sessions(Busy(), FakeRealtime(transcripts=["hello"]))
+        stt = OpenAITranscriber("en", settings=settings(), connect=sessions.connect)
+        await stt.feed(SILENCE)
+        await asyncio.sleep(0.05)
+        await feed_frames(stt, speech(15) + SILENCE * 40)
+        events = await collect(stt, 2)
+        await stt.close()
+        return events, sessions
+
+    events, sessions = asyncio.run(scenario())
+    assert events == [TranscriptEvent("speech_started"), TranscriptEvent("final", "hello")]
+    assert len(sessions.opened) == 2
 
 
 def test_rejected_session_is_an_error_but_later_errors_are_not():
@@ -210,15 +262,16 @@ def test_rejected_session_is_an_error_but_later_errors_are_not():
                 )
 
     async def rejected():
-        fake = Rejecting()
-        stt = transcriber(fake)
+        sessions = Sessions(Rejecting(), Rejecting())
+        stt = OpenAITranscriber("bn", settings=settings(), connect=sessions.connect)
         await stt.feed(SILENCE)
         events = await collect(stt, 1)
         await stt.close()
-        return events
+        return events, sessions
 
-    events = asyncio.run(rejected())
+    events, sessions = asyncio.run(rejected())
     assert events[0].kind == "error" and "Unsupported language" in events[0].text
+    assert len(sessions.opened) == 1  # a wrong setting is not tried again
 
     async def later_error():
         fake = FakeRealtime(transcripts=["hello"])
@@ -234,19 +287,58 @@ def test_rejected_session_is_an_error_but_later_errors_are_not():
     assert [e.kind for e in asyncio.run(later_error())] == ["speech_started", "final"]
 
 
-def test_session_dropping_mid_call_is_an_error():
+def test_a_turn_lost_with_its_session_is_asked_for_again():
     async def scenario():
-        fake = FakeRealtime()
-        stt = transcriber(fake)
-        await stt.feed(SILENCE)
+        first = FakeRealtime(reply_in_order=False)  # takes the turn, never transcribes it
+        sessions = Sessions(first, FakeRealtime(transcripts=["said again"]))
+        stt = OpenAITranscriber("en", settings=settings(), connect=sessions.connect)
+        await feed_frames(stt, SILENCE * 5 + speech(15) + SILENCE * 40)
         await asyncio.sleep(0.05)
-        fake.push(None)  # the server closes the socket
+        first.push(None)  # the session drops before the transcript
+        events = await collect(stt, 2)
+        await feed_frames(stt, speech(15) + SILENCE * 40)
+        events += await collect(stt, 2)
+        await stt.close()
+        return events
+
+    assert [(e.kind, e.text) for e in asyncio.run(scenario())] == [
+        ("speech_started", ""), ("repeat", ""), ("speech_started", ""), ("final", "said again"),
+    ]  # fmt: skip
+
+
+def test_a_turn_cut_in_half_by_a_lost_session_is_not_taken_half_heard():
+    async def scenario():
+        first, second = FakeRealtime(), FakeRealtime(transcripts=["never used"])
+        stt = OpenAITranscriber("en", settings=settings(), connect=Sessions(first, second).connect)
+        await feed_frames(stt, SILENCE * 5 + speech(15))  # the caller is still talking
+        await asyncio.sleep(0.05)
+        first.push(None)
+        await asyncio.sleep(0.05)
+        await feed_frames(stt, speech(15) + SILENCE * 40)
+        events = await collect(stt, 2)
+        await stt.close()
+        return events, second
+
+    events, second = asyncio.run(scenario())
+    assert [e.kind for e in events] == ["speech_started", "repeat"]
+    assert second.of_type("input_audio_buffer.commit") == []
+    assert second.of_type("input_audio_buffer.append") == []
+    assert second.of_type("input_audio_buffer.clear")
+
+
+def test_a_session_that_keeps_dropping_is_an_error_in_the_end():
+    async def scenario():
+        dropping = [FakeRealtime() for _ in range(4)]
+        stt = OpenAITranscriber("en", settings=settings(), connect=Sessions(*dropping).connect)
+        await stt.feed(SILENCE)
+        for fake in dropping:
+            await asyncio.sleep(0.05)
+            fake.push(None)
         events = await collect(stt, 1)
         await stt.close()
         return events
 
-    events = asyncio.run(scenario())
-    assert events == [TranscriptEvent("error", "the transcription session closed")]
+    assert asyncio.run(scenario()) == [TranscriptEvent("error", "the transcription session closed")]
 
 
 def test_close_ends_the_event_stream():

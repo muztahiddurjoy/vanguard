@@ -19,6 +19,7 @@ from app.services.elevenlabs import ElevenLabsTTS, TTSError
 from app.services.speech_to_text import OpenAITranscriber, TranscriptEvent
 from app.services.stream_manager import (
     NO_SPEECH_INPUT,
+    SAY_AGAIN,
     STT_FAILED,
     StreamManager,
     build_transcriber,
@@ -364,6 +365,31 @@ def test_speech_to_text_failing_mid_call_apologises_and_files_what_was_said(db_e
     assert manager.case_ref == case.application_id
     assert "callDropped" in case.flags
     assert "doNotCall" not in case.flags
+
+
+def test_a_turn_lost_by_speech_to_text_is_asked_for_again(db_engine):
+    async def scenario():
+        ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            intake=IntakeConversation(use_default_llm=False, use_default_registry=False),
+            session_factory=sessionmaker(bind=db_engine),
+        )
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(ws.events("mark")) == 1)  # the greeting
+        stt.queue.put_nowait(TranscriptEvent("repeat"))
+        stt.say("My landlord took my land and will not give it back")
+        await until(lambda: len(tts.spoken) == 3)
+        ws.push({"event": "stop"})
+        await asyncio.wait_for(runner, 5)
+        return tts
+
+    tts = asyncio.run(scenario())
+    assert tts.spoken[1] == SAY_AGAIN["en"]
+    assert tts.spoken[2].startswith("Thank you for telling me.")  # the call carries on
 
 
 def test_transcriber_is_openai_when_a_key_is_set(monkeypatch):

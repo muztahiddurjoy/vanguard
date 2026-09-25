@@ -11,9 +11,12 @@ not the silence between them, so the transcriber never hears our own replies
 echoing on a quiet line.
 
 Transcripts are emitted in the order the turns were spoken (completions can
-arrive out of order). If the session cannot be opened or configured, or drops
-mid-call, a single ``error`` event lets the call end politely; transcripts
-are never logged.
+arrive out of order). A session lost for a passing reason (the service busy,
+the socket dropped) is opened again, a few times per call; if a turn the
+caller had spoken went with it, a ``repeat`` event asks them to say it again.
+A setting that is wrong (the key, model or language), or a session that
+cannot be opened again, gives a single ``error`` event so the call can end
+politely. Transcripts are never logged.
 """
 
 import asyncio
@@ -27,6 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from websockets.asyncio.client import connect as ws_connect
+from websockets.exceptions import InvalidStatus
 
 from app.config import Settings, get_settings
 from app.services.audio import (
@@ -43,7 +47,7 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class TranscriptEvent:
-    kind: Literal["speech_started", "final", "error"]
+    kind: Literal["speech_started", "final", "repeat", "error"]
     text: str = ""
 
 
@@ -68,9 +72,25 @@ PROMPT = (
 )
 PCM_RATE = 24000
 PREROLL_MS = 500
+# Words in an error's type or code that mean a setting is wrong: opening the
+# session again would not help.
+SETTING_ERRORS = ("invalid", "not_found", "unsupported", "auth", "permission", "quota")
+
+
+def setting_error(error: dict[str, Any]) -> bool:
+    code = f"{error.get('type') or ''} {error.get('code') or ''}".casefold()
+    return any(word in code for word in SETTING_ERRORS)
+
+
+def refused(exc: Exception) -> bool:
+    """Whether a failed connection was refused for its credentials or URL."""
+    return isinstance(exc, InvalidStatus) and exc.response.status_code in (401, 403, 404)
 
 
 class OpenAITranscriber:
+    # Pauses before opening a lost session again; their number is the tries per outage.
+    RECONNECT_DELAYS_S = (0.3, 1.0, 2.0)
+
     def __init__(
         self,
         language: str,
@@ -95,6 +115,10 @@ class OpenAITranscriber:
         self._texts: dict[str, str] = {}
         self._failed = False
         self._closing = False
+        self._awaiting = 0  # committed turns not yet transcribed
+        self._lost_turn = False  # the turn in progress began on a session that was lost
+        self._reconnects = 0  # in this outage
+        self._generation = 0  # which session the current reader belongs to
 
     def session_update(self) -> dict[str, Any]:
         s = self.settings
@@ -145,8 +169,16 @@ class OpenAITranscriber:
                 self._preroll.clear()
             turn_audio.append(pcm)
             if decision == "end":
+                if self._lost_turn:
+                    # Its start went with a lost session: ask for the whole turn again.
+                    self._lost_turn = False
+                    turn_audio = []
+                    await self._send({"type": "input_audio_buffer.clear"})
+                    self._events.put_nowait(TranscriptEvent("repeat"))
+                    continue
                 await self._append(turn_audio)
                 turn_audio = []
+                self._awaiting += 1
                 await self._send({"type": "input_audio_buffer.commit"})
         await self._append(turn_audio)
 
@@ -180,34 +212,69 @@ class OpenAITranscriber:
             )
             await self._ws.send(json.dumps(self.session_update()))
         except Exception as exc:
-            self._fail(f"could not open the transcription session: {exc}")
+            self._ws = None
+            self._lost(f"could not open the transcription session: {exc}", setting=refused(exc))
             return
-        self._reader = asyncio.create_task(self._read())
+        self._reader = asyncio.create_task(self._read(self._ws, self._generation))
+
+    async def _reopen(self, delay: float) -> None:
+        old, self._ws = self._ws, None
+        self._configured = False
+        if old is not None:
+            with contextlib.suppress(Exception):
+                await old.close()
+        await asyncio.sleep(delay)
+        await self._open()
+
+    def _lost(self, reason: str, *, setting: bool = False) -> None:
+        """The session failed: open another if the reason may pass, else give up."""
+        if self._failed or self._closing:
+            return
+        if setting or self._reconnects >= len(self.RECONNECT_DELAYS_S):
+            self._fail(reason)
+            return
+        delay = self.RECONNECT_DELAYS_S[self._reconnects]
+        self._reconnects += 1
+        log.warning("Transcription session lost (%s); opening it again in %.1fs", reason, delay)
+        self._generation += 1  # the old session's reader is ignored from now on
+        # What the caller said and we had not heard back went with the session.
+        unanswered = self._awaiting > 0
+        self._awaiting = 0
+        self._order.clear()
+        self._texts.clear()
+        if self._vad.in_turn:
+            self._lost_turn = True  # asked again once they finish
+        elif unanswered:
+            self._events.put_nowait(TranscriptEvent("repeat"))
+        self._opening = asyncio.create_task(self._reopen(delay))
 
     async def _append(self, pcm_frames: list[bytes]) -> None:
-        if pcm_frames:
+        if pcm_frames and not self._lost_turn:
             audio = base64.b64encode(b"".join(pcm_frames)).decode()
             await self._send({"type": "input_audio_buffer.append", "audio": audio})
 
     async def _send(self, event: dict[str, Any]) -> None:
-        if self._opening is not None:
-            await self._opening
+        # Wait for the session, including one being opened again meanwhile.
+        while (opening := self._opening) is not None and not opening.done():
+            await asyncio.wait({opening})
         if self._ws is None or self._failed or self._closing:
             return
         try:
             await self._ws.send(json.dumps(event))
         except Exception as exc:
-            self._fail(f"sending audio failed: {exc}")
+            self._lost(f"sending audio failed: {exc}")
 
-    async def _read(self) -> None:
+    async def _read(self, ws: Any, generation: int) -> None:
         try:
-            async for raw in self._ws:
+            async for raw in ws:
+                if generation != self._generation:
+                    return
                 self._handle(json.loads(raw))
         except Exception as exc:
-            if not self._closing:
+            if generation == self._generation and not self._closing:
                 log.warning("Transcription session read failed: %s", exc)
-        if not self._closing:
-            self._fail("the transcription session closed")
+        if generation == self._generation and not self._closing:
+            self._lost("the transcription session closed")
 
     def _handle(self, message: dict[str, Any]) -> None:
         kind = message.get("type")
@@ -228,8 +295,11 @@ class OpenAITranscriber:
                 "OpenAI transcription error (%s): %s", error.get("code"), error.get("message")
             )
             if not self._configured:
-                # The session was never set up (bad key, model or language): nothing will work.
-                self._fail(f"the transcription session was rejected: {error.get('message')}")
+                # Not set up: a wrong setting fails the call, a busy service is tried again.
+                self._lost(
+                    f"the transcription session was rejected: {error.get('message')}",
+                    setting=setting_error(error),
+                )
 
     def _done(self, item_id: str, text: str) -> None:
         if item_id not in self._order:
@@ -240,6 +310,8 @@ class OpenAITranscriber:
             self._emit(self._texts.pop(self._order.popleft()))
 
     def _emit(self, text: str) -> None:
+        self._awaiting = max(0, self._awaiting - 1)
+        self._reconnects = 0  # the session works: a later outage gets its own tries
         if text.strip():
             self._events.put_nowait(TranscriptEvent("final", text.strip()))
 

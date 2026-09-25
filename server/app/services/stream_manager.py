@@ -58,6 +58,12 @@ NO_SPEECH_INPUT = {
     "To apply, please visit your Union Digital Centre.",
 }
 
+# A turn the caller spoke was lost with the speech-to-text session (it was reopened).
+SAY_AGAIN = {
+    "bn": "দুঃখিত, শেষ কথাটা শুনতে পাইনি। আরেকবার বলবেন?",
+    "en": "Sorry, I did not catch that. Could you say it again?",
+}
+
 STT_FAILED = {
     "bn": "দুঃখিত, এই মুহূর্তে আপনার কথা শোনা যাচ্ছে না। একটু পরে আবার ফোন করুন। "
     "আপনি বিপদে থাকলে ৯৯৯ নম্বরে ফোন করুন।",
@@ -266,6 +272,9 @@ class StreamManager:
         async for event in self.transcriber.events():
             if event.kind == "speech_started":
                 await self._stop_speaking(clear=True)  # barge-in
+                continue
+            if event.kind == "repeat":
+                await self._speak(SAY_AGAIN[self.language])
                 continue
             if event.kind == "error":
                 # We can no longer hear the caller: say so rather than fall silent.
