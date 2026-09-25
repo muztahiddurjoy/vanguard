@@ -277,10 +277,14 @@ operation that made the case.
    the call's language (`language_code`). `eleven_v3` usually starts within about a
    second but sometimes stalls, so a reply with no audio after
    `ELEVENLABS_FIRST_AUDIO_TIMEOUT_S` (2.5 s) is requested once more. `eleven_v3`
-   speaks slowly and ignores ElevenLabs' `speed` setting, so the server speeds the
-   audio up itself, `VOICE_SPEED` times (default 1.2) at the same pitch
-   (`services/audio.py`, WSOLA). `eleven_v3_conversational` also speaks Bangla and
-   starts about 0.6 s sooner; listen to it before switching `ELEVENLABS_MODEL_ID`.
+   streams in bursts, and Twilio plays audio as it arrives, so the first
+   `VOICE_START_BUFFER_S` (0.6 s) of each reply is held back and sent at once: without
+   it, half of all replies had audible gaps; with it, none (about 0.4 s later start).
+   `eleven_v3` speaks slowly and ignores ElevenLabs' `speed` setting, so the server
+   speeds the audio up itself, `VOICE_SPEED` times (default 1.2) at the same pitch
+   (`services/audio.py`, WSOLA), once a second of audio is queued: replies are about
+   12% shorter. `eleven_v3_conversational` also speaks Bangla and starts about 0.6 s
+   sooner; listen to it before switching `ELEVENLABS_MODEL_ID`.
 3. Set `TWILIO_AUTH_TOKEN`. Signature checks are always on when
    `ENVIRONMENT=production`.
 4. Set `OPENAI_API_KEY` for speech-to-text. Without it, callers hear a short message
