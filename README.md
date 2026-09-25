@@ -5,7 +5,7 @@ decision.
 
 | Part | What it is | Port |
 | --- | --- | --- |
-| [`server/`](server/README.md) | The backend: AI hotline intake, triage, SMS notices, the AI query helpline, and the officer API | 8000 |
+| [`server/`](server/README.md) | The backend: AI hotline intake by phone (live speech-to-text), triage, SMS notices, the AI query helpline, and the officer API | 8000 |
 | [`nid-server/`](nid-server/README.md) | A National ID registry with fictional citizens, parent links and registered SIMs | 8100 |
 | [`dlao-dashboard/`](dlao-dashboard/README.md) | The District Legal Aid Officer's dashboard (English and বাংলা) | 5173 |
 
@@ -51,7 +51,12 @@ npm run dev
 Try a call without a phone line at <http://localhost:8000/docs>. Start with
 `POST /intake/conversations`, then send each answer to `/intake/conversations/{id}/turns`.
 [`nid-server/README.md`](nid-server/README.md) lists people you can call as, such as Rafiqul
-Islam applying for his mother. For real calls, see *Telephony* in
+Islam applying for his mother.
+
+To hear the voice path (speech-to-text, the agents and the spoken replies), set
+`OPENAI_API_KEY` and the ElevenLabs keys in `server/.env` (and `LLM_PROVIDER=openai` for
+the agents to use `gpt-6-luna`), then call a line from recorded answers with
+`scripts/simulate_call.py`. For real calls through Twilio, see *Telephony* in
 [`server/README.md`](server/README.md).
 
 > The registry's people are fictional, but their phone numbers may belong to real
