@@ -3,9 +3,10 @@
 Bangladesh's National ID database holds each citizen's name, parents,
 date of birth, addresses, and every SIM registered under their NID. Intake
 uses it to confirm a caller's identity from answers only they should know
-(father's name, permanent district, date of birth), to confirm a family
-member they are applying for, and to find the registered numbers of the
-person a case is filed against.
+(father's name, permanent district, date of birth) or, when they cannot
+answer, from the SIM they are calling from; to confirm a family member they
+are applying for; and to find the registered numbers of the person a case
+is filed against.
 
 Every call returns ``None`` when the registry cannot be reached, which is
 different from "no match" (an empty result): callers are then taken through
@@ -89,6 +90,10 @@ class NidRegistry(Protocol):
         """Citizens matching every given detail (name plus at least two others)."""
         ...
 
+    def citizen(self, nid: str) -> Citizen | None:
+        """The record for an NID the registry gave us (from ``sim_owner``, say)."""
+        ...
+
     def family(self, nid: str) -> Family | None: ...
 
     def sim_owner(self, msisdn: str) -> str | None:
@@ -153,6 +158,19 @@ class HttpNidRegistry:
             return [Citizen.model_validate(m["citizen"]) for m in resp.json()["matches"]]
         except (KeyError, TypeError, ValueError, ValidationError) as exc:
             log.error("NID match returned an unexpected body: %s", exc)
+            return None
+
+    def citizen(self, nid: str) -> Citizen | None:
+        resp = self._get(f"/v1/citizens/{nid}")
+        if resp is None:
+            return None
+        if resp.status_code == 404:
+            log.error("The NID registry does not hold an NID it gave for a SIM")
+            return None
+        try:
+            return Citizen.model_validate(resp.json())
+        except (ValueError, ValidationError) as exc:
+            log.error("NID citizen lookup returned an unexpected body: %s", exc)
             return None
 
     def family(self, nid: str) -> Family | None:
