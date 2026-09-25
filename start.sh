@@ -24,10 +24,10 @@ usage() {
 	cat <<EOF
 Usage: ./start.sh [options]
 
-Starts the NID registry (port $NID_PORT), the backend (port $SERVER_PORT), an ngrok
-tunnel to the backend (on the domain in PUBLIC_BASE_URL in server/.env, when one
-is set) and the dashboard (port $DASHBOARD_PORT). Ctrl-C stops everything. Logs are
-kept in .logs/.
+Starts the NID registry (port $NID_PORT), the backend with its SQLite database
+(port $SERVER_PORT), an ngrok tunnel to the backend and the dashboard (port $DASHBOARD_PORT).
+The tunnel uses PUBLIC_BASE_URL in server/.env as its domain when one is set.
+Ctrl-C stops everything. Logs are kept in .logs/.
 
 Options:
   --no-ngrok     No tunnel: everything but real phone calls works
@@ -45,7 +45,11 @@ while (($#)); do
 	--no-dashboard) DASHBOARD=0 ;;
 	--reset-db) RESET_DB=1 ;;
 	-h | --help) usage && exit 0 ;;
-	*) usage >&2 && exit 2 ;;
+	*)
+		printf 'Unknown option: %s\n\n' "$1" >&2
+		usage >&2
+		exit 2
+		;;
 	esac
 	shift
 done
@@ -69,7 +73,7 @@ die() {
 env_value() {
 	local file=$1 key=$2
 	[[ -f $file ]] || return 0
-	sed -n "s/^[[:space:]]*$key[[:space:]]*=[[:space:]]*//p" "$file" | tail -n 1 |
+	sed -n "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//p" "$file" | tail -n 1 |
 		sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
 }
 
@@ -269,7 +273,7 @@ if ((NGROK)); then
 	for ((i = 0; i < 120; i++)); do
 		public_url=$(sed -n 's/.*msg="started tunnel".* url=\([^ ]*\).*/\1/p' "$LOG_DIR/ngrok.log" | tail -n 1)
 		[[ -z $public_url ]] || break
-		alive ngrok || fail ngrok "ngrok could not open the tunnel (or pass --no-ngrok)."
+		alive ngrok || fail ngrok "ngrok could not open the tunnel. Pass --no-ngrok to run without it."
 		sleep 0.25
 	done
 	[[ -n $public_url ]] || fail ngrok "ngrok did not open the tunnel within 30s."
