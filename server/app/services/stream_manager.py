@@ -30,7 +30,7 @@ from typing import Any, Literal, Protocol
 
 from sqlalchemy.orm import Session
 
-from app.agents.t5_intake import IntakeConversation, conversations
+from app.agents.t5_intake import IntakeConversation, conversations, with_token
 from app.database import SessionLocal
 from app.services.elevenlabs import TextToSpeech, TTSError
 
@@ -95,6 +95,7 @@ class StreamManager:
         self.language = "bn"
         self.transcriber: Transcriber | None = None
         self.case_ref: str | None = None
+        self.tracking_token: str | None = None
 
         self._speak_task: asyncio.Task[None] | None = None
         self._listen_task: asyncio.Task[None] | None = None
@@ -223,7 +224,9 @@ class StreamManager:
             state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
             if state.get("complete"):
                 await asyncio.to_thread(self._finish, state)
-                await self._say_and_hang_up(state["reply"])
+                await self._say_and_hang_up(
+                    with_token(state["reply"], self.tracking_token, self.language)
+                )
                 return
             await self._speak(state["reply"])
 
@@ -243,6 +246,7 @@ class StreamManager:
             )
             db.commit()
             self.case_ref = case.display_id if case else None
+            self.tracking_token = case.tracking_token if case else None
         log.info(
             "call %s %s; application %s",
             self.call_sid,

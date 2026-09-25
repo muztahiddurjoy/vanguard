@@ -44,6 +44,7 @@ from app.agents.spoken import (
     is_dont_know,
     name_similarity,
     parse_date,
+    say_digits,
     words,
     yes_or_no,
 )
@@ -216,6 +217,11 @@ HOSTAGE_ACK = _t(
     "If you are being held right now, call 999 as soon as you can. "
     "We will not call this number back.",
     "আপনাকে এখন আটকে রাখা হলে যত দ্রুত সম্ভব ৯৯৯ নম্বরে ফোন করুন। আমরা এই নম্বরে ফোন করব না।",
+)
+
+TOKEN_LINE = _t(
+    "Your tracking number is {digits}. Please note it down.",
+    "আপনার ট্র্যাকিং নম্বর {digits}। নম্বরটি লিখে রাখুন।",
 )
 
 DANGER_TERMS = (
@@ -730,6 +736,15 @@ def conversations() -> IntakeConversation:
     if _conversations is None:
         _conversations = IntakeConversation()
     return _conversations
+
+
+def with_token(reply: str, token: str | None, lang: str) -> str:
+    """The closing line plus the tracking number, read out digit by digit."""
+    if not token:
+        return reply
+    lang_key: Lang = "en" if lang == "en" else "bn"
+    digits = f"{say_digits(token[:4], lang_key)}, {say_digits(token[4:], lang_key)}"
+    return _join(reply, TOKEN_LINE[lang_key].format(digits=digits))
 
 
 def missing_required(slots: dict[str, Any]) -> list[str]:

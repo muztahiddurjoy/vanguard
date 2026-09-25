@@ -41,6 +41,7 @@ from app.models import (
     Priority,
     Provenance,
     SafetyLevel,
+    new_tracking_token,
     next_reference,
     record_audit,
 )
@@ -56,6 +57,7 @@ from app.routers.duplicates import cases_of, find_duplicates_for
 from app.services.adnsms import normalize_bd_mobile
 from app.services.crypto import sha256_hex
 from app.services.nid_registry import Citizen
+from app.services.notices import send_intake_notices
 
 router = APIRouter(prefix="/intake", tags=["intake"], dependencies=[Depends(require_api_token)])
 
@@ -163,8 +165,14 @@ def create_application(
     actor: str,
     extra: dict[str, Any] | None = None,
     identities: Identities | None = None,
+    notify: bool = True,
 ) -> Case:
-    """Record parties and a new APP- application, then triage it. Caller commits."""
+    """Record parties and a new APP- application, triage it, and send the SMS notices.
+
+    ``notify=False`` leaves the notices to the caller, which must send them once
+    the case is fully marked (a do-not-call mark must come before any SMS).
+    Caller commits.
+    """
     if data.client_ref:
         existing = db.scalars(select(Case).where(Case.client_ref == data.client_ref)).first()
         if existing is not None:
@@ -222,6 +230,7 @@ def create_application(
     now = utcnow()
     case = Case(
         application_id=next_reference(db, "APP", now.year),
+        tracking_token=new_tracking_token(db),
         channel=IntakeChannel.PROXY if data.proxy else channel,
         summary=data.narrative.strip(),
         district=applicant.district,
@@ -252,6 +261,8 @@ def create_application(
     for review in find_duplicates_for(db, applicant):
         for linked in cases_of(db, review.party_a_id) + cases_of(db, review.party_b_id):
             linked.add_flag("possibleDuplicate")
+    if notify:
+        send_intake_notices(db, case, actor)
     return case
 
 
@@ -560,6 +571,7 @@ def finish_conversation(
             },
         },
         identities=identities,
+        notify=False,
     )
     case.call_notes = list(state.get("notes") or [])
     record_audit(
@@ -589,6 +601,7 @@ def finish_conversation(
         mark_do_not_call(db, case, DoNotCallReason.HOSTAGE, actor=actor)
     elif cut_short and CUT_CALL_DANGER & detected:
         mark_do_not_call(db, case, DoNotCallReason.DANGER_CALL_CUT, actor=actor)
+    send_intake_notices(db, case, actor)
     return case
 
 
@@ -597,8 +610,9 @@ PRIVATE_SLOTS = {"phone", "father_name", "date_of_birth"}
 
 
 def turn_view(state: t5_intake.IntakeState, case: Case | None) -> dict[str, Any]:
+    lang = state.get("language", "bn")
     return {
-        "reply": state["reply"],
+        "reply": t5_intake.with_token(state["reply"], case.tracking_token if case else None, lang),
         "asking": state.get("asking"),
         "complete": state.get("complete", False),
         "emergency": state.get("emergency", False),
