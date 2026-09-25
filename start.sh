@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Start DLAS locally: the NID registry and the backend with its database.
-# Ctrl-C stops everything.
+# Start DLAS locally: the NID registry, the backend with its database, and an
+# ngrok tunnel so Twilio can reach the phone lines. Ctrl-C stops everything.
 #
 # Dependencies are installed on the first run (and again when the requirements
 # change). Each service's output is shown here and kept in .logs/.
@@ -14,15 +14,18 @@ NID_PORT=8100
 SERVER_PORT=8000
 
 INSTALL=0
+NGROK=1
 
 usage() {
 	cat <<EOF
 Usage: ./start.sh [options]
 
-Starts the NID registry (port $NID_PORT) and the backend (port $SERVER_PORT).
-Ctrl-C stops everything. Logs are kept in .logs/.
+Starts the NID registry (port $NID_PORT), the backend (port $SERVER_PORT) and an
+ngrok tunnel to the backend, on the domain in PUBLIC_BASE_URL (server/.env)
+when one is set. Ctrl-C stops everything. Logs are kept in .logs/.
 
 Options:
+  --no-ngrok     No tunnel: everything but real phone calls works
   --install      Reinstall every dependency first
   -h, --help     Show this help
 EOF
@@ -31,6 +34,7 @@ EOF
 while (($#)); do
 	case $1 in
 	--install) INSTALL=1 ;;
+	--no-ngrok) NGROK=0 ;;
 	-h | --help) usage && exit 0 ;;
 	*) usage >&2 && exit 2 ;;
 	esac
@@ -42,7 +46,7 @@ if [[ -t 1 ]]; then
 else
 	BOLD='' DIM='' RED='' GREEN='' YELLOW='' RESET=''
 fi
-declare -A COLOR=([nid]=$'\e[36m' [server]=$'\e[32m')
+declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m')
 [[ -t 1 ]] || COLOR=()
 
 say() { printf '%s==>%s %s\n' "$BOLD" "$RESET" "$*"; }
@@ -65,6 +69,7 @@ env_value() {
 need() { command -v "$1" >/dev/null || die "$1 is not installed. $2"; }
 need curl ""
 need setsid "It comes with util-linux."
+((!NGROK)) || need ngrok "Install it from https://ngrok.com/download, or pass --no-ngrok."
 if ! command -v uv >/dev/null; then
 	need python3.12 "Install uv (https://docs.astral.sh/uv/) or Python 3.12."
 fi
@@ -135,6 +140,7 @@ start() {
 	: >"$LOG_DIR/$name.log"
 	(cd "$dir" && exec setsid "$@") >>"$LOG_DIR/$name.log" 2>&1 </dev/null &
 	PID[$name]=$!
+	disown "$!" # we report how it ended, not bash
 	ORDER+=("$name")
 }
 
@@ -197,9 +203,32 @@ start nid "$ROOT/nid-server" env -u PYTHONPATH \
 	.venv/bin/uvicorn app.main:app --port "$NID_PORT"
 wait_for nid "http://localhost:$NID_PORT/health" 30
 
+# The tunnel comes up before the backend, which needs its public URL for the
+# calls' media streams (and Twilio's signatures).
+configured_url=$(server_setting PUBLIC_BASE_URL)
+public_url='' inspector=''
+if ((NGROK)); then
+	ngrok_args=(http "$SERVER_PORT" --log stdout --log-format logfmt)
+	# A reserved domain keeps Twilio's webhooks valid between runs.
+	if [[ $configured_url =~ ^https://[^/]+ && ! $configured_url =~ ^https://(example\.|localhost) ]]; then
+		ngrok_args+=(--url "${configured_url%/}")
+	fi
+	say "Opening the ngrok tunnel"
+	start ngrok "$ROOT" ngrok "${ngrok_args[@]}"
+	for ((i = 0; i < 120; i++)); do
+		public_url=$(sed -n 's/.*msg="started tunnel".* url=\([^ ]*\).*/\1/p' "$LOG_DIR/ngrok.log" | tail -n 1)
+		[[ -z $public_url ]] || break
+		alive ngrok || fail ngrok "ngrok could not open the tunnel (or pass --no-ngrok)."
+		sleep 0.25
+	done
+	[[ -n $public_url ]] || fail ngrok "ngrok did not open the tunnel within 30s."
+	inspector=$(sed -n 's/.*msg="starting web service".* addr=\([^ ]*\).*/\1/p' "$LOG_DIR/ngrok.log" | tail -n 1)
+fi
+
 say "Starting the backend"
-start server "$ROOT/server" env -u PYTHONPATH \
-	NID_SERVER_URL="http://localhost:$NID_PORT" \
+server_env=(NID_SERVER_URL="http://localhost:$NID_PORT")
+[[ -z $public_url ]] || server_env+=(PUBLIC_BASE_URL="$public_url")
+start server "$ROOT/server" env -u PYTHONPATH "${server_env[@]}" \
 	.venv/bin/uvicorn app.main:app --port "$SERVER_PORT" --reload --reload-dir app
 wait_for server "http://localhost:$SERVER_PORT/health" 90
 
@@ -218,6 +247,17 @@ row() { printf '  %-14s %s\n' "$1" "$2"; }
 printf '\n%sDLAS is running%s\n' "$BOLD" "$RESET"
 row "Backend API" "http://localhost:$SERVER_PORT/docs"
 row "NID registry" "http://localhost:$NID_PORT/docs"
+if [[ -n $public_url ]]; then
+	row "Public URL" "$public_url${inspector:+  (requests: http://$inspector)}"
+	row "Twilio" "hotline   POST $public_url/telephony/voice"
+	row "" "helpline  POST $public_url/telephony/voice?line=helpline"
+	row "" "status    POST $public_url/telephony/status"
+	if [[ ${public_url%/} != "${configured_url%/}" ]]; then
+		warn "This is a new ngrok URL. Point the Twilio numbers at it, or reserve a domain and set PUBLIC_BASE_URL in server/.env."
+	fi
+else
+	row "Phone lines" "off (no tunnel)"
+fi
 if [[ $llm == True ]]; then
 	row "AI agents" "$(on True) ($provider)"
 else
@@ -255,8 +295,9 @@ follow_logs() {
 		printf '%s%-9s%s│ %s\n' "${COLOR[$name]-}" "$name" "$RESET" "$line"
 	done
 }
-follow_logs &
+follow_logs 2>/dev/null &
 FOLLOW_PID=$!
+disown "$FOLLOW_PID"
 
 while sleep 1; do
 	for name in "${ORDER[@]}"; do
