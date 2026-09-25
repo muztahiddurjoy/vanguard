@@ -19,6 +19,11 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_utc(value: datetime) -> datetime:
+    """SQLite returns naive datetimes; everything we store is UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 def make_engine(url: str, **kwargs: Any) -> Engine:
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
     engine = create_engine(url, connect_args=connect_args, pool_pre_ping=True, **kwargs)

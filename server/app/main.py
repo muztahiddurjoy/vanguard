@@ -12,6 +12,9 @@ from app.database import init_db
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    settings = get_settings()
+    if settings.environment == "production" and settings.nid_hash_key == "dev-only-nid-key":
+        raise RuntimeError("Set NID_HASH_KEY before running in production")
     init_db()
     yield
 

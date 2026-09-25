@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Shared bearer token for the dashboard and UDC clients. Empty disables the check.
     api_token: str = ""
 
+    # Secret key for hashing National ID numbers. Must be set (and kept) in production.
+    nid_hash_key: str = "dev-only-nid-key"
+
     office_district: str = "Rangpur"
     timezone: str = "Asia/Dhaka"
 
