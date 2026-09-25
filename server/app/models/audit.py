@@ -26,6 +26,7 @@ class AuditAction(StrEnum):
     CASE_CREATED = "case.created"
     CASE_VIEWED = "case.viewed"
     CASE_PROMOTED = "case.promoted"
+    CASE_CLOSED = "case.closed"
     TRIAGE_GENERATED = "triage.generated"
     TRIAGE_ACCEPTED = "triage.accepted"
     PRIORITY_OVERRIDE = "priority.override"

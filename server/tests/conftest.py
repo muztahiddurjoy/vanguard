@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 # Tests never touch real services or a developer's .env values.
 os.environ.update(
@@ -9,6 +10,7 @@ os.environ.update(
         "SMS_DRY_RUN": "true",
         "OFFICE_DISTRICT": "Rangpur",
         "TWILIO_VALIDATE_SIGNATURES": "false",
+        "UPLOAD_DIR": tempfile.mkdtemp(prefix="dlas-test-uploads-"),
     }
 )
 

@@ -19,6 +19,7 @@ from app.models import (
     AuditAction,
     AuditEntry,
     Case,
+    CaseOutcome,
     CaseStatus,
     ChecklistItem,
     Document,
@@ -524,6 +525,33 @@ def message_applicant(
         "blockedReason": d.reason,
         "nextWindow": d.next_window.isoformat() if d.next_window else None,
     }
+
+
+class CloseIn(BaseModel):
+    outcome: CaseOutcome
+    note: str = Field(min_length=10, max_length=2000)
+
+
+@router.post("/cases/{ref}/close")
+def close_case(
+    ref: str, body: CloseIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    case = get_case_or_404(db, ref)
+    if case.status == CaseStatus.CLOSED:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Case is already closed")
+    case.status = CaseStatus.CLOSED
+    case.outcome = body.outcome
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.CASE_CLOSED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"outcome": body.outcome},
+        justification=body.note.strip(),
+    )
+    db.commit()
+    return case_view(case)
 
 
 @router.get("/audit/verify")

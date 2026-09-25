@@ -5,16 +5,20 @@ provenance and safety needs, the case gets an APP- reference, T8 triage runs,
 and possible duplicates (T4) are queued for review.
 """
 
+import base64
 import uuid
 from datetime import date
+from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents import t5_intake
+from app.agents.state import DocumentState
+from app.agents.t6_document import run_document_review
 from app.config import get_settings
 from app.database import get_db, utcnow
 from app.models import (
@@ -22,6 +26,11 @@ from app.models import (
     AuditAction,
     Case,
     CaseParty,
+    ChecklistItem,
+    ChecklistStatus,
+    Document,
+    DocumentKind,
+    DocumentStatus,
     IntakeChannel,
     Party,
     PartyRole,
@@ -32,9 +41,10 @@ from app.models import (
     record_audit,
 )
 from app.routers import current_actor, require_api_token
-from app.routers.dlao import apply_triage, case_view, due_at_for
+from app.routers.dlao import apply_triage, case_view, due_at_for, get_case_or_404
 from app.routers.duplicates import cases_of, find_duplicates_for
 from app.services.adnsms import normalize_bd_mobile
+from app.services.crypto import sha256_hex
 
 router = APIRouter(prefix="/intake", tags=["intake"], dependencies=[Depends(require_api_token)])
 
@@ -225,6 +235,122 @@ def udc_intake(
     )
     db.commit()
     return case_view(case)
+
+
+# --- documents (T6) ----------------------------------------------------------
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+ALLOWED_TYPES = {
+    "application/pdf": ".pdf",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "text/plain": ".txt",
+}
+
+
+def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -> DocumentState:
+    """Run T6 on the new document and rebuild the case checklist.
+
+    Documents already read are passed as text, so only the new one is OCR'd.
+    """
+    existing = db.scalars(
+        select(Document).where(Document.case_id == case.id, Document.id != new_doc.id)
+    ).all()
+    docs: list[dict[str, Any]] = [
+        {"id": d.id, "kind": d.kind, "content_type": d.content_type, "text": d.extracted_text}
+        for d in existing
+        if d.kind != DocumentKind.SETTLEMENT_DRAFT
+    ]
+    docs.append(
+        {
+            "id": new_doc.id,
+            "kind": None if new_doc.kind == DocumentKind.OTHER else new_doc.kind,
+            "filename": new_doc.filename,
+            "content_type": new_doc.content_type,
+            "data_b64": base64.b64encode(data).decode(),
+        }
+    )
+    out = run_document_review(case.category, docs)
+    result = out["results"][str(new_doc.id)]
+    new_doc.extracted_text = result["text"]
+    new_doc.summary = result["summary"]
+    new_doc.kind = result["kind"]
+    new_doc.status = DocumentStatus(result["status"])
+
+    current = {
+        i.item_key: i
+        for i in db.scalars(select(ChecklistItem).where(ChecklistItem.case_id == case.id))
+    }
+    for item in out["checklist"]:
+        row = current.get(item["key"]) or ChecklistItem(case_id=case.id, item_key=item["key"])
+        if row.status == ChecklistStatus.WAIVED:
+            continue  # an officer's waiver stands
+        row.label, row.label_bn, row.required = item["label"], item["label_bn"], item["required"]
+        row.status = ChecklistStatus(item["status"])
+        row.document_id = item["document_id"]
+        db.add(row)
+    return out
+
+
+@router.post("/cases/{ref}/documents", status_code=status.HTTP_201_CREATED)
+async def upload_document(
+    ref: str,
+    file: UploadFile = File(...),
+    kind: DocumentKind = Form(DocumentKind.OTHER),
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    case = get_case_or_404(db, ref)
+    ctype = (file.content_type or "").split(";")[0].strip()
+    if ctype not in ALLOWED_TYPES:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Upload a PDF, JPEG, PNG or text file"
+        )
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Files must be 10 MB or smaller")
+    if not data:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The file is empty")
+
+    digest = sha256_hex(data)
+    folder = Path(get_settings().upload_dir) / str(case.id)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{digest}{ALLOWED_TYPES[ctype]}"
+    path.write_bytes(data)
+
+    doc = Document(
+        case_id=case.id,
+        kind=kind,
+        filename=(file.filename or "upload")[:255],
+        content_type=ctype,
+        storage_path=str(path),
+        size_bytes=len(data),
+        sha256=digest,
+        uploaded_by=actor,
+    )
+    db.add(doc)
+    db.flush()
+    out = refresh_checklist(db, case, doc, data)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.DOCUMENT_UPLOADED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documentId": doc.id, "kind": doc.kind, "sha256": digest, "status": doc.status},
+    )
+    db.commit()
+    return {
+        "document": {
+            "id": doc.id,
+            "kind": doc.kind,
+            "status": doc.status,
+            "summary": doc.summary,
+            "sha256": digest,
+        },
+        "checklist": out["checklist"],
+        "missing": out["missing"],
+    }
 
 
 # --- T5 conversation ---------------------------------------------------------

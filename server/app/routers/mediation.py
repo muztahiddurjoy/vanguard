@@ -1,0 +1,394 @@
+"""Online dispute resolution: scheduling, settlement drafts (T7) and e-signatures (T11).
+
+Lifecycle of a settlement document:
+
+1. ``POST /mediation/cases/{ref}/settlement-draft`` - T7 drafts it (status processed).
+2. ``PUT /mediation/documents/{id}`` - the officer edits the text.
+3. ``POST /mediation/documents/{id}/approve`` - text is frozen; its SHA-256 is final.
+4. ``POST /mediation/signatures`` - each party's device signs
+   ``signing_message(document_id, sha256)`` with Ed25519 (see services.crypto).
+   When every required signer has signed, the document is executed.
+"""
+
+from datetime import datetime, timedelta
+from typing import Any, Literal
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.agents.t7_settlement import run_settlement_draft
+from app.config import get_settings
+from app.database import as_utc, get_db
+from app.models import (
+    AuditAction,
+    Case,
+    CaseStatus,
+    Document,
+    DocumentKind,
+    DocumentStatus,
+    MediationMode,
+    MediationSession,
+    MediationStatus,
+    Party,
+    PartyRole,
+    SafetyLevel,
+    Signature,
+    record_audit,
+)
+from app.routers import current_actor, require_api_token
+from app.routers.dlao import get_case_or_404
+from app.services import crypto, safe_contact
+
+router = APIRouter(
+    prefix="/mediation", tags=["mediation"], dependencies=[Depends(require_api_token)]
+)
+
+
+# --- scheduling ---------------------------------------------------------------
+
+
+def session_view(s: MediationSession) -> dict[str, Any]:
+    return {
+        "id": s.id,
+        "caseId": s.case_id,
+        "scheduledFor": as_utc(s.scheduled_for).isoformat(),
+        "durationMinutes": s.duration_minutes,
+        "mode": s.mode,
+        "status": s.status,
+        "meetingUrl": s.meeting_url,
+        "notes": s.notes,
+        "settlementDocumentId": s.settlement_document_id,
+    }
+
+
+def fits_safe_window(party: Party, start: datetime, minutes: int) -> bool:
+    """For restricted parties the whole session must sit inside one safe window."""
+    if party.safety_level != SafetyLevel.RESTRICTED:
+        return True
+    tz = get_settings().tz
+    local_start = start.astimezone(tz)
+    local_end = (start + timedelta(minutes=minutes)).astimezone(tz)
+    for window in safe_contact.party_windows(party):
+        if safe_contact.is_within_window(local_start, window):
+            window_end = local_start.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
+                hours=window.end_hour
+            )
+            if local_end <= window_end:
+                return True
+    return False
+
+
+class SessionIn(BaseModel):
+    case_ref: str
+    scheduled_for: AwareDatetime
+    duration_minutes: int = Field(default=60, ge=15, le=240)
+    mode: MediationMode
+    meeting_url: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=2000)
+    # Send the applicant a (neutral) SMS confirmation through safe_contact.
+    notify_applicant: bool = False
+
+
+@router.post("/sessions", status_code=status.HTTP_201_CREATED)
+def schedule_session(
+    body: SessionIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    case = get_case_or_404(db, body.case_ref)
+    applicant = case.applicant
+    remote = body.mode in (MediationMode.ODR_PHONE, MediationMode.ODR_VIDEO)
+    if (
+        applicant
+        and remote
+        and not fits_safe_window(applicant, body.scheduled_for, body.duration_minutes)
+    ):
+        windows = applicant.safe_contact_windows or []
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "message": "Session must fall inside the applicant's safe contact window",
+                "windows": windows,
+            },
+        )
+    session = MediationSession(
+        case_id=case.id,
+        scheduled_for=body.scheduled_for,
+        duration_minutes=body.duration_minutes,
+        mode=body.mode,
+        meeting_url=body.meeting_url,
+        notes=body.notes,
+        created_by=actor,
+    )
+    db.add(session)
+    case.status = CaseStatus.IN_MEDIATION
+    db.flush()
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.MEDIATION_SCHEDULED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"sessionId": session.id, "at": body.scheduled_for.isoformat(), "mode": body.mode},
+    )
+    notified = None
+    if body.notify_applicant and applicant:
+        when = body.scheduled_for.astimezone(get_settings().tz).strftime("%d/%m/%Y %H:%M")
+        outcome = safe_contact.contact_party(
+            db,
+            applicant,
+            body=f"District Legal Aid Office: your mediation session for {case.display_id} is on {when}.",
+            neutral_body=f"Your appointment is confirmed for {when}.",
+            actor=actor,
+            case_ref=case.display_id,
+        )
+        notified = {
+            "sent": bool(outcome.sms and outcome.sms.ok),
+            "blockedReason": outcome.decision.reason,
+        }
+    db.commit()
+    return {**session_view(session), "notification": notified}
+
+
+@router.get("/sessions")
+def list_sessions(case_ref: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    case = get_case_or_404(db, case_ref)
+    rows = db.scalars(
+        select(MediationSession)
+        .where(MediationSession.case_id == case.id)
+        .order_by(MediationSession.scheduled_for)
+    )
+    return [session_view(s) for s in rows]
+
+
+class SessionStatusIn(BaseModel):
+    status: Literal["held", "cancelled"]
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/sessions/{session_id}/status")
+def update_session_status(
+    session_id: int, body: SessionStatusIn, db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    session = db.get(MediationSession, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such session")
+    session.status = MediationStatus(body.status)
+    if body.notes:
+        session.notes = body.notes
+    db.commit()
+    return session_view(session)
+
+
+# --- settlement drafts (T7) -------------------------------------------------------
+
+
+def document_view(doc: Document) -> dict[str, Any]:
+    return {
+        "id": doc.id,
+        "caseId": doc.case_id,
+        "kind": doc.kind,
+        "status": doc.status,
+        "content": doc.content,
+        "sha256": doc.sha256,
+        "requiredSigners": doc.required_signers,
+        "signatures": [
+            {
+                "partyId": s.party_id,
+                "keyFingerprint": s.key_fingerprint,
+                "signedAt": as_utc(s.signed_at).isoformat(),
+            }
+            for s in doc.signatures
+        ],
+        "signingMessage": (
+            crypto.signing_message(doc.id, doc.sha256).decode()
+            if doc.sha256 and doc.status in (DocumentStatus.APPROVED, DocumentStatus.EXECUTED)
+            else None
+        ),
+    }
+
+
+def risk_flags_of(case: Case) -> list[str]:
+    factors = (case.triage or {}).get("factors", [])
+    return [f["key"] for f in factors if f.get("detected")]
+
+
+class DraftIn(BaseModel):
+    terms: list[str] = Field(min_length=1, max_length=30)
+    language: Literal["bn", "en"] = "bn"
+    session_id: int | None = None
+    # Required to draft when violence is on record; the justification is audited.
+    acknowledge_risk: bool = False
+    justification: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _justified(self) -> "DraftIn":
+        if self.acknowledge_risk and len((self.justification or "").strip()) < 20:
+            raise ValueError("acknowledge_risk needs a justification of at least 20 characters")
+        return self
+
+
+@router.post("/cases/{ref}/settlement-draft", status_code=status.HTTP_201_CREATED)
+def draft_settlement(
+    ref: str, body: DraftIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    case = get_case_or_404(db, ref)
+    signers = [cp for cp in case.parties if cp.role in (PartyRole.APPLICANT, PartyRole.RESPONDENT)]
+    out = run_settlement_draft(
+        case_ref=case.display_id,
+        parties=[{"id": cp.party_id, "name": cp.party.name, "role": cp.role} for cp in signers],
+        terms=body.terms,
+        office=case.current_office,
+        language=body.language,
+        category=case.category,
+        risk_flags=risk_flags_of(case),
+        risk_acknowledged=body.acknowledge_risk,
+    )
+    if not out.get("ready_for_review"):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, {"issues": out.get("issues", [])}
+        )
+
+    draft = out["draft"]
+    doc = Document(
+        case_id=case.id,
+        kind=DocumentKind.SETTLEMENT_DRAFT,
+        status=DocumentStatus.PROCESSED,
+        content=draft,
+        sha256=crypto.sha256_hex(draft),
+        required_signers=[cp.party_id for cp in signers],
+        uploaded_by=actor,
+    )
+    db.add(doc)
+    db.flush()
+    if body.session_id:
+        session = db.get(MediationSession, body.session_id)
+        if session is None or session.case_id != case.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No such session for this case")
+        session.settlement_document_id = doc.id
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.SETTLEMENT_DRAFTED,
+        entity_type="case",
+        entity_id=case.id,
+        details={
+            "documentId": doc.id,
+            "source": out.get("draft_source"),
+            "riskAcknowledged": body.acknowledge_risk,
+        },
+        justification=body.justification if body.acknowledge_risk else None,
+    )
+    db.commit()
+    return document_view(doc)
+
+
+def get_settlement_or_404(db: Session, document_id: int) -> Document:
+    doc = db.get(Document, document_id)
+    if doc is None or doc.kind != DocumentKind.SETTLEMENT_DRAFT:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such settlement document")
+    return doc
+
+
+@router.get("/documents/{document_id}")
+def get_document(document_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    return document_view(get_settlement_or_404(db, document_id))
+
+
+class EditIn(BaseModel):
+    content: str = Field(min_length=20, max_length=50_000)
+
+
+@router.put("/documents/{document_id}")
+def edit_document(document_id: int, body: EditIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+    doc = get_settlement_or_404(db, document_id)
+    if doc.status != DocumentStatus.PROCESSED:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Approved documents cannot be edited")
+    doc.content = body.content
+    doc.sha256 = crypto.sha256_hex(body.content)
+    db.commit()
+    return document_view(doc)
+
+
+@router.post("/documents/{document_id}/approve")
+def approve_document(
+    document_id: int, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    doc = get_settlement_or_404(db, document_id)
+    if doc.status != DocumentStatus.PROCESSED:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Document is {doc.status}")
+    doc.status = DocumentStatus.APPROVED
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.SETTLEMENT_APPROVED,
+        entity_type="case",
+        entity_id=doc.case_id,
+        details={"documentId": doc.id, "sha256": doc.sha256},
+    )
+    db.commit()
+    return document_view(doc)
+
+
+# --- T11 signatures ---------------------------------------------------------------
+
+
+class SignatureIn(BaseModel):
+    document_id: int
+    party_id: int
+    public_key: str = Field(min_length=40, max_length=100, description="Raw Ed25519 key, base64")
+    signature: str = Field(min_length=80, max_length=200, description="Ed25519 signature, base64")
+    signed_sha256: str = Field(pattern="^[0-9a-f]{64}$")
+    device_id: str | None = Field(default=None, max_length=100)
+
+
+@router.post("/signatures", status_code=status.HTTP_201_CREATED)
+def receive_signature(
+    body: SignatureIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    doc = get_settlement_or_404(db, body.document_id)
+    if doc.status != DocumentStatus.APPROVED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"Document is {doc.status}, not open for signing"
+        )
+    if body.party_id not in doc.required_signers:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This party is not a signer of the document")
+    if body.signed_sha256 != doc.sha256:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Signed a different version of the document")
+    if any(s.party_id == body.party_id for s in doc.signatures):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This party has already signed")
+    assert doc.sha256 is not None
+    message = crypto.signing_message(doc.id, doc.sha256)
+    if not crypto.verify_ed25519(body.public_key, body.signature, message):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Signature does not verify")
+
+    fingerprint = crypto.public_key_fingerprint(body.public_key)
+    doc.signatures.append(
+        Signature(
+            party_id=body.party_id,
+            public_key=body.public_key,
+            key_fingerprint=fingerprint,
+            signature=body.signature,
+            signed_sha256=doc.sha256,
+            device_id=body.device_id,
+        )
+    )
+    signed = {s.party_id for s in doc.signatures}
+    if set(doc.required_signers) <= signed:
+        doc.status = DocumentStatus.EXECUTED
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.SIGNATURE_RECORDED,
+        entity_type="case",
+        entity_id=doc.case_id,
+        details={
+            "documentId": doc.id,
+            "partyId": body.party_id,
+            "keyFingerprint": fingerprint,
+            "sha256": doc.sha256,
+            "executed": doc.status == DocumentStatus.EXECUTED,
+        },
+    )
+    db.commit()
+    return document_view(doc)

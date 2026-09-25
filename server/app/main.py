@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import dlao, duplicates, incidents, intake, referrals
+from app.routers import dlao, duplicates, incidents, intake, mediation, referrals
 
 
 @asynccontextmanager
@@ -31,7 +31,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    for module in (intake, dlao, duplicates, referrals, incidents):
+    for module in (intake, dlao, duplicates, referrals, incidents, mediation):
         app.include_router(module.router)
 
     @app.get("/health", tags=["meta"])
