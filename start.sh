@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start DLAS locally: the NID registry, the backend with its database, an ngrok
-# tunnel so Twilio can reach the phone lines, and the DLAO dashboard showing the
-# backend's cases. Ctrl-C stops everything.
+# tunnel so Twilio can reach the phone lines, the DLAO dashboard showing the
+# backend's cases and the panel lawyers' dashboard. Ctrl-C stops everything.
 #
 # Dependencies are installed on the first run (and again when the requirements
 # change). Each service's output is shown here and kept in .logs/.
@@ -14,6 +14,7 @@ LOG_DIR=$ROOT/.logs
 NID_PORT=8100
 SERVER_PORT=8000
 DASHBOARD_PORT=5173
+LAWYER_PORT=5174
 
 INSTALL=0
 NGROK=1
@@ -25,13 +26,14 @@ usage() {
 Usage: ./start.sh [options]
 
 Starts the NID registry (port $NID_PORT), the backend with its SQLite database
-(port $SERVER_PORT), an ngrok tunnel to the backend and the dashboard (port $DASHBOARD_PORT).
+(port $SERVER_PORT), an ngrok tunnel to the backend, the DLAO dashboard (port
+$DASHBOARD_PORT) and the panel lawyers' dashboard (port $LAWYER_PORT).
 The tunnel uses PUBLIC_BASE_URL in server/.env as its domain when one is set.
 Ctrl-C stops everything. Logs are kept in .logs/.
 
 Options:
   --no-ngrok     No tunnel: everything but real phone calls works
-  --no-dashboard Backend only
+  --no-dashboard Backend only (neither dashboard)
   --reset-db     Start with an empty database (the old one is kept as a backup)
   --install      Reinstall every dependency first
   -h, --help     Show this help
@@ -59,7 +61,7 @@ if [[ -t 1 ]]; then
 else
 	BOLD='' DIM='' RED='' GREEN='' YELLOW='' RESET=''
 fi
-declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m' [dashboard]=$'\e[34m')
+declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m' [dashboard]=$'\e[34m' [lawyer]=$'\e[33m')
 [[ -t 1 ]] || COLOR=()
 
 say() { printf '%s==>%s %s\n' "$BOLD" "$RESET" "$*"; }
@@ -136,11 +138,13 @@ dashboard_setting() {
 }
 
 if ((DASHBOARD)); then
-	lock=$ROOT/dlao-dashboard/node_modules/.package-lock.json
-	if ((INSTALL)) || [[ ! -f $lock || $ROOT/dlao-dashboard/package-lock.json -nt $lock ]]; then
-		say "Installing dlao-dashboard dependencies"
-		(cd "$ROOT/dlao-dashboard" && npm install --no-audit --no-fund --loglevel=error >/dev/null)
-	fi
+	for app in dlao-dashboard lawyer-dashboard; do
+		lock=$ROOT/$app/node_modules/.package-lock.json
+		if ((INSTALL)) || [[ ! -f $lock || $ROOT/$app/package-lock.json -nt $lock ]]; then
+			say "Installing $app dependencies"
+			(cd "$ROOT/$app" && npm install --no-audit --no-fund --loglevel=error >/dev/null)
+		fi
+	done
 fi
 
 # --- Services ------------------------------------------------------------------
@@ -154,7 +158,7 @@ port_owner() {
 }
 
 ports=("$NID_PORT" "$SERVER_PORT")
-((!DASHBOARD)) || ports+=("$DASHBOARD_PORT")
+((!DASHBOARD)) || ports+=("$DASHBOARD_PORT" "$LAWYER_PORT")
 for port in "${ports[@]}"; do
 	owner=$(port_owner "$port")
 	[[ -z $owner ]] || die "Port $port is already in use: $owner"
@@ -282,6 +286,12 @@ fi
 
 say "Starting the backend"
 server_env=(NID_SERVER_URL="http://localhost:$NID_PORT")
+# Both dashboards must reach the backend, whatever CORS_ORIGINS in server/.env says.
+cors=$(server_setting CORS_ORIGINS)
+for origin in "http://localhost:$DASHBOARD_PORT" "http://localhost:$LAWYER_PORT"; do
+	[[ ,$cors, == *",$origin,"* ]] || cors=${cors:+$cors,}$origin
+done
+server_env+=(CORS_ORIGINS="$cors")
 [[ -z $public_url ]] || server_env+=(PUBLIC_BASE_URL="$public_url")
 start server "$ROOT/server" env -u PYTHONPATH "${server_env[@]}" \
 	.venv/bin/uvicorn app.main:app --port "$SERVER_PORT" --reload --reload-dir app
@@ -295,14 +305,15 @@ if ((DASHBOARD)); then
 	token=$(dashboard_setting VITE_API_TOKEN)
 	[[ -n $token ]] || token=$(server_setting API_TOKEN)
 	[[ -z $token ]] || dashboard_env+=(VITE_API_TOKEN="$token")
-	if [[ $api_url == "http://localhost:$SERVER_PORT" && $(server_setting CORS_ORIGINS) != *"localhost:$DASHBOARD_PORT"* ]]; then
-		warn "CORS_ORIGINS in server/.env does not include http://localhost:$DASHBOARD_PORT, so the dashboard cannot reach the backend."
-	fi
 
-	say "Starting the dashboard"
+	say "Starting the dashboards"
 	start dashboard "$ROOT/dlao-dashboard" env "${dashboard_env[@]}" \
 		npm run dev -- --port "$DASHBOARD_PORT" --strictPort
+	# Panel lawyers post their court updates from here, to the same backend.
+	start lawyer "$ROOT/lawyer-dashboard" env "${dashboard_env[@]}" \
+		npm run dev -- --port "$LAWYER_PORT" --strictPort
 	wait_for dashboard "http://localhost:$DASHBOARD_PORT" 60
+	wait_for lawyer "http://localhost:$LAWYER_PORT" 60
 fi
 
 # --- Summary -------------------------------------------------------------------
@@ -327,6 +338,7 @@ if ((DASHBOARD)); then
 	dashboard_row="$BOLD$GREEN""http://localhost:$DASHBOARD_PORT$RESET"
 	[[ $api_url == "http://localhost:$SERVER_PORT" ]] || dashboard_row+="  (cases from $api_url)"
 	row "Dashboard" "$dashboard_row"
+	row "Lawyers" "$BOLD$GREEN""http://localhost:$LAWYER_PORT$RESET  (panel lawyers' dashboard)"
 fi
 row "Backend API" "http://localhost:$SERVER_PORT/docs"
 row "NID registry" "http://localhost:$NID_PORT/docs"
