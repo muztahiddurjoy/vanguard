@@ -29,6 +29,7 @@ class TriageState(TypedDict, total=False):
     is_proxy: bool
     safety_level: str
     next_hearing_days: int | None
+    has_respondent: bool
     # Categorization
     category: str | None
     category_confidence: float
@@ -40,6 +41,10 @@ class TriageState(TypedDict, total=False):
     priority: str
     confidence: float
     rationale: dict[str, str]
+    # Advice, mediation or sensitive: a mark for the officer, never a decision.
+    track: str
+    track_reason: dict[str, str]
+    track_source: Literal["rules", "llm"]
 
 
 class IntakeState(TypedDict, total=False):

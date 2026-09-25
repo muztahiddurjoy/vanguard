@@ -1,10 +1,18 @@
-"""T8 triage: Categorization -> Compliance -> Urgency.
+"""T8 triage: Categorization -> Compliance -> Urgency -> Track.
 
 Produces the dashboard's ``TriageRecommendation``: a priority, a confidence,
-the warning signs checked (each tagged with the check that found it) and a
-bilingual rationale. The priority itself is always decided by the transparent
-rules in ``urgency`` so an officer can see exactly why; Claude is only asked
-to categorize narratives the keyword rules cannot place confidently.
+the warning signs checked (each tagged with the check that found it), a
+bilingual rationale, and a *track* mark saying which way the case could go:
+
+- ``advice``: can be resolved through advice alone;
+- ``mediation``: a dispute with another side that mediation could settle;
+- ``sensitive``: violence, threats or other risk; needs an officer's care.
+
+Everything here is a recommendation that an officer accepts or changes. The
+priority is always decided by the transparent rules in ``urgency`` so an
+officer can see exactly why; Claude is only asked to categorize narratives the
+keyword rules cannot place confidently, and to choose between advice and
+mediation. It can never lower a case the rules marked sensitive.
 """
 
 import re
@@ -73,6 +81,18 @@ RISK_FACTORS: dict[str, FactorSpec] = {
         ("knife", "machete", "acid", "gun", "kill", "burn her", "burn me",
          "ছুরি", "এসিড", "মেরে ফেল", "খুন", "দা দিয়ে", "পুড়িয়ে"),
     ),
+    # Person-specific phrasing on purpose: "আটকে রেখেছে" alone also means
+    # "withheld" (wages, money), which is a labour dispute, not a hostage.
+    "hostageSituation": (
+        "risk", "high",
+        ("hostage", "held captive", "kidnap", "abduct", "locked me", "locked her",
+         "locked him", "locked us", "locked in the room", "locked in a room",
+         "locked in the house", "won't let me leave", "will not let me leave",
+         "not letting me leave", "won't let me out", "confined me", "confined her",
+         "জিম্মি", "অপহরণ", "আমাকে আটকে", "তাকে আটকে", "ওকে আটকে", "ঘরে আটকে",
+         "বন্দি করে", "বন্দী করে", "ঘরে বন্দি", "ঘরে বন্দী", "আমাকে তালা", "ঘরে তালা",
+         "বের হতে দিচ্ছে না", "যেতে দিচ্ছে না"),
+    ),
     "extortionThreat": (
         "risk", "high",
         ("blackmail", "extort", "demand money", "demands money", "ransom",
@@ -109,6 +129,7 @@ PHONE_MONITORED = (
 LABELS: dict[str, tuple[str, str]] = {
     "activeViolence": ("active violence", "চলমান সহিংসতা"),
     "weaponThreat": ("threat with a weapon or to kill", "অস্ত্র বা হত্যার হুমকি"),
+    "hostageSituation": ("possibly held hostage", "জিম্মি থাকার আশঙ্কা"),
     "extortionThreat": ("blackmail or extortion", "ব্ল্যাকমেইল বা চাঁদাবাজি"),
     "onlineAbuse": ("online abuse", "অনলাইন হয়রানি"),
     "childrenInHousehold": ("children in the household", "পরিবারে শিশু"),
@@ -126,6 +147,42 @@ WEIGHT_POINTS = {"high": 3, "medium": 2, "low": 1}
 # Categorizations below this confidence are sent to Claude when available.
 LLM_CATEGORY_THRESHOLD = 0.5
 
+TRACKS = ("advice", "mediation", "sensitive")
+TRACK_LABELS: dict[str, tuple[str, str]] = {
+    "advice": ("Can be resolved through advice", "পরামর্শের মাধ্যমে সমাধানযোগ্য"),
+    "mediation": ("Can be resolved through mediation", "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য"),
+    "sensitive": ("Sensitive case", "সংবেদনশীল মামলা"),
+}
+# Warning signs that make a case sensitive, most serious first.
+SENSITIVE_FACTORS = (
+    "hostageSituation",
+    "weaponThreat",
+    "activeViolence",
+    "extortionThreat",
+    "safeContactRestricted",
+)
+SENSITIVE_CATEGORIES: dict[str, tuple[str, str]] = {
+    "domesticViolence": ("domestic violence", "পারিবারিক সহিংসতা"),
+    "dowryHarassment": ("dowry harassment", "যৌতুকের জন্য হয়রানি"),
+    "cyberHarassment": ("cyber harassment", "সাইবার হয়রানি"),
+}
+SENSITIVE_TERMS = (
+    "rape", "sexual", "molest", "trafficking", "acid", "child marriage", "suicide",
+    "ধর্ষণ", "যৌন", "শ্লীলতাহানি", "পাচার", "এসিড", "বাল্যবিবাহ", "বাল্য বিবাহ", "আত্মহত্যা",
+)  # fmt: skip
+# Someone on the other side of a dispute; without one there is nobody to mediate with.
+COUNTERPARTY_TERMS = (
+    "husband", "wife", "employer", "owner", "neighbour", "neighbor", "brother", "cousin",
+    "uncle", "landlord", "tenant", "in-laws", "relative", "company", "factory",
+    "স্বামী", "স্ত্রী", "মালিক", "প্রতিবেশী", "ভাই", "চাচা", "মামা", "শ্বশুর", "শাশুড়ি",
+    "ভাড়াটিয়া", "বাড়িওয়ালা", "আত্মীয়", "কোম্পানি", "কারখানা",
+)  # fmt: skip
+ADVICE_TERMS = (
+    "advice", "how do i", "how can i", "what should i", "what can i", "want to know",
+    "is it legal", "my rights", "পরামর্শ", "জানতে চাই", "কীভাবে", "কিভাবে", "কী করব",
+    "কি করব", "করণীয়", "অধিকার",
+)  # fmt: skip
+
 
 def _matches(text: str, term: str) -> bool:
     if term.isascii():
@@ -135,6 +192,44 @@ def _matches(text: str, term: str) -> bool:
 
 def _first_match(text: str, terms: tuple[str, ...]) -> str | None:
     return next((t.strip() for t in terms if _matches(text, t)), None)
+
+
+def find_hostage_sign(text: str) -> str | None:
+    """The phrase suggesting someone is being held, if any (also used by T5 on calls)."""
+    return _first_match(text.casefold(), RISK_FACTORS["hostageSituation"][2])
+
+
+def track_by_rules(
+    text: str, category: str | None, detected: set[str], has_respondent: bool
+) -> tuple[str, dict[str, str]]:
+    """Mark the case advice, mediation or sensitive, with a bilingual reason."""
+    lowered = text.casefold()
+    signs = [LABELS[k] for k in SENSITIVE_FACTORS if k in detected]
+    if category in SENSITIVE_CATEGORIES:
+        signs.append(SENSITIVE_CATEGORIES[category])
+    if term := _first_match(lowered, SENSITIVE_TERMS):
+        signs.append((f'mentions "{term}"', f'"{term}" উল্লেখ আছে'))
+    if signs:
+        return "sensitive", {
+            "en": f"Sensitive case: {', '.join(en for en, _ in signs)}.",
+            "bn": f"সংবেদনশীল মামলা: {', '.join(bn for _, bn in signs)}।",
+        }
+
+    counterparty = "the named respondent" if has_respondent else None
+    counterparty = counterparty or _first_match(lowered, COUNTERPARTY_TERMS)
+    if counterparty:
+        return "mediation", {
+            "en": f"Can be resolved through mediation: a dispute with {counterparty} "
+            "and no sign of violence.",
+            "bn": "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: অপর পক্ষের সঙ্গে বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।",
+        }
+    asking = _first_match(lowered, ADVICE_TERMS)
+    return "advice", {
+        "en": "Can be resolved through advice: no other side is named"
+        + (", and the applicant is asking for information." if asking else "."),
+        "bn": "পরামর্শের মাধ্যমে সমাধানযোগ্য: অপর কোনো পক্ষের নাম নেই"
+        + ("; আবেদনকারী তথ্য জানতে চাইছেন।" if asking else "।"),
+    }
 
 
 def categorize_by_rules(text: str) -> tuple[str | None, float]:
@@ -164,6 +259,21 @@ class LLMCategory(BaseModel):
     ]
     confidence: float = Field(description="0 to 1")
 
+
+class LLMTrack(BaseModel):
+    track: Literal["advice", "mediation", "sensitive"]
+    reason_en: str = Field(description="One sentence, plain English")
+    reason_bn: str = Field(description="The same sentence in Bangla")
+
+
+TRACK_SYSTEM = (
+    "You help a District Legal Aid Office in Bangladesh sort applications. Mark how the "
+    "application could be resolved: 'advice' if legal advice or information alone could "
+    "resolve it; 'mediation' if it is a dispute with another side that the office could "
+    "settle by mediation; 'sensitive' if there is violence, threats, sexual abuse, a risk to "
+    "someone's safety, or another reason it needs special care. This is only a mark for an "
+    "officer, who decides. Give a one-sentence reason in English and in Bangla."
+)
 
 CATEGORY_SYSTEM = (
     "You categorize legal aid applications received by a District Legal Aid Office in "
@@ -255,6 +365,8 @@ def build_triage_graph(llm: StructuredLLM | None = None) -> CompiledStateGraph:
         detected = {f["key"] for f in factors if f["detected"]}
         if {"activeViolence", "weaponThreat"} & detected:
             notes.append("Violence reported: not suitable for mediation until safety is secured.")
+        if "hostageSituation" in detected:
+            notes.append("Possibly held hostage: do not call or text the applicant's number.")
 
         return {
             "factors": factors,
@@ -267,7 +379,7 @@ def build_triage_graph(llm: StructuredLLM | None = None) -> CompiledStateGraph:
         detected = {f["key"] for f in factors if f["detected"]}
         score = sum(WEIGHT_POINTS[f["weight"]] for f in factors if f["detected"])
 
-        if "weaponThreat" in detected:
+        if {"weaponThreat", "hostageSituation"} & detected:
             priority = "critical"
         elif {"activeViolence", "extortionThreat", "hearingImminent"} & detected or score >= 6:
             priority = "high"
@@ -292,14 +404,35 @@ def build_triage_graph(llm: StructuredLLM | None = None) -> CompiledStateGraph:
         }
         return {"priority": priority, "confidence": confidence, "rationale": rationale}
 
+    def track(state: TriageState) -> TriageState:
+        detected = {f["key"] for f in state["factors"] if f["detected"]}
+        key, reason = track_by_rules(
+            state["text"], state.get("category"), detected, bool(state.get("has_respondent"))
+        )
+        if llm is not None and key != "sensitive":
+            result = llm.structured(
+                system=TRACK_SYSTEM,
+                content=f"<narrative>\n{state['text']}\n</narrative>",
+                schema=LLMTrack,
+            )
+            if result is not None:
+                return {
+                    "track": result.track,
+                    "track_reason": {"en": result.reason_en, "bn": result.reason_bn},
+                    "track_source": "llm",
+                }
+        return {"track": key, "track_reason": reason, "track_source": "rules"}
+
     graph = StateGraph(TriageState)
     graph.add_node("categorize", categorize)
     graph.add_node("compliance", compliance)
     graph.add_node("urgency", urgency)
+    graph.add_node("track", track)
     graph.add_edge(START, "categorize")
     graph.add_edge("categorize", "compliance")
     graph.add_edge("compliance", "urgency")
-    graph.add_edge("urgency", END)
+    graph.add_edge("urgency", "track")
+    graph.add_edge("track", END)
     return graph.compile()
 
 
@@ -317,6 +450,7 @@ def run_triage(
     is_proxy: bool = False,
     safety_level: str = "standard",
     next_hearing_days: int | None = None,
+    has_respondent: bool = False,
     llm: StructuredLLM | None = None,
     use_default_llm: bool = True,
 ) -> dict[str, Any]:
@@ -332,6 +466,7 @@ def run_triage(
             "is_proxy": is_proxy,
             "safety_level": safety_level,
             "next_hearing_days": next_hearing_days,
+            "has_respondent": has_respondent,
         }
     )
     return {
@@ -346,4 +481,9 @@ def run_triage(
         "categorySource": out.get("category_source"),
         "complianceNotes": out.get("compliance_notes", []),
         "recommendedSafetyLevel": out.get("recommended_safety_level"),
+        "track": {
+            "key": out["track"],
+            "reason": out["track_reason"],
+            "source": out["track_source"],
+        },
     }
