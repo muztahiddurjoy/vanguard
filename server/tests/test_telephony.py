@@ -420,3 +420,31 @@ def test_media_websocket_rejects_unsigned_upgrade_when_validation_on(client, mon
     monkeypatch.setattr(s, "twilio_auth_token", "secret")
     with pytest.raises(WebSocketDisconnect), client.websocket_connect("/telephony/media") as ws:
         ws.receive_text()
+
+
+def test_elevenlabs_asks_again_when_audio_is_slow_to_start():
+    requests = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        if requests == 1:
+            await asyncio.sleep(1.0)  # a stalled request
+        return httpx.Response(200, content=f"reply{requests}".encode())
+
+    async def collect(timeout: float):
+        tts = ElevenLabsTTS(
+            _settings(elevenlabs_first_audio_timeout_s=timeout),
+            transport=httpx.MockTransport(handler),
+        )
+        try:
+            return b"".join([c async for c in tts.stream("hi", "en")])
+        finally:
+            await tts.aclose()
+
+    assert asyncio.run(collect(0.1)) == b"reply2"
+    assert requests == 2
+    # Turned off, the slow request is simply waited for.
+    requests = 0
+    assert asyncio.run(collect(0)) == b"reply1"
+    assert requests == 1

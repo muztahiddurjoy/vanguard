@@ -10,14 +10,24 @@ rejects the models that speak Bangla (``eleven_v3`` and newer): we always
 have the whole reply before speaking, so nothing is lost. The call's language
 is sent as ``language_code`` so the model does not guess (a model without
 Bangla reads Bangla script with a Hindi accent).
+
+``eleven_v3`` usually starts speaking within about a second but now and then
+stalls for 5-10 s before the first audio. A caller would hear dead air, so a
+reply with no audio after ``ELEVENLABS_FIRST_AUDIO_TIMEOUT_S`` is requested
+once more (without a limit the second time).
 """
 
-from collections.abc import AsyncGenerator
-from typing import Protocol
+import asyncio
+import contextlib
+import logging
+from collections.abc import AsyncGenerator, AsyncIterator
+from typing import Any, Protocol
 
 import httpx
 
 from app.config import Settings, get_settings
+
+log = logging.getLogger(__name__)
 
 
 class TTSError(RuntimeError):
@@ -69,18 +79,39 @@ class ElevenLabsTTS:
         body: dict[str, str] = {"text": text.strip(), "model_id": self.settings.elevenlabs_model_id}
         if language:
             body["language_code"] = language
+        timeout: float | None = self.settings.elevenlabs_first_audio_timeout_s or None
         try:
-            async with self._http().stream(
-                "POST", self.url(), params={"output_format": self.OUTPUT_FORMAT}, json=body
-            ) as response:
-                if response.status_code != 200:
-                    detail = (await response.aread()).decode(errors="replace")[:300]
-                    raise TTSError(f"ElevenLabs {response.status_code}: {detail}")
-                async for chunk in response.aiter_bytes():
-                    if chunk:
-                        yield chunk
+            for _ in range(2):
+                async with contextlib.AsyncExitStack() as stack:
+                    try:
+                        chunks, first = await asyncio.wait_for(self._start(stack, body), timeout)
+                    except TimeoutError:
+                        log.warning("ElevenLabs gave no audio in %.1fs; asking again", timeout)
+                        timeout = None
+                        continue
+                    if first:
+                        yield first
+                    async for chunk in chunks:
+                        if chunk:
+                            yield chunk
+                    return
         except httpx.HTTPError as exc:
             raise TTSError(f"ElevenLabs request failed: {exc}") from exc
+
+    async def _start(
+        self, stack: contextlib.AsyncExitStack, body: dict[str, Any]
+    ) -> tuple[AsyncIterator[bytes], bytes]:
+        """Send the request and wait for the first audio; the stack owns the response."""
+        response = await stack.enter_async_context(
+            self._http().stream(
+                "POST", self.url(), params={"output_format": self.OUTPUT_FORMAT}, json=body
+            )
+        )
+        if response.status_code != 200:
+            detail = (await response.aread()).decode(errors="replace")[:300]
+            raise TTSError(f"ElevenLabs {response.status_code}: {detail}")
+        chunks = response.aiter_bytes()
+        return chunks, await anext(chunks, b"")
 
     async def aclose(self) -> None:
         if self._client is not None:

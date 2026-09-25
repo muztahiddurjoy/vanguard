@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     # models do not (they read Bangla script with a Hindi accent).
     elevenlabs_model_id: str = "eleven_v3"
     elevenlabs_base_url: str = "https://api.elevenlabs.io"
+    # A reply with no audio after this long is requested again (0 turns it off).
+    elevenlabs_first_audio_timeout_s: float = 2.5
 
     adnsms_api_key: str = ""
     adnsms_api_secret: str = ""
