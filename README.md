@@ -33,6 +33,30 @@ decision.
 ## Run everything locally
 
 ```bash
+./start.sh
+```
+
+This starts the NID registry, the backend with its SQLite database (`server/dlas.db`, created
+at startup), an ngrok tunnel for the phone lines and the dashboard, then prints their
+addresses and the Twilio webhooks. The first run installs the dependencies and creates
+`server/.env`. Each service's output is shown with its name and kept in `.logs/`. Ctrl-C
+stops everything, and so does any one service stopping.
+
+| Option | What it does |
+| --- | --- |
+| `--no-ngrok` | No tunnel: everything but real phone calls works |
+| `--no-dashboard` | Backend only |
+| `--reset-db` | Starts with an empty database (after a schema change); the old file is kept as a backup |
+| `--install` | Reinstalls every dependency first |
+
+The tunnel uses `PUBLIC_BASE_URL` from `server/.env` as its domain, so the Twilio numbers
+keep working between runs. Without one, ngrok picks a new URL each time; the backend is
+given that URL, and the script warns you to repoint the numbers. The script needs `uv` (or
+Python 3.12), Node.js and a signed-in `ngrok`.
+
+Or start each part by hand:
+
+```bash
 # 1. NID registry
 cd nid-server && uv venv --python 3.12 .venv && uv pip install -r requirements-dev.txt --python .venv/bin/python
 .venv/bin/uvicorn app.main:app --port 8100 &
