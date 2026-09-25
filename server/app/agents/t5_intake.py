@@ -646,10 +646,15 @@ def build_intake_graph(
     def listen(state: IntakeState) -> IntakeState:
         """Hear the caller out: ask nothing until what they said sounds like a case."""
         utterance = state.get("utterance", "")
-        if state.get("asking") != "problem" or state.get("emergency") or not utterance.strip():
+        if state.get("asking") != "problem" or not utterance.strip():
             return {}
-        lang = state.get("language", "bn")
         story = state.get("story", "")
+        if state.get("emergency"):
+            # No time for anything else, but what they said is the application's account.
+            slots = {**(state.get("slots") or {}), "problem": story}
+            _categorized(slots)
+            return {"slots": slots} if story else {}
+        lang = state.get("language", "bn")
         asks = dict(state.get("asks") or {})
         asks["problem"] = heard = asks.get("problem", 0) + 1
         # The model decides when it has read the account, but a problem the rules

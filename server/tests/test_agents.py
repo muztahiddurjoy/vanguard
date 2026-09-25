@@ -302,10 +302,11 @@ def test_conversations_are_isolated_by_session():
 def test_danger_in_the_first_words_ends_the_call_with_emergency_guidance():
     conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
     conv.start("c", channel="hotline_16699")
-    s = conv.turn("c", "ও এখনই আমাকে মেরে ফেলবে")
+    s = talk(conv, "c", "হ্যালো?", "ও এখনই আমাকে মেরে ফেলবে")
     assert s["emergency"] is True
     assert s["complete"] is True
     assert "৯৯৯" in s["reply"]
+    assert s["slots"]["problem"] == "ও এখনই আমাকে মেরে ফেলবে"  # the account, without the hello
 
 
 def test_hostage_sign_promises_no_callback_and_intake_carries_on():
