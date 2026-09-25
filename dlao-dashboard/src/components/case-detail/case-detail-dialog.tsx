@@ -8,6 +8,7 @@ import { PriorityBadge } from "@/components/case/priority-badge"
 import { SafeContactAlert } from "@/components/case/safe-contact"
 import { ActivityLog } from "@/components/case-detail/activity-log"
 import { CaseDetails } from "@/components/case-detail/case-details"
+import { CourtProgress } from "@/components/case-detail/court-progress"
 import { NextStepPanel } from "@/components/case-detail/next-step-panel"
 import { TrackReview } from "@/components/triage/track-review"
 import { TriagePanel } from "@/components/triage/triage-panel"
@@ -23,7 +24,7 @@ import type { LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import type { CaseAction } from "@/state/cases-reducer"
 
-export type CaseTab = "triage" | "details" | "activity"
+export type CaseTab = "triage" | "details" | "court" | "activity"
 
 export function CaseDetailDialog({
   legalCase: c,
@@ -44,6 +45,8 @@ export function CaseDetailDialog({
   const [tab, setTab] = useState<CaseTab>(initialTab)
   const at = () => new Date().toISOString()
   const sensitive = c.flags.includes("sensitive")
+  // Court progress once a lawyer has the case (or has had it).
+  const inCourt = !!c.lawyer || !!c.lawyerUpdates?.length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -101,6 +104,7 @@ export function CaseDetailDialog({
               [
                 ["triage", t.detail.tabTriage],
                 ["details", t.detail.tabDetails],
+                ...(inCourt ? [["court", t.detail.tabCourt] as const] : []),
                 ["activity", t.detail.tabActivity],
               ] as const
             ).map(([value, label]) => (
@@ -133,6 +137,11 @@ export function CaseDetailDialog({
               }
             />
           </TabsContent>
+          {inCourt && (
+            <TabsContent value="court" className="pt-5">
+              <CourtProgress legalCase={c} />
+            </TabsContent>
+          )}
           <TabsContent value="activity" className="pt-5">
             <ActivityLog legalCase={c} />
           </TabsContent>

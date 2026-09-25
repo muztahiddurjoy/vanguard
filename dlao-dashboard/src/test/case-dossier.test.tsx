@@ -49,3 +49,52 @@ describe("who reported it, and who it is about", () => {
     expect(within(provenance).queryByText("Who reported it")).not.toBeInTheDocument()
   })
 })
+
+describe("court progress from the panel lawyer", () => {
+  it("shows the next hearing, the lawyer's reports and that they are late", async () => {
+    const { dialog } = await openCase("DLAS-2026-045", "Abdul Malek", "Court progress")
+    const panel = within(dialog).getByRole("tabpanel")
+    expect(panel).toHaveTextContent("Joint District Judge Court 2, Rangpur")
+    expect(panel).toHaveTextContent("Where the case standsHeard; order reserved or date moved")
+    expect(panel).toHaveTextContent("Adv. Shahidul Islam")
+    expect(panel).toHaveTextContent("2 reports missed.")
+    const reports = within(panel).getByRole("region", { name: "Reports from court" })
+    const [latest, first] = within(reports)
+      .getAllByRole("listitem")
+      .filter((li) => li.parentElement?.tagName === "OL")
+    expect(latest).toHaveTextContent("The cousins filed their written statement.")
+    expect(latest).toHaveTextContent("Attached: Order sheet.pdf")
+    expect(first).toHaveTextContent("Title suit filed against the three cousins")
+  })
+
+  it("flags a hearing the lawyer has not reported on", async () => {
+    const { dialog } = await openCase("DLAS-2026-041", "Anwara Begum", "Court progress")
+    expect(within(dialog).getByRole("tabpanel")).toHaveTextContent(
+      /Hearing on .+: waiting for the lawyer's report/,
+    )
+  })
+
+  it("is in Bangla too, with the lawyer's words in Bangla", async () => {
+    const { user } = renderApp({ lang: "bn" })
+    const row = within(screen.getByRole("list", { name: "মামলাসমূহ, সবচেয়ে জরুরিগুলো আগে" }))
+      .getAllByRole("listitem")
+      .find((r) => r.getAttribute("data-case-id") === "DLAS-2026-045")!
+    await user.click(within(row).getByRole("button", { name: "আব্দুল মালেক" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(within(dialog).getByRole("tab", { name: "আদালতের অগ্রগতি" }))
+    const panel = within(dialog).getByRole("tabpanel")
+    expect(panel).toHaveTextContent("যুগ্ম জেলা জজ আদালত ২, রংপুর")
+    expect(panel).toHaveTextContent("চাচাতো ভাইয়েরা লিখিত জবাব দাখিল করেছেন।")
+    expect(panel).not.toHaveTextContent("written statement")
+  })
+
+  it("has no court tab before a lawyer is assigned", async () => {
+    const { user } = renderApp()
+    const row = within(queueList())
+      .getAllByRole("listitem")
+      .find((r) => r.getAttribute("data-case-id") === "APP-2026-031")!
+    await user.click(within(row).getByRole("button", { name: "Shirin Sultana" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).queryByRole("tab", { name: "Court progress" })).not.toBeInTheDocument()
+  })
+})
