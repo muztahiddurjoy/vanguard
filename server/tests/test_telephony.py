@@ -223,7 +223,8 @@ def test_emergency_line_is_spoken_before_the_application_is_filed(db_engine, mon
     order: list[str] = []
 
     async def scenario():
-        ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+        # Twilio is still playing whatever it was sent until finish_playing().
+        ws, tts, stt = FakeTwilio(echo_marks=False), FakeTTS(), ScriptedTranscriber()
         manager = StreamManager(
             ws,
             tts=tts,
@@ -246,13 +247,18 @@ def test_emergency_line_is_spoken_before_the_application_is_filed(db_engine, mon
         runner = asyncio.create_task(manager.run())
         ws.push(START)
         stt.say("He is beating me right now, help me now")
+        # The tracking number is sent while the 999 line is still playing: queued
+        # right behind it, with no silence for the caller to hang up in.
+        await until(lambda: len(ws.events("mark")) == 3)
+        assert not ws.closed
+        ws.finish_playing()
         await asyncio.wait_for(runner, 5)
         return ws
 
     ws = asyncio.run(scenario())
     assert order[1:3] == [t5_intake.EMERGENCY["en"], "filed"]
     assert order[3].startswith("Your tracking number is")
-    assert ws.closed
+    assert ws.closed  # once the number has played
     with factory() as db:
         case = db.scalars(select(Case)).one()
     assert "escalated" in case.flags and case.priority == "critical"

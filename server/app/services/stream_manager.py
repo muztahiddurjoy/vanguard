@@ -302,15 +302,19 @@ class StreamManager:
     async def _emergency(self, state: Any) -> None:
         """The 999 line at once; the application is created while it plays.
 
-        Its tracking number follows, if it is ready, and then the call ends.
+        Its tracking number follows without a pause, and then the call ends.
         """
         mark = await self._speak(state["reply"])
         await asyncio.to_thread(self._finish, state)
-        await self._wait_played(mark)
         if token_line := with_token("", self.tracking_token, self.language):
-            await self._say_and_hang_up(token_line)
-        else:
-            await self.ws.close()
+            # Once the 999 line is fully sent, the number is queued right behind it:
+            # Twilio plays in order, so there is no silence for the caller to hang up in.
+            if self._speak_task:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._speak_task
+            mark = await self._speak(token_line)
+        await self._wait_played(mark)
+        await self.ws.close()
 
     def _finish(self, state: Any, *, dropped: bool = False) -> None:
         from app.routers.intake import finish_conversation
