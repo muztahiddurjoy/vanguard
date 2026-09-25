@@ -1,6 +1,8 @@
-import { ChevronsUpDown, LogOut, UserRound } from "lucide-react"
+import { ChevronsUpDown, LogOut, Settings, UserRound } from "lucide-react"
+import { useNavigate } from "react-router"
 import { toast } from "sonner"
 
+import { useAuth, useOfficer } from "@/auth/use-auth"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,12 +14,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { OFFICER } from "@/data/cases"
 import { useI18n } from "@/i18n/use-i18n"
 
 export function UserMenu() {
   const { t, pick } = useI18n()
-  const notAvailable = () => toast.info(t.nav.notInPrototype)
+  const officer = useOfficer()
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
 
   return (
     <DropdownMenu>
@@ -32,30 +35,42 @@ export function UserMenu() {
       >
         <Avatar>
           <AvatarFallback className="bg-primary font-semibold text-primary-foreground">
-            {OFFICER.initials}
+            {officer.initials}
           </AvatarFallback>
         </Avatar>
         <span className="hidden flex-col items-start text-left leading-tight md:flex">
-          <span className="text-sm font-medium">{pick(OFFICER.name)}</span>
-          <span className="text-xs text-muted-foreground">{pick(OFFICER.role)}</span>
+          <span className="text-sm font-medium">{pick(officer.name)}</span>
+          <span className="text-xs text-muted-foreground">{pick(officer.role)}</span>
         </span>
         <ChevronsUpDown aria-hidden className="hidden size-4 text-muted-foreground md:block" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium text-foreground">{pick(OFFICER.name)}</span>
+            <span className="text-sm font-medium text-foreground">{pick(officer.name)}</span>
             <span>
-              {pick(OFFICER.role)} · {t.app.district(pick(OFFICER.district))}
+              {pick(officer.role)} · {t.app.district(pick(officer.district))}
             </span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={notAvailable}>
+        <DropdownMenuItem onClick={() => navigate("/profile")}>
           <UserRound aria-hidden />
           {t.header.profile}
         </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onClick={notAvailable}>
+        <DropdownMenuItem onClick={() => navigate("/settings")}>
+          <Settings aria-hidden />
+          {t.header.settings}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => {
+            signOut()
+            toast.info(t.login.signedOut)
+            navigate("/login", { replace: true })
+          }}
+        >
           <LogOut aria-hidden />
           {t.header.signOut}
         </DropdownMenuItem>

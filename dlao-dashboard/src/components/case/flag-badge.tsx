@@ -15,17 +15,17 @@ import type { CaseFlag } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 
-type Tone = "danger" | "warning" | "info" | "success" | "neutral"
+// Tags are quiet on purpose: neutral chip, coloured icon only. The loud colours
+// are reserved for priority and the do-not-call warning.
+const ICON_TONE = {
+  danger: "text-danger",
+  warning: "text-warning-foreground",
+  info: "text-info",
+  success: "text-success",
+  neutral: "text-muted-foreground",
+} as const
 
-const TONE: Record<Tone, string> = {
-  danger: "border-danger/30 bg-danger-surface text-danger-foreground",
-  warning: "border-warning/50 bg-warning-surface text-warning-foreground",
-  info: "border-info/30 bg-info-surface text-info-foreground",
-  success: "border-success/30 bg-success-surface text-success-foreground",
-  neutral: "border-primary/20 bg-primary/8 text-primary",
-}
-
-const FLAG: Record<CaseFlag, { tone: Tone; Icon: LucideIcon }> = {
+const FLAG: Record<CaseFlag, { tone: keyof typeof ICON_TONE; Icon: LucideIcon }> = {
   proxyReported: { tone: "info", Icon: UsersRound },
   restrictedContact: { tone: "danger", Icon: PhoneOff },
   lawyerInactivity: { tone: "warning", Icon: UserRoundX },
@@ -42,15 +42,19 @@ export function FlagBadge({
   className,
 }: {
   flag: CaseFlag
-  /** Overrides the default flag label, e.g. "Proxy reported by Ripon". */
+  /** Overrides the default flag label, e.g. "Proxy Reported by Ripon". */
   label?: string
   className?: string
 }) {
   const { t } = useI18n()
   const { tone, Icon } = FLAG[flag]
   return (
-    <Badge variant="outline" data-flag={flag} className={cn("h-6 px-2", TONE[tone], className)}>
-      <Icon aria-hidden data-icon="inline-start" />
+    <Badge
+      variant="outline"
+      data-flag={flag}
+      className={cn("h-6 bg-card px-2 font-normal text-foreground", className)}
+    >
+      <Icon aria-hidden data-icon="inline-start" className={ICON_TONE[tone]} />
       {label ?? t.flag[flag]}
     </Badge>
   )

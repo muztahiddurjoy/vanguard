@@ -108,9 +108,50 @@ export interface Applicant {
   age: number
 }
 
+export interface Officer {
+  /** Employee ID, used to sign in. */
+  id: string
+  name: Localized
+  role: Localized
+  district: Localized
+  office: Localized
+  email: string
+  phone: string
+  initials: string
+  joinedAt: string
+}
+
+export type CaseOutcome = "resolved" | "settled" | "withdrawn" | "referred"
+
+/** Closed cases keep only what the register needs. */
+export interface ClosedCase {
+  id: string
+  name: Localized
+  category: CaseCategory
+  receivedAt: string
+  closedAt: string
+  outcome: CaseOutcome
+  note: Localized
+  lawyerId?: string
+}
+
+export interface Hearing {
+  id: string
+  caseId: string
+  at: string
+  kind: "court" | "mediation"
+  place: Localized
+  purpose: Localized
+  lawyerId?: string
+}
+
 export interface PanelLawyer {
   id: string
   name: Localized
+  speciality: Localized
+  phone: string
+  /** Year they joined the district legal aid panel. */
+  since: number
 }
 
 export interface DuplicateMatch {

@@ -9,7 +9,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -55,6 +54,8 @@ export function DuplicateReviewDialog({
 }) {
   const { t, f, pick } = useI18n()
   const mergeReasonId = useId()
+  const confirmHintId = useId()
+  const decisionId = useId()
   const match = incoming.duplicate!
   const resolved = match.resolution === "distinct"
   // Conflicting identity documents are a hard stop for merging.
@@ -105,22 +106,27 @@ export function DuplicateReviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         closeLabel={t.detail.close}
-        className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-5xl"
+        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto p-5 sm:max-w-5xl sm:p-7"
       >
-        <DialogHeader className="pr-10">
-          <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-            <CopyCheck aria-hidden className="size-5 text-primary" />
+        <DialogHeader className="gap-2 pr-10">
+          <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <CopyCheck aria-hidden className="size-4" />
+            {t.duplicate.eyebrow}
+          </p>
+          <DialogTitle className="text-2xl leading-tight font-semibold">
             {t.duplicate.title}
           </DialogTitle>
-          <DialogDescription>{t.duplicate.description}</DialogDescription>
+          <DialogDescription className="max-w-prose text-[0.9375rem]">
+            {t.duplicate.description}
+          </DialogDescription>
         </DialogHeader>
 
-        <Alert className="border-2 border-warning bg-warning-surface text-warning-foreground">
+        <Alert className="border-2 border-warning bg-warning-surface px-5 py-4 text-warning-foreground">
           <CopyCheck aria-hidden />
           <AlertTitle className="text-base font-bold">
             {t.duplicate.confidence(f.pct(match.score))}
           </AlertTitle>
-          <AlertDescription className="flex flex-col gap-2 text-current">
+          <AlertDescription className="flex flex-col gap-1.5 text-current [&_p:not(:last-child)]:mb-0">
             <div
               aria-hidden
               className="h-2.5 w-full max-w-md overflow-hidden rounded-full bg-warning/25"
@@ -130,6 +136,7 @@ export function DuplicateReviewDialog({
                 style={{ width: `${Math.round(match.score * 100)}%` }}
               />
             </div>
+            <p className="text-sm">{t.duplicate.confidenceHint}</p>
             <p className="font-medium">
               {t.duplicate.matched(f.num(match.matchingFields.length), f.num(FIELDS.length))}
             </p>
@@ -227,38 +234,51 @@ export function DuplicateReviewDialog({
           </Table>
         </div>
 
-        <DialogFooter className="flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex max-w-md flex-col gap-1.5">
-            {/* Kept focusable so keyboard and screen-reader users can discover why it is disabled. */}
-            <Button
-              variant="outline"
-              disabled
-              focusableWhenDisabled
-              aria-describedby={mergeReasonId}
-              className="w-fit aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
-            >
-              <Merge aria-hidden data-icon="inline-start" />
-              {t.duplicate.merge}
-              <Badge variant="secondary" className="ml-1">
-                {t.duplicate.mergeNotAllowed}
-              </Badge>
-            </Button>
-            <p id={mergeReasonId} className="text-xs text-muted-foreground">
-              {t.duplicate.mergeBlocked}
-            </p>
+        <section aria-labelledby={decisionId} className="flex flex-col gap-3 border-t pt-5">
+          <h3 id={decisionId} className="text-base font-semibold">
+            {t.duplicate.decision}
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              {/* Kept focusable so keyboard and screen-reader users can discover why it is disabled. */}
+              <Button
+                size="lg"
+                variant="outline"
+                disabled
+                focusableWhenDisabled
+                aria-describedby={mergeReasonId}
+                className="h-11 w-full aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+              >
+                <Merge aria-hidden data-icon="inline-start" />
+                {t.duplicate.merge}
+                <Badge variant="secondary" className="ml-1">
+                  {t.duplicate.mergeNotAllowed}
+                </Badge>
+              </Button>
+              <p id={mergeReasonId} className="text-center text-xs text-muted-foreground">
+                {t.duplicate.mergeBlocked}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Button
+                size="lg"
+                className="h-11 w-full"
+                disabled={resolved}
+                aria-describedby={confirmHintId}
+                onClick={() => {
+                  onConfirmDistinct()
+                  toast.success(t.duplicate.distinctToast(existing.id, incoming.id))
+                }}
+              >
+                <UserCheck aria-hidden data-icon="inline-start" />
+                {t.duplicate.confirmDistinct}
+              </Button>
+              <p id={confirmHintId} className="text-center text-xs text-muted-foreground">
+                {t.duplicate.confirmHint}
+              </p>
+            </div>
           </div>
-          <Button
-            size="lg"
-            disabled={resolved}
-            onClick={() => {
-              onConfirmDistinct()
-              toast.success(t.duplicate.distinctToast(existing.id, incoming.id))
-            }}
-          >
-            <UserCheck aria-hidden data-icon="inline-start" />
-            {t.duplicate.confirmDistinct}
-          </Button>
-        </DialogFooter>
+        </section>
       </DialogContent>
     </Dialog>
   )

@@ -16,6 +16,16 @@ describe("createFormatters", () => {
     expect(f.num(2)).toBe("২")
   })
 
+  it("labels today and tomorrow in words", () => {
+    const now = new Date("2026-09-23T09:00:00").getTime()
+    expect(createFormatters("en").dayLabel("2026-09-23T15:30:00", now)).toBe("Today")
+    expect(createFormatters("en").dayLabel("2026-09-24T10:00:00", now)).toBe("Tomorrow")
+    expect(createFormatters("en").dayLabel("2026-09-26T10:00:00", now)).toBe(
+      "Saturday 26 September",
+    )
+    expect(createFormatters("bn").dayLabel("2026-09-24T10:00:00", now)).toBe("আগামীকাল")
+  })
+
   it("picks a sensible relative unit", () => {
     const now = new Date("2026-09-23T12:00:00Z").getTime()
     const f = createFormatters("en")

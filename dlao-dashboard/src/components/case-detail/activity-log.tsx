@@ -1,69 +1,21 @@
 import { Bot, Cog, UserRound, type LucideIcon } from "lucide-react"
 
-import { OFFICER, PANEL_LAWYERS } from "@/data/cases"
+import { useOfficer } from "@/auth/use-auth"
 import type { ActivityEvent, LegalCase } from "@/data/types"
+import { ACTOR, describeEvent, type Actor } from "@/i18n/activity-text"
 import { useI18n } from "@/i18n/use-i18n"
-
-type Actor = "system" | "ai" | "officer"
-
-const ACTOR: Record<ActivityEvent["type"], Actor> = {
-  received: "system",
-  duplicateFlagged: "system",
-  lawyerUpdateMissed: "system",
-  aiTriage: "ai",
-  triageAccepted: "officer",
-  priorityOverride: "officer",
-  duplicateDistinct: "officer",
-  lawyerReminder: "officer",
-  escalated: "officer",
-  overdueResolved: "officer",
-  lawyerAssigned: "officer",
-  safeCallScheduled: "officer",
-}
 
 const ACTOR_ICON: Record<Actor, LucideIcon> = { system: Cog, ai: Bot, officer: UserRound }
 
 export function ActivityLog({ legalCase: c }: { legalCase: LegalCase }) {
-  const { t, f, pick } = useI18n()
+  const i18n = useI18n()
+  const { t, f, pick } = i18n
+  const officer = useOfficer()
 
-  const describe = (e: ActivityEvent): string => {
-    switch (e.type) {
-      case "received":
-        return t.activity.received(t.channel[e.channel])
-      case "aiTriage":
-        return t.activity.aiTriage(t.priority[e.priority])
-      case "triageAccepted":
-        return t.activity.triageAccepted(t.priority[e.priority])
-      case "priorityOverride":
-        return t.activity.priorityOverride(t.priority[e.from], t.priority[e.to])
-      case "duplicateFlagged":
-        return t.activity.duplicateFlagged(e.otherId, f.pct(e.score))
-      case "duplicateDistinct":
-        return t.activity.duplicateDistinct(e.otherId)
-      case "lawyerUpdateMissed":
-        return t.activity.lawyerUpdateMissed
-      case "lawyerReminder":
-        return t.activity.lawyerReminder
-      case "escalated":
-        return t.activity.escalated
-      case "overdueResolved":
-        return t.activity.overdueResolved
-      case "lawyerAssigned":
-        return t.activity.lawyerAssigned(
-          pick(
-            PANEL_LAWYERS.find((l) => l.id === e.lawyerId)?.name ?? {
-              en: e.lawyerId,
-              bn: e.lawyerId,
-            },
-          ),
-        )
-      case "safeCallScheduled":
-        return t.activity.safeCallScheduled(f.dateTime(e.scheduledFor))
-    }
-  }
+  const describe = (e: ActivityEvent) => describeEvent(e, i18n)
 
   const actorName = (actor: Actor) =>
-    actor === "officer" ? pick(OFFICER.name) : actor === "ai" ? t.activity.ai : t.activity.system
+    actor === "officer" ? pick(officer.name) : actor === "ai" ? t.activity.ai : t.activity.system
 
   const events = [...c.activity].reverse()
 

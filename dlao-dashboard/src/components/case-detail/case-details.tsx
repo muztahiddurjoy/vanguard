@@ -45,7 +45,9 @@ export function CaseDetails({ legalCase: c }: { legalCase: LegalCase }) {
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-1.5">
         <h3 className="text-sm font-semibold">{t.detail.summary}</h3>
-        <p className="text-sm leading-relaxed text-pretty">{pick(c.summary)}</p>
+        <p className="max-w-prose text-[0.9375rem] leading-relaxed text-pretty">
+          {pick(c.summary)}
+        </p>
       </section>
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold">{t.detail.applicant}</h3>
@@ -53,7 +55,7 @@ export function CaseDetails({ legalCase: c }: { legalCase: LegalCase }) {
           {rows.map(({ key, label, value }) => (
             <div key={key} className="flex flex-col gap-0.5 border-b px-3 py-2 sm:odd:border-r">
               <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="text-sm font-medium">{value}</dd>
+              <dd className="text-[0.9375rem] font-medium">{value}</dd>
             </div>
           ))}
         </dl>

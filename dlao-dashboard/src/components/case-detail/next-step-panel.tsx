@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react"
+import { useId, useState, type ReactNode } from "react"
 import {
   AlarmClock,
   CalendarClock,
+  CircleCheck,
   CopyCheck,
   Gavel,
   Landmark,
@@ -29,15 +30,17 @@ import { nextSafeWindowStart } from "@/lib/safe-contact"
 import { cn } from "@/lib/utils"
 import type { CaseAction } from "@/state/cases-reducer"
 
-type Tone = "info" | "warning" | "danger"
+type Tone = "info" | "warning" | "danger" | "done"
 
-const TONE: Record<Tone, string> = {
-  info: "border-info/30 bg-info-surface text-info-foreground",
-  warning: "border-warning/50 bg-warning-surface text-warning-foreground",
-  danger: "border-danger/40 bg-danger-surface text-danger-foreground",
+const ICON_TONE: Record<Tone, string> = {
+  info: "bg-info-surface text-info-foreground",
+  warning: "bg-warning-surface text-warning-foreground",
+  danger: "bg-danger-surface text-danger-foreground",
+  done: "bg-success-surface text-success-foreground",
 }
 
-function Panel({
+/** "What to do now": one plain instruction and one button. */
+function Step({
   tone,
   Icon,
   title,
@@ -48,26 +51,33 @@ function Panel({
   Icon: LucideIcon
   title: string
   children?: ReactNode
-  action: ReactNode
+  action?: ReactNode
 }) {
   const { t } = useI18n()
+  const headingId = useId()
   return (
     <section
-      aria-label={t.detail.nextStep}
-      className={cn(
-        "flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center",
-        TONE[tone],
-      )}
+      aria-labelledby={headingId}
+      className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:p-5"
     >
-      <Icon aria-hidden className="size-5 shrink-0" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <p className="text-xs font-semibold tracking-wide uppercase opacity-80">
-          {t.detail.nextStep}
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-full",
+          ICON_TONE[tone],
+        )}
+      >
+        <Icon aria-hidden className="size-5" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {t.detail.whatToDo}
         </p>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {children && <div className="text-sm">{children}</div>}
+        <h3 id={headingId} className="text-base font-semibold">
+          {title}
+        </h3>
+        {children && <div className="text-sm text-muted-foreground">{children}</div>}
       </div>
-      <div className="flex shrink-0 flex-wrap gap-2">{action}</div>
+      {action && <div className="flex shrink-0 flex-wrap gap-2">{action}</div>}
     </section>
   )
 }
@@ -93,24 +103,23 @@ export function NextStepPanel({
   switch (nextActionOf(c)) {
     case "reviewTriage":
       return (
-        <Panel
+        <Step
           tone="info"
           Icon={Sparkles}
           title={t.followUp.triageTitle}
           action={
-            <Button onClick={onOpenTriage}>
-              <Sparkles aria-hidden data-icon="inline-start" />
-              {t.triage.goToTriage}
+            <Button variant="outline" onClick={onOpenTriage}>
+              {t.action.reviewTriage}
             </Button>
           }
         >
           {t.followUp.triageBody}
-        </Panel>
+        </Step>
       )
 
     case "reviewDuplicate":
       return (
-        <Panel
+        <Step
           tone="info"
           Icon={CopyCheck}
           title={t.followUp.duplicateTitle}
@@ -122,12 +131,12 @@ export function NextStepPanel({
           }
         >
           {t.followUp.duplicateBody}
-        </Panel>
+        </Step>
       )
 
     case "followUpLawyer":
       return (
-        <Panel
+        <Step
           tone="warning"
           Icon={UserRoundX}
           title={t.followUp.lawyerTitle}
@@ -143,19 +152,16 @@ export function NextStepPanel({
             </Button>
           }
         >
-          <p>
-            <strong>{lawyerName(c.lawyer!.id)}</strong> —{" "}
-            {t.followUp.lawyerMissed(f.num(c.lawyer!.missedUpdates))}
-          </p>
+          <p>{t.followUp.lawyerMissed(lawyerName(c.lawyer!.id), f.num(c.lawyer!.missedUpdates))}</p>
           <p className="text-xs">
             {t.followUp.lawyerLast(f.relative(c.lawyer!.lastUpdateAt, now.getTime()))}
           </p>
-        </Panel>
+        </Step>
       )
 
     case "escalateJurisdiction":
       return (
-        <Panel
+        <Step
           tone="warning"
           Icon={Landmark}
           title={t.followUp.escalateTitle}
@@ -174,17 +180,17 @@ export function NextStepPanel({
           {c.jurisdiction && (
             <>
               <p>{pick(c.jurisdiction.reason)}</p>
-              <p className="text-xs font-medium">
+              <p className="font-medium text-foreground">
                 {t.followUp.escalateTo(pick(c.jurisdiction.target))}
               </p>
             </>
           )}
-        </Panel>
+        </Step>
       )
 
     case "resolveOverdue":
       return (
-        <Panel
+        <Step
           tone="danger"
           Icon={AlarmClock}
           title={t.followUp.overdueTitle}
@@ -203,12 +209,12 @@ export function NextStepPanel({
           {c.overdue && c.dueAt && (
             <p>{t.followUp.overdueWas(pick(c.overdue.task), f.relative(c.dueAt, now.getTime()))}</p>
           )}
-        </Panel>
+        </Step>
       )
 
     case "assignLawyer":
       return (
-        <Panel
+        <Step
           tone="info"
           Icon={Gavel}
           title={t.followUp.assignTitle}
@@ -219,10 +225,7 @@ export function NextStepPanel({
                 value={lawyerId}
                 onValueChange={(v) => setLawyerId(v as string | null)}
               >
-                <SelectTrigger
-                  aria-label={t.followUp.selectLawyer}
-                  className="w-56 bg-card text-foreground"
-                >
+                <SelectTrigger aria-label={t.followUp.selectLawyer} className="w-56">
                   <SelectValue placeholder={t.followUp.selectLawyer} />
                 </SelectTrigger>
                 <SelectContent>
@@ -246,14 +249,16 @@ export function NextStepPanel({
               </Button>
             </>
           }
-        />
+        >
+          {t.followUp.assignBody}
+        </Step>
       )
 
     case "scheduleSafeCall": {
       if (!c.safeContact) return null
       const next = nextSafeWindowStart(now, c.safeContact)
       return (
-        <Panel
+        <Step
           tone="info"
           Icon={CalendarClock}
           title={t.followUp.safeCallTitle}
@@ -275,15 +280,11 @@ export function NextStepPanel({
           }
         >
           {t.followUp.safeCallWhen(f.dateTime(next))}
-        </Panel>
+        </Step>
       )
     }
 
     case "viewCase":
-      return (
-        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          {t.detail.noActions}
-        </p>
-      )
+      return <Step tone="done" Icon={CircleCheck} title={t.detail.noActions} />
   }
 }

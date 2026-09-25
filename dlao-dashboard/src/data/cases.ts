@@ -1,26 +1,56 @@
 import type { LegalCase, PanelLawyer } from "@/data/types"
 
 // Dates are relative to page load so "overdue" and "2 days ago" stay true
-// whenever the prototype is demoed.
+// whenever the dashboard is opened.
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
 const now = Date.now()
+
+/** When the sample data was created — anything later happened in this session. */
+export const SESSION_STARTED_AT = now
 const daysAgo = (d: number) => new Date(now - d * DAY).toISOString()
 const hoursAgo = (h: number) => new Date(now - h * HOUR).toISOString()
 const daysFromNow = (d: number) => new Date(now + d * DAY).toISOString()
 
-export const OFFICER = {
-  name: { en: "Farhana Rahman", bn: "ফারহানা রহমান" },
-  role: { en: "District Legal Aid Officer", bn: "জেলা লিগ্যাল এইড অফিসার" },
-  district: { en: "Rangpur", bn: "রংপুর" },
-  initials: "FR",
-}
-
 export const PANEL_LAWYERS: PanelLawyer[] = [
-  { id: "LAW-07", name: { en: "Adv. Shahidul Islam", bn: "অ্যাড. শহিদুল ইসলাম" } },
-  { id: "LAW-12", name: { en: "Adv. Nasrin Jahan", bn: "অ্যাড. নাসরিন জাহান" } },
-  { id: "LAW-15", name: { en: "Adv. Mizanur Rahman", bn: "অ্যাড. মিজানুর রহমান" } },
-  { id: "LAW-21", name: { en: "Adv. Taslima Akter", bn: "অ্যাড. তাসলিমা আক্তার" } },
+  {
+    id: "LAW-07",
+    name: { en: "Adv. Shahidul Islam", bn: "অ্যাড. শহিদুল ইসলাম" },
+    speciality: { en: "Land and civil cases", bn: "জমি ও দেওয়ানি মামলা" },
+    phone: "01713-XXX-107",
+    since: 2016,
+  },
+  {
+    id: "LAW-12",
+    name: { en: "Adv. Nasrin Jahan", bn: "অ্যাড. নাসরিন জাহান" },
+    speciality: { en: "Family law and maintenance", bn: "পারিবারিক আইন ও ভরণপোষণ" },
+    phone: "01715-XXX-212",
+    since: 2019,
+  },
+  {
+    id: "LAW-15",
+    name: { en: "Adv. Mizanur Rahman", bn: "অ্যাড. মিজানুর রহমান" },
+    speciality: { en: "Labour and wage disputes", bn: "শ্রম ও মজুরি বিরোধ" },
+    phone: "01716-XXX-315",
+    since: 2018,
+  },
+  {
+    id: "LAW-21",
+    name: { en: "Adv. Taslima Akter", bn: "অ্যাড. তাসলিমা আক্তার" },
+    speciality: {
+      en: "Violence against women and children",
+      bn: "নারী ও শিশু নির্যাতন",
+    },
+    phone: "01717-XXX-421",
+    since: 2020,
+  },
+  {
+    id: "LAW-24",
+    name: { en: "Adv. Rafiqul Hasan", bn: "অ্যাড. রফিকুল হাসান" },
+    speciality: { en: "Cyber crime and criminal cases", bn: "সাইবার অপরাধ ও ফৌজদারি মামলা" },
+    phone: "01718-XXX-524",
+    since: 2022,
+  },
 ]
 
 export const INITIAL_CASES: LegalCase[] = [
@@ -151,8 +181,8 @@ export const INITIAL_CASES: LegalCase[] = [
         bn: "অভিযুক্ত ঢাকায় বসবাস করেন; অপরাধটি সাইবার অপরাধ, যার বিচার কেবল সাইবার ট্রাইব্যুনালে হয়।",
       },
       target: {
-        en: "Cyber Tribunal, Dhaka via NLASO",
-        bn: "জাতীয় আইনগত সহায়তা সংস্থার মাধ্যমে সাইবার ট্রাইব্যুনাল, ঢাকা",
+        en: "Cyber Tribunal, Dhaka (through the National Legal Aid Services Organisation)",
+        bn: "সাইবার ট্রাইব্যুনাল, ঢাকা (জাতীয় আইনগত সহায়তা প্রদান সংস্থার মাধ্যমে)",
       },
     },
     triage: {
