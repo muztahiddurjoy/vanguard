@@ -31,11 +31,16 @@ npm run dev
 ```
 
 Start `../server` first (and `../nid-server` for NID checks). The signed-in officer ID is sent
-with every request for the server's audit trail. Opening a case fetches its history and call
-notes. These decisions are saved on the server: accepting or overriding triage, confirming or
-changing the advice / mediation / sensitive mark, sending a held SMS to the other side, and
-assigning a lawyer. The remaining steps (lawyer reminders, transfers, safe-call booking,
-duplicate decisions) are kept on screen only for now.
+with every request for the server's audit trail. Opening a case fetches its history, call
+notes, the panel lawyer's court reports and its transfers between offices; Hearings shows the
+dates lawyers reported. These decisions are saved on the server: accepting or overriding
+triage, confirming or changing the advice / mediation / sensitive mark, sending a held SMS to
+the other side, assigning a lawyer or moving a case to another one, reminding a lawyer,
+escalating to the Chief Legal Aid Officer, and acknowledging sensitive evidence (opening it is
+recorded too). The remaining steps (safe-call booking, duplicate decisions, marking a late
+task done, hearing reminders) are kept on screen only for now.
+
+Panel lawyers post their court updates from their own dashboard, [`../lawyer-dashboard`](../lawyer-dashboard/README.md).
 
 | Script              | What it does                                   |
 | ------------------- | ---------------------------------------------- |
@@ -54,15 +59,15 @@ rewrite rules.
 | Screen | What it is for |
 | --- | --- |
 | **Sign in** | Officer ID + password, show/hide password, keep me signed in, forgot-password help, one-click demo account |
-| **Home** | Greeting, four summary numbers, the three most urgent cases ("Start here"), your lists, upcoming hearings |
-| **Work queue** | Every open case that needs you, filtered by _Needs Action Today_, _Pending AI Triage_, _Duplicates for Review_, _Overdue / Alerts_; one button per case |
-| **Case** (dialog) | Safety warning (safe window, or **Do not call this number**), "What to do now", AI triage recommendation, the AI's advice / mediation / sensitive mark to confirm or change, case information (who filed it, National ID checks, tracking number, the other side and their SMS, the caller's words) and history |
+| **Home** | Greeting, four summary numbers, pattern alerts for lawyers who stopped reporting, the three most urgent cases ("Start here"), your lists, upcoming hearings |
+| **Work queue** | The backlog at a glance (_New · Urgent · Overdue_), then every open case that needs you, filtered by _Needs Action Today_, _Pending AI Triage_, _Duplicates for Review_, _Overdue / Alerts_ and _Show only_ (children at risk, reported by someone else, sensitive); search by name, case or tracking number, or place; one button per case |
+| **Case** (dialog; full screen on a phone) | Safety warning (safe window, or **Do not call this number**, with the 999 police line), "What to do now", AI triage recommendation, the AI's advice / mediation / sensitive mark to confirm or change, case information (who reported it kept apart from who it is about, with their consent; National ID checks, tracking number, documents and evidence, transfers between offices, the other side and their SMS, the caller's words), court progress from the lawyer, and history |
 | **Duplicate check** (dialog) | "Is this the same person?" — side-by-side records, 85% fuzzy match, merge blocked, confirm as distinct |
 | **All cases** | Register of open and closed cases, with how each closed case ended |
-| **Lawyers** | Panel lawyers, their open cases, who has stopped reporting, send a reminder |
-| **Hearings** | Court hearings and mediation meetings for the next two weeks, grouped by day |
+| **Lawyers** | Panel lawyers, their open cases and next hearing, who has stopped reporting (pattern alert with **Review & Reassign**), send a reminder or move their cases |
+| **Hearings** | Court hearings (the dates lawyers reported) and mediation meetings for the next two weeks, grouped by day |
 | **Reports** | Key numbers and three charts, each with a table view |
-| **My profile** | Officer details, editable contact details, this session's decisions |
+| **My profile** | Officer details (including Role B6, the authorized receiving DLAO for sensitive evidence), editable contact details, this session's decisions |
 | **Settings** | Language, text size (whole UI scales), notification choices |
 | **Help** | Getting started, common questions, what priorities mean, glossary, contacts |
 | **Notifications** (bell) | Live list of what needs attention; opens the case |
@@ -93,10 +98,18 @@ rewrite rules.
    same name/phone/village highlighted, **Merge Records** blocked (different National IDs),
    **Confirm as Distinct Individuals** resolves it.
 6. **Abdul Malek (DLAS-2026-045):** _Lawyer Inactivity Alert_ — remind the lawyer from the case or
-   from the **Lawyers** page.
+   from the **Lawyers** page. **Court progress** shows what Adv. Shahidul Islam reported and that
+   two reports are missing. On **Home**, his _Pattern alert_ reads **Inactivity Threshold Reached:
+   Missed 3 updates across 3 cases.** — **Review & Reassign** moves the cases you tick (Anwara
+   Begum's hearing four days ago went unreported) to another lawyer.
 7. **Nabila (APP-2026-012):** _Sensitive_, _Cyber Harassment_, _Jurisdiction Escalation_ — details
-   hidden in lists; transfer the case.
-8. **Profile** now counts the decisions you just made; **Settings → Text size → Extra large**
+   hidden in lists. _Case information_ shows the case sent to Dhaka and back twice, so "What to do
+   now" is **Escalate to Chief Officer**. Her evidence is blurred: **Access Restricted - Viewable
+   only by Authorized Receiving DLAO (Role B6).** The demo officer holds Role B6: **Show the
+   files**, then **Acknowledge Receipt** for the Dhaka office that sent it.
+8. **Moyuri Akter:** _Case information_ keeps Ripon (the neighbour who reported it) apart from
+   Moyuri, and warns that her own agreement is not recorded yet.
+9. **Profile** now counts the decisions you just made; **Settings → Text size → Extra large**
    enlarges the whole interface.
 
 ## Project structure

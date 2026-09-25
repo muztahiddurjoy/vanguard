@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import fixture from "@/api/fixtures/server-cases.json"
+import { openEvidence, saveAction } from "@/api/cases"
 import { DEMO_OFFICER } from "@/data/officer"
 import { renderApp } from "@/test/render-app"
 
@@ -27,6 +28,23 @@ function fakeServer({ failList = 0, failSaves = false } = {}) {
       if (listFailures-- > 0) return json({ detail: "down" }, 503)
       return json(fixture.list)
     }
+    if (path === "/dlao/hearings") return json(HEARINGS)
+    if (path.endsWith("/evidence/view")) {
+      return json({
+        documents: [
+          {
+            id: 9,
+            kind: "screenshot",
+            filename: "threat-screenshot.png",
+            contentType: "image/png",
+            sizeBytes: 5120,
+            status: "processed",
+            summary: null,
+            withheld: false,
+          },
+        ],
+      })
+    }
     const detail = path.match(/^\/dlao\/cases\/([^/]+)$/)
     if (detail) {
       const found = fixture.list.find((c) => c.id === decodeURIComponent(detail[1]))
@@ -40,6 +58,19 @@ function fakeServer({ failList = 0, failSaves = false } = {}) {
 }
 
 const familyCase = fixture.detail.id
+
+// What GET /dlao/hearings returns: the date the family case's lawyer reported.
+const HEARINGS = [
+  {
+    id: "court-2",
+    caseId: familyCase,
+    at: fixture.detail.nextHearing!.at,
+    kind: "court",
+    place: "Family Court, Rangpur",
+    lawyerId: "LAW-12",
+    stage: "plaintFiled",
+  },
+]
 
 beforeEach(() => {
   vi.stubEnv("VITE_API_URL", "http://api.test/")
@@ -95,6 +126,59 @@ describe("with a backend (VITE_API_URL)", () => {
         body: { track: "mediation" },
         officer: DEMO_OFFICER.id,
       }),
+    )
+  })
+
+  it("shows the lawyer's court reports and the hearings the server reports", async () => {
+    fakeServer()
+    const { user } = renderApp()
+    await user.click(await screen.findByRole("button", { name: "Rahima Khatun" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(await within(dialog).findByRole("tab", { name: "Court progress" }))
+    const panel = within(dialog).getByRole("tabpanel")
+    expect(
+      await within(panel).findByText(
+        "Maintenance suit filed at the Family Court; summons issued to Kamal Hossain.",
+      ),
+    ).toBeInTheDocument()
+    expect(panel).toHaveTextContent("Adv. Nasrin Jahan")
+    await user.click(within(dialog).getByRole("tab", { name: "Case information" }))
+    const transfers = within(dialog).getByRole("region", { name: "Transfers between offices" })
+    expect(transfers).toHaveTextContent("From Rangpur to Gaibandha")
+    expect(transfers).toHaveTextContent("The applicant lives in Rangpur, so Rangpur acts.")
+    await user.keyboard("{Escape}")
+
+    await user.click(screen.getByRole("link", { name: /^Hearings$/ }))
+    expect(
+      await screen.findByText(/Next date after: Case filed \(plaint and vakalatnama\)/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent("1 hearings in the next two weeks")
+  })
+
+  it("saves reminders, moves, escalations and evidence decisions on the server", async () => {
+    const calls = fakeServer()
+    const post = (path: string, body?: unknown) =>
+      expect.objectContaining({ method: "POST", path: `/dlao/cases/${familyCase}${path}`, body })
+    await saveAction({ type: "sendLawyerReminder", id: familyCase, at: "x" }, DEMO_OFFICER.id)
+    await saveAction({ type: "escalateJurisdiction", id: familyCase, at: "x" }, DEMO_OFFICER.id)
+    await saveAction(
+      { type: "acknowledgeEvidence", id: familyCase, by: DEMO_OFFICER.id, at: "x" },
+      DEMO_OFFICER.id,
+    )
+    await saveAction(
+      { type: "assignLawyer", id: familyCase, lawyerId: "LAW-21", reason: "Moved.", at: "x" },
+      DEMO_OFFICER.id,
+    )
+    const [doc] = await openEvidence(familyCase, DEMO_OFFICER.id)
+    expect(doc).toEqual({ id: "9", name: "threat-screenshot.png", type: "image", sizeBytes: 5120 })
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        post("/lawyer-reminder"),
+        post("/escalate", {}),
+        post("/evidence/receipt"),
+        post("/lawyer", { lawyer_id: "LAW-21", reason: "Moved." }),
+        post("/evidence/view"),
+      ]),
     )
   })
 
