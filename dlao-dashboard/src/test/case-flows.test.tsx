@@ -105,7 +105,7 @@ describe("Moyuri's case (T8 triage)", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     expect(badge()).toHaveAttribute("data-priority", "critical")
     expect(within(rowFor("APP-2026-001")).getByText("Changed by officer")).toBeInTheDocument()
-    expect(screen.getByRole("tab", { name: /Pending AI Triage/ })).toHaveTextContent("1")
+    expect(screen.getByRole("tab", { name: /Pending AI Triage/ })).toHaveTextContent("2")
   })
 })
 
