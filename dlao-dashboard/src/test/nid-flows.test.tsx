@@ -41,6 +41,11 @@ describe("a caller who may be held hostage", () => {
     expect(within(dialog).getByText("DO NOT CALL THIS NUMBER")).toBeInTheDocument()
     expect(within(dialog).getByText(/The victim may be in a hostage situation/)).toBeInTheDocument()
     expect(within(dialog).getByRole("button", { name: "Call applicant" })).toBeDisabled()
+    // Nobody may call her, but the police can be called for her.
+    expect(within(dialog).getByRole("link", { name: "Call the police (999)" })).toHaveAttribute(
+      "href",
+      "tel:999",
+    )
     expect(within(dialog).getByText("Possibly held hostage").closest("li")).toHaveAttribute(
       "data-detected",
       "true",

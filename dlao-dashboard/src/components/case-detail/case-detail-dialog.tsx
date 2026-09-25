@@ -3,7 +3,7 @@ import { EyeOff } from "lucide-react"
 
 import { useOfficer } from "@/auth/use-auth"
 import { CaseFlags } from "@/components/case/case-flags"
-import { DoNotCallAlert } from "@/components/case/do-not-call"
+import { DoNotCallAlert, PoliceLink } from "@/components/case/do-not-call"
 import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
 import { SafeContactAlert } from "@/components/case/safe-contact"
@@ -54,7 +54,7 @@ export function CaseDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         closeLabel={t.detail.close}
-        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto p-5 sm:max-w-4xl sm:p-7"
+        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto p-5 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none max-sm:pt-[max(1.25rem,env(safe-area-inset-top))] max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-4xl sm:p-7"
       >
         <DialogHeader className="gap-2.5 pr-10">
           <p className="text-sm text-muted-foreground">
@@ -87,6 +87,10 @@ export function CaseDetailDialog({
           <DoNotCallAlert reason={c.doNotCall.reason} />
         ) : (
           c.safeContact && <SafeContactAlert window={c.safeContact} />
+        )}
+        {/* A threat to life: the police line is one tap away. */}
+        {c.priority === "critical" && !c.doNotCall && (
+          <PoliceLink className="rounded-lg bg-danger-surface px-4 py-3 text-danger-foreground" />
         )}
 
         <NextStepPanel

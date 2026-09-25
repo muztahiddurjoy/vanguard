@@ -1,8 +1,8 @@
 import { useId } from "react"
-import { Phone, ShieldAlert } from "lucide-react"
+import { Phone, ShieldAlert, Siren } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import type { DoNotCallReason } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
@@ -45,8 +45,34 @@ export function DoNotCallAlert({
             {t.doNotCall.blocked}
           </span>
         </div>
+        <PoliceLink className="mt-1" />
       </AlertDescription>
     </Alert>
+  )
+}
+
+/** The 999 emergency line, for someone who may be in danger right now. */
+export function PoliceLink({ className }: { className?: string }) {
+  const { t } = useI18n()
+  const hintId = useId()
+  return (
+    <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1", className)}>
+      {/* A real link, so phones offer to dial it and it reads as one. */}
+      <a
+        href="tel:999"
+        aria-describedby={hintId}
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "bg-card text-foreground",
+        )}
+      >
+        <Siren aria-hidden data-icon="inline-start" className="text-danger" />
+        {t.doNotCall.police}
+      </a>
+      <span id={hintId} className="text-xs">
+        {t.doNotCall.policeHint}
+      </span>
+    </div>
   )
 }
 
