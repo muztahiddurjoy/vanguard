@@ -181,8 +181,9 @@ class Case(Base):
     parties: Mapped[list["CaseParty"]] = relationship(
         back_populates="case", cascade="all, delete-orphan", lazy="selectin"
     )
+    # Loaded with the case: lists show how often it was sent back (T2).
     referrals: Mapped[list["Referral"]] = relationship(
-        back_populates="case", cascade="all, delete-orphan", order_by="Referral.id"
+        back_populates="case", cascade="all, delete-orphan", order_by="Referral.id", lazy="selectin"
     )
     incident: Mapped["Incident | None"] = relationship(back_populates="cases")
     # Oldest first. Loaded with the case: the dashboards' lists show the next hearing.

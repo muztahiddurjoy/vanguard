@@ -179,3 +179,33 @@ def test_case_cannot_join_two_incidents(client):
     r = client.post("/incidents", json={"title": "Second", "case_refs": [a["id"]]})
     assert r.status_code == 409
     assert client.get(f"/incidents/{first['id']}").json()["caseCount"] == 1
+
+
+def test_case_bounced_twice_is_escalated_to_the_chief_officer(client):
+    case = apply(client)
+    ref = case["id"]
+    for note in ("The accused lives in Rangpur; this is not ours.", "Still Rangpur's, not ours."):
+        referral = client.post(
+            "/referrals",
+            json={"case_ref": ref, "to_office": "Dhaka", "reason": "The accused lives in Dhaka."},
+        ).json()
+        client.post(f"/referrals/{referral['id']}/respond", json={"accept": False, "note": note})
+    listed = next(c for c in client.get("/dlao/cases").json() if c["id"] == ref)
+    assert listed["timesReturned"] == 2
+
+    detail = client.get(f"/dlao/cases/{ref}").json()
+    first = detail["referrals"][0]
+    assert (first["from"], first["to"], first["status"]) == ("Rangpur", "Dhaka", "returned")
+    assert first["responseNote"].startswith("The accused lives in Rangpur")
+    assert first["at"] and first["respondedAt"]
+
+    note = "Returned twice between Rangpur and Dhaka; the chief must decide."
+    r = client.post(
+        f"/dlao/cases/{ref}/escalate", json={"note": note}, headers={"X-Officer-Id": "DLAO-1"}
+    )
+    assert r.status_code == 200
+    assert "escalated" in r.json()["flags"] and "jurisdictionEscalation" not in r.json()["flags"]
+    entry = client.get(f"/dlao/cases/{ref}").json()["activity"][-1]
+    assert entry["action"] == "case.escalated" and entry["justification"] == note
+    assert entry["details"] == {"to": "chiefLegalAidOfficer", "timesReturned": 2}
+    assert client.post(f"/dlao/cases/{ref}/escalate").status_code == 409

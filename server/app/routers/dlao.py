@@ -251,8 +251,14 @@ def case_view(
         "nextHearing": next_hearing_view(case),
         "courtStage": latest_stage(case),
         "triage": ({**case.triage, "status": case.triage_status} if case.triage else None),
+        # T2: how often another office sent the case back.
+        "timesReturned": times_returned(case),
         "incidentId": case.incident_id,
     }
+
+
+def times_returned(case: Case) -> int:
+    return sum(1 for r in case.referrals if r.status == ReferralStatus.RETURNED)
 
 
 def by_urgency(view: dict[str, Any]) -> tuple[int, str, float]:
@@ -445,10 +451,13 @@ def get_case(
     view["referrals"] = [
         {
             "id": r.id,
+            "at": as_utc(r.created_at).isoformat(),
             "from": r.from_office,
             "to": r.to_office,
             "status": r.status,
             "reason": r.reason,
+            "respondedAt": as_utc(r.responded_at).isoformat() if r.responded_at else None,
+            "responseNote": r.response_note,
         }
         for r in case.referrals
     ]
@@ -637,6 +646,40 @@ def remind_lawyer(
         entity_type="case",
         entity_id=case.id,
         details={"lawyerId": case.lawyer_id},
+    )
+    db.commit()
+    return case_view(case)
+
+
+class EscalateIn(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/cases/{ref}/escalate")
+def escalate_to_chief(
+    ref: str,
+    body: EscalateIn | None = None,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    """Send the case above district level, to the Chief Legal Aid Officer (NLASO).
+
+    For a case this office cannot act on (T2), or one that other offices keep
+    sending back: the chief's decision on who handles it binds every office.
+    """
+    case = get_case_or_404(db, ref)
+    if "escalated" in case.flags and "jurisdictionEscalation" not in case.flags:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The case has already been escalated")
+    case.remove_flag("jurisdictionEscalation")
+    case.add_flag("escalated")
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.CASE_ESCALATED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"to": "chiefLegalAidOfficer", "timesReturned": times_returned(case)},
+        justification=((body.note if body else None) or "").strip() or None,
     )
     db.commit()
     return case_view(case)
