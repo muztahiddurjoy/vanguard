@@ -4,12 +4,16 @@ import {
   CircleCheck,
   Clock,
   OctagonAlert,
+  ShieldAlert,
   Undo2,
   type LucideIcon,
 } from "lucide-react"
 
+import { toast } from "sonner"
+
 import { Badge } from "@/components/ui/badge"
-import type { LegalCase, ReferralHop } from "@/data/types"
+import { Button } from "@/components/ui/button"
+import { nextActionOf, type LegalCase, type ReferralHop } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 
@@ -21,12 +25,22 @@ const STATUS: Record<ReferralHop["status"], { Icon: LucideIcon; className: strin
 }
 
 /** T2: every time the case went to another office, and what that office did. */
-export function ReferralHistory({ legalCase: c }: { legalCase: LegalCase }) {
+export function ReferralHistory({
+  legalCase: c,
+  onEscalate,
+}: {
+  legalCase: LegalCase
+  onEscalate: () => void
+}) {
   const { t, f, pick } = useI18n()
   const titleId = useId()
   const hops = c.referrals ?? []
   if (hops.length === 0) return null
   const returned = c.timesReturned ?? hops.filter((r) => r.status === "returned").length
+  // After the second bounce the escalation is always one press away, even while
+  // "What to do now" is still on an earlier step (such as the AI suggestion).
+  const offerEscalation =
+    returned >= 2 && !c.flags.includes("escalated") && nextActionOf(c) !== "escalateJurisdiction"
 
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-2">
@@ -99,6 +113,24 @@ export function ReferralHistory({ legalCase: c }: { legalCase: LegalCase }) {
           )
         })}
       </ol>
+      {offerEscalation && (
+        <div className="flex flex-col gap-3 rounded-lg border border-danger/40 bg-danger-surface p-3 sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm text-danger-foreground">
+            <span className="font-semibold">{t.followUp.chiefTitle}. </span>
+            {t.followUp.chiefBody(f.num(returned))}
+          </p>
+          <Button
+            className="sm:shrink-0"
+            onClick={() => {
+              onEscalate()
+              toast.success(t.followUp.chiefToast(c.id))
+            }}
+          >
+            <ShieldAlert aria-hidden data-icon="inline-start" />
+            {t.followUp.chief}
+          </Button>
+        </div>
+      )}
       {c.flags.includes("escalated") && (
         <p className="flex items-start gap-2 rounded-md bg-success-surface px-3 py-2 text-sm text-success-foreground">
           <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />

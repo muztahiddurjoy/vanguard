@@ -132,6 +132,22 @@ describe("transfers between offices (ping-pong)", () => {
   })
 })
 
+describe("escalation right after the second bounce", () => {
+  it("is offered in the transfers even while the AI suggestion still waits", async () => {
+    // Nabila's triage waits for the officer: "What to do now" is on that first.
+    const { user, dialog } = await openCase("APP-2026-012", "Nabila", "Case information", {})
+    expect(
+      within(dialog).getByText("Sent back twice: ask the Chief Legal Aid Officer to decide"),
+    ).toBeInTheDocument()
+    const history = within(dialog).getByRole("region", { name: "Transfers between offices" })
+    // Already the next step here, so it is not offered twice.
+    expect(
+      within(history).queryByRole("button", { name: "Escalate to Chief Officer" }),
+    ).not.toBeInTheDocument()
+    await user.keyboard("{Escape}")
+  })
+})
+
 describe("sensitive evidence (A3)", () => {
   const evidence = (dialog: HTMLElement) =>
     within(dialog).getByRole("region", { name: "Documents and evidence" })

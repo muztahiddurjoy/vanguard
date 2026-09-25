@@ -11,10 +11,12 @@ export function CaseDetails({
   legalCase: c,
   onReleaseNotice,
   onAcknowledgeEvidence,
+  onEscalate,
 }: {
   legalCase: LegalCase
   onReleaseNotice: (justification: string) => void
   onAcknowledgeEvidence: () => void
+  onEscalate: () => void
 }) {
   const { t, f, pick } = useI18n()
   const sensitive = c.flags.includes("sensitive")
@@ -108,7 +110,7 @@ export function CaseDetails({
         </dl>
       </section>
       <EvidencePanel legalCase={c} onAcknowledge={onAcknowledgeEvidence} />
-      <ReferralHistory legalCase={c} />
+      <ReferralHistory legalCase={c} onEscalate={onEscalate} />
       <RespondentPanel legalCase={c} onRelease={onReleaseNotice} />
       <CallNotes legalCase={c} />
     </div>

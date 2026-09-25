@@ -144,6 +144,7 @@ export function CaseDetailDialog({
               onAcknowledgeEvidence={() =>
                 dispatch({ type: "acknowledgeEvidence", id: c.id, by: officer.id, at: at() })
               }
+              onEscalate={() => dispatch({ type: "escalateJurisdiction", id: c.id, at: at() })}
             />
           </TabsContent>
           {inCourt && (
