@@ -161,6 +161,37 @@ class ElevenLabsTTS:
         chunks = response.aiter_bytes()
         return chunks, await anext(chunks, b"")
 
+    async def check(self) -> tuple[str, str]:
+        """Whether the line can speak, checked without spending any credit.
+
+        ("ok", ""), ("error", why) for a setting that must be fixed, or
+        ("unchecked", why) when ElevenLabs could not tell.
+        """
+        s = self.settings
+        base, model_id = s.elevenlabs_base_url.rstrip("/"), s.elevenlabs_model_id
+        try:
+            models = await self._http().get(f"{base}/v1/models", timeout=10.0)
+            if models.status_code in (401, 403):
+                return "error", f"ElevenLabs rejected the API key ({models.status_code})"
+            if models.status_code != 200:
+                return "unchecked", f"ElevenLabs answered {models.status_code} for its models"
+            model = next((m for m in models.json() if m.get("model_id") == model_id), None)
+            if model is None:
+                return "error", f"ElevenLabs has no model {model_id!r} for this account"
+            if "bn" not in {lang.get("language_id") for lang in model.get("languages", [])}:
+                return "error", (
+                    f"{model_id} does not speak Bangla (callers would hear a Hindi accent); "
+                    "set ELEVENLABS_MODEL_ID=eleven_v3"
+                )
+            voice = await self._http().get(f"{base}/v1/voices/{s.elevenlabs_voice_id}")
+            if voice.status_code in (400, 404):
+                return "error", f"ElevenLabs has no voice {s.elevenlabs_voice_id!r}"
+            if voice.status_code != 200:
+                return "unchecked", f"ElevenLabs answered {voice.status_code} for the voice"
+        except (httpx.HTTPError, ValueError) as exc:
+            return "unchecked", f"ElevenLabs could not be reached: {exc}"
+        return "ok", ""
+
     async def aclose(self) -> None:
         if self._client is not None:
             await self._client.aclose()

@@ -442,6 +442,57 @@ def test_elevenlabs_audio_plays_at_voice_speed_with_the_same_pitch():
     assert b"".join(normal) == tone and len(normal[0]) >= 0.6 * 8000
 
 
+def test_elevenlabs_check_finds_what_would_keep_the_line_silent():
+    def registry(model: dict, voice_status: int = 200, models_status: int = 200):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.headers["xi-api-key"] == "xi"
+            if request.url.path == "/v1/models":
+                return httpx.Response(models_status, json=[model])
+            assert request.url.path == "/v1/voices/voice1"
+            return httpx.Response(voice_status, json={"voice_id": "voice1"})
+
+        return handler
+
+    async def check(handler, **kw):
+        tts = ElevenLabsTTS(_settings(**kw), transport=httpx.MockTransport(handler))
+        try:
+            return await tts.check()
+        finally:
+            await tts.aclose()
+
+    v3 = {"model_id": "eleven_v3", "languages": [{"language_id": "en"}, {"language_id": "bn"}]}
+    flash = {"model_id": "eleven_flash_v2_5", "languages": [{"language_id": "hi"}]}
+    assert asyncio.run(check(registry(v3))) == ("ok", "")
+    result, why = asyncio.run(check(registry(flash), elevenlabs_model_id="eleven_flash_v2_5"))
+    assert result == "error" and "does not speak Bangla" in why
+    assert (
+        asyncio.run(check(registry(flash)))[1]
+        == "ElevenLabs has no model 'eleven_v3' for this account"
+    )
+    assert asyncio.run(check(registry(v3, voice_status=404))) == (
+        "error", "ElevenLabs has no voice 'voice1'",
+    )  # fmt: skip
+    assert asyncio.run(check(registry(v3, models_status=401)))[0] == "error"
+
+    def offline(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline")
+
+    # Only a setting that must be fixed stops the line; an outage is just reported.
+    assert asyncio.run(check(offline))[0] == "unchecked"
+
+
+def test_a_broken_voice_answers_with_a_spoken_message_not_silence(client, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "elevenlabs_api_key", "xi")
+    monkeypatch.setattr(s, "elevenlabs_voice_id", "voice1")
+    monkeypatch.setattr(client.app.state, "voice", "error: ElevenLabs rejected the API key (401)")
+    r = client.post("/telephony/voice", data={"CallSid": "CA1", "From": "+8801712345318"})
+    assert "<Say" in r.text and "9 9 9" in r.text and "<Stream" not in r.text
+    monkeypatch.setattr(client.app.state, "voice", "unchecked: ElevenLabs could not be reached")
+    r = client.post("/telephony/voice", data={"CallSid": "CA1", "From": "+8801712345318"})
+    assert "<Stream" in r.text  # an outage at startup does not silence every call
+
+
 def test_a_reply_that_cannot_be_spoken_is_logged_and_the_call_goes_on(db_engine, caplog):
     class BrokenOnce(FakeTTS):
         async def stream(self, text: str, language: str | None = None):

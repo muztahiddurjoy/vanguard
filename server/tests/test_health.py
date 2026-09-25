@@ -5,3 +5,4 @@ def test_health(client):
     assert r.json()["llm"] is False
     assert r.json()["llm_provider"] == "anthropic"
     assert r.json()["speech_to_text"] is False
+    assert r.json()["voice"] == "off"  # no ElevenLabs key in tests

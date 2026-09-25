@@ -20,14 +20,38 @@ from app.routers import (
     sync,
     telephony,
 )
+from app.services.elevenlabs import ElevenLabsTTS
+
+log = logging.getLogger(__name__)
+
+
+async def voice_status() -> str:
+    """The phone lines' voice: "ok", "off", "error: ..." or "unchecked: ...".
+
+    Checked once at startup, so a wrong key, voice or model shows before a call
+    rather than as silence on it.
+    """
+    tts = ElevenLabsTTS()
+    if not tts.configured:
+        return "off"
+    try:
+        result, why = await tts.check()
+    finally:
+        await tts.aclose()
+    if result == "error":
+        log.error("The phone lines cannot speak: %s", why)
+    elif result == "unchecked":
+        log.warning("The phone lines' voice could not be checked: %s", why)
+    return f"{result}: {why}" if why else result
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     if settings.environment == "production" and settings.nid_hash_key == "dev-only-nid-key":
         raise RuntimeError("Set NID_HASH_KEY before running in production")
     init_db()
+    app.state.voice = await voice_status()
     yield
 
 
@@ -74,6 +98,7 @@ def create_app() -> FastAPI:
             "llm": settings.llm_enabled,
             "llm_provider": settings.llm_provider,
             "speech_to_text": settings.stt_enabled,
+            "voice": getattr(app.state, "voice", "off"),
             "sms_dry_run": settings.sms_dry_run or not settings.adnsms_api_key,
         }
 
