@@ -27,9 +27,8 @@ import base64
 import contextlib
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
@@ -38,6 +37,7 @@ from app.agents.t5_intake import IntakeConversation, conversations, with_token
 from app.database import SessionLocal
 from app.services.case_status import lookup_token
 from app.services.elevenlabs import TextToSpeech, TTSError
+from app.services.speech_to_text import Transcriber
 
 log = logging.getLogger(__name__)
 
@@ -49,20 +49,6 @@ NO_SPEECH_INPUT = {
     "en": "Sorry, we cannot take applications by phone right now. If you are in danger, call 999. "
     "To apply, please visit your Union Digital Centre.",
 }
-
-
-@dataclass
-class TranscriptEvent:
-    kind: Literal["speech_started", "final"]
-    text: str = ""
-
-
-class Transcriber(Protocol):
-    async def feed(self, ulaw: bytes) -> None: ...
-
-    def events(self) -> AsyncIterator[TranscriptEvent]: ...
-
-    async def close(self) -> None: ...
 
 
 def build_transcriber(language: str) -> Transcriber | None:

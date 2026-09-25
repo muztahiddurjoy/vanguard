@@ -11,7 +11,8 @@ from app.config import get_settings
 from app.models import Case
 from app.routers import telephony
 from app.services.elevenlabs import ElevenLabsTTS, TTSError
-from app.services.stream_manager import NO_SPEECH_INPUT, StreamManager, TranscriptEvent
+from app.services.speech_to_text import TranscriptEvent
+from app.services.stream_manager import NO_SPEECH_INPUT, StreamManager
 
 # --- fakes ------------------------------------------------------------------------
 
