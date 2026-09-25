@@ -150,11 +150,7 @@ export interface Identity {
 export type NoticeStatus = "sent" | "held" | "notFound" | "blocked" | "failed"
 
 export type NoticeHoldReason =
-  | "callerDidNotAgree"
-  | "doNotCall"
-  | "sensitive"
-  | "emergency"
-  | "identityNotVerified"
+  "callerDidNotAgree" | "doNotCall" | "sensitive" | "emergency" | "identityNotVerified"
 
 export interface Respondent {
   name: Localized
