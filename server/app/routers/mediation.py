@@ -342,10 +342,8 @@ class SignatureIn(BaseModel):
     device_id: str | None = Field(default=None, max_length=100)
 
 
-@router.post("/signatures", status_code=status.HTTP_201_CREATED)
-def receive_signature(
-    body: SignatureIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
-) -> dict[str, Any]:
+def apply_signature(db: Session, body: SignatureIn, actor: str) -> Document:
+    """Verify and record one T11 signature. Caller commits."""
     doc = get_settlement_or_404(db, body.document_id)
     if doc.status != DocumentStatus.APPROVED:
         raise HTTPException(
@@ -390,5 +388,13 @@ def receive_signature(
             "executed": doc.status == DocumentStatus.EXECUTED,
         },
     )
+    return doc
+
+
+@router.post("/signatures", status_code=status.HTTP_201_CREATED)
+def receive_signature(
+    body: SignatureIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    doc = apply_signature(db, body, actor)
     db.commit()
     return document_view(doc)

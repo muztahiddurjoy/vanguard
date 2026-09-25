@@ -292,21 +292,22 @@ def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -
     return out
 
 
-@router.post("/cases/{ref}/documents", status_code=status.HTTP_201_CREATED)
-async def upload_document(
-    ref: str,
-    file: UploadFile = File(...),
-    kind: DocumentKind = Form(DocumentKind.OTHER),
-    db: Session = Depends(get_db),
-    actor: str = Depends(current_actor),
+def store_document(
+    db: Session,
+    case: Case,
+    *,
+    data: bytes,
+    filename: str | None,
+    content_type: str | None,
+    kind: DocumentKind,
+    actor: str,
 ) -> dict[str, Any]:
-    case = get_case_or_404(db, ref)
-    ctype = (file.content_type or "").split(";")[0].strip()
+    """Validate, store and read one document, and refresh the checklist. Caller commits."""
+    ctype = (content_type or "").split(";")[0].strip()
     if ctype not in ALLOWED_TYPES:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Upload a PDF, JPEG, PNG or text file"
         )
-    data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Files must be 10 MB or smaller")
     if not data:
@@ -321,7 +322,7 @@ async def upload_document(
     doc = Document(
         case_id=case.id,
         kind=kind,
-        filename=(file.filename or "upload")[:255],
+        filename=(filename or "upload")[:255],
         content_type=ctype,
         storage_path=str(path),
         size_bytes=len(data),
@@ -339,7 +340,6 @@ async def upload_document(
         entity_id=case.id,
         details={"documentId": doc.id, "kind": doc.kind, "sha256": digest, "status": doc.status},
     )
-    db.commit()
     return {
         "document": {
             "id": doc.id,
@@ -351,6 +351,28 @@ async def upload_document(
         "checklist": out["checklist"],
         "missing": out["missing"],
     }
+
+
+@router.post("/cases/{ref}/documents", status_code=status.HTTP_201_CREATED)
+async def upload_document(
+    ref: str,
+    file: UploadFile = File(...),
+    kind: DocumentKind = Form(DocumentKind.OTHER),
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    case = get_case_or_404(db, ref)
+    result = store_document(
+        db,
+        case,
+        data=await file.read(MAX_UPLOAD_BYTES + 1),
+        filename=file.filename,
+        content_type=file.content_type,
+        kind=kind,
+        actor=actor,
+    )
+    db.commit()
+    return result
 
 
 # --- T5 conversation ---------------------------------------------------------
