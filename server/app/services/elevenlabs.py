@@ -16,11 +16,16 @@ stalls for 5-10 s before the first audio. A caller would hear dead air, so a
 reply with no audio after ``ELEVENLABS_FIRST_AUDIO_TIMEOUT_S`` is requested
 once more (without a limit the second time).
 
+Twilio plays audio the moment it arrives, and ``eleven_v3`` sends it in
+bursts: played as it comes, half of all replies had audible gaps (measured).
+So the first ``VOICE_START_BUFFER_S`` of each reply is held back and sent at
+once; waiting for it costs about 0.4 s, because the second burst usually
+brings it.
+
 ``eleven_v3`` speaks slowly and ignores the API's ``voice_settings.speed``, so
-the audio is sped up here instead, ``VOICE_SPEED`` times at the same pitch.
-Twilio plays audio the moment it arrives, and at the start of a reply
-``eleven_v3`` sends it little faster than it plays: sped up then, the line
-would stutter. So audio is only sped up while enough is already queued.
+the audio is sped up here instead, ``VOICE_SPEED`` times at the same pitch,
+but only while more than ``CUSHION_S`` is already queued: a sped-up line
+drains Twilio's queue faster than a burst refills it.
 """
 
 import asyncio
@@ -52,9 +57,9 @@ class TextToSpeech(Protocol):
 
 class ElevenLabsTTS:
     OUTPUT_FORMAT = "ulaw_8000"
-    # Audio queued at Twilio before the rest of a reply is sped up (measured on
-    # eleven_v3: no more gaps than at normal speed).
-    CUSHION_S = 0.3
+    # Audio queued at Twilio before a reply is sped up. With a 0.6 s start buffer,
+    # 16 recorded eleven_v3 replies had one gap (70 ms) and played 1.1x faster.
+    CUSHION_S = 1.0
 
     def __init__(
         self,
@@ -100,40 +105,45 @@ class ElevenLabsTTS:
                         log.warning("ElevenLabs gave no audio in %.1fs; asking again", timeout)
                         timeout = None
                         continue
-                    async for chunk in self._at_voice_speed(first, chunks):
+                    async for chunk in self._playable(first, chunks):
                         yield chunk
                     return
         except httpx.HTTPError as exc:
             raise TTSError(f"ElevenLabs request failed: {exc}") from exc
 
-    async def _at_voice_speed(
+    async def _playable(
         self, first: bytes, chunks: AsyncIterator[bytes]
     ) -> AsyncGenerator[bytes, None]:
+        """The reply as Twilio should get it: sped up, its start held back to play smoothly."""
         speed = self.settings.voice_speed
-        if speed == 1.0:
+        hold = int(self.settings.voice_start_buffer_s * SAMPLE_RATE)
+        tempo = TempoChanger(speed)
+        queued_until = 0.0  # when the audio sent so far will have played
+        held: bytes | None = b""  # the start of the reply, until there is enough of it
+
+        async def generated() -> AsyncIterator[bytes]:
             if first:
                 yield first
             async for chunk in chunks:
                 if chunk:
                     yield chunk
-            return
-        tempo = TempoChanger(speed)
-        queued_until = 0.0  # when the audio sent so far will have played
 
-        def at_speed(chunk: bytes) -> bytes:
-            nonlocal queued_until
+        async for chunk in generated():
             now = time.monotonic()
-            tempo.rate = speed if queued_until - now >= self.CUSHION_S else 1.0
-            out = ulaw_encode(tempo.process(ulaw_decode(chunk)))
-            queued_until = max(queued_until, now) + len(out) / SAMPLE_RATE
-            return out
-
-        if faster := at_speed(first):
-            yield faster
-        async for chunk in chunks:
-            if faster := at_speed(chunk):
-                yield faster
-        if rest := ulaw_encode(tempo.flush()):
+            if speed == 1.0:
+                out = chunk
+            else:
+                tempo.rate = speed if queued_until - now >= self.CUSHION_S else 1.0
+                out = ulaw_encode(tempo.process(ulaw_decode(chunk)))
+            if held is not None:
+                held += out
+                if len(held) < hold:
+                    continue
+                out, held = held, None
+            if out:
+                queued_until = max(queued_until, now) + len(out) / SAMPLE_RATE
+                yield out
+        if rest := (held or b"") + ulaw_encode(tempo.flush()):
             yield rest
 
     async def _start(

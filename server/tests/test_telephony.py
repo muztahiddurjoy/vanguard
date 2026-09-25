@@ -420,22 +420,26 @@ def test_elevenlabs_audio_plays_at_voice_speed_with_the_same_pitch():
         assert "voice_settings" not in json.loads(request.content)  # eleven_v3 ignores it
         return httpx.Response(200, content=streamed())
 
-    async def collect(speed: float) -> bytes:
+    async def collect(speed: float) -> list[bytes]:
         tts = ElevenLabsTTS(_settings(voice_speed=speed), transport=httpx.MockTransport(handler))
         try:
-            return b"".join([c async for c in tts.stream("hi", "en")])
+            return [c async for c in tts.stream("hi", "en")]
         finally:
             await tts.aclose()
 
-    faster = asyncio.run(collect(1.25))
-    # The start plays at normal speed until enough is queued at Twilio, then faster.
+    sent = asyncio.run(collect(1.25))
+    # The first 0.6 s go out together, so the line does not stall between bursts.
+    assert len(sent[0]) >= 0.6 * 8000
+    # It plays at normal speed until a second is queued at Twilio, then faster.
+    faster = b"".join(sent)
     cushion = int(ElevenLabsTTS.CUSHION_S * 8000)
     expected = cushion + (len(tone) - cushion) / 1.25
     assert len(faster) == pytest.approx(expected, abs=400 + 240)
     samples = ulaw_decode(faster)
     crossings = sum(1 for a, b in itertools.pairwise(samples) if (a < 0) != (b < 0))
     assert crossings / 2 / (len(samples) / 8000) == pytest.approx(200, rel=0.01)
-    assert asyncio.run(collect(1.0)) == tone
+    normal = asyncio.run(collect(1.0))
+    assert b"".join(normal) == tone and len(normal[0]) >= 0.6 * 8000
 
 
 def test_elevenlabs_errors_raise_tts_error():

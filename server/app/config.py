@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # How much faster than generated the line speaks, at the same pitch. Done on our
     # side (services.audio.TempoChanger): eleven_v3 ignores ElevenLabs' own speed.
     voice_speed: float = Field(default=1.2, ge=0.5, le=2.0)
+    # Audio held back at the start of each reply so the line plays it without gaps
+    # (eleven_v3 streams in bursts). 0 sends audio as it comes.
+    voice_start_buffer_s: float = Field(default=0.6, ge=0.0, le=3.0)
 
     adnsms_api_key: str = ""
     adnsms_api_secret: str = ""
