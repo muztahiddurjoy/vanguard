@@ -1,4 +1,5 @@
 import { CallNotes } from "@/components/case-detail/call-notes"
+import { EvidencePanel } from "@/components/case-detail/evidence-panel"
 import { ProvenancePanel } from "@/components/case-detail/provenance-panel"
 import { ReferralHistory } from "@/components/case-detail/referral-history"
 import { RespondentPanel } from "@/components/case-detail/respondent-panel"
@@ -9,9 +10,11 @@ import { useI18n } from "@/i18n/use-i18n"
 export function CaseDetails({
   legalCase: c,
   onReleaseNotice,
+  onAcknowledgeEvidence,
 }: {
   legalCase: LegalCase
   onReleaseNotice: (justification: string) => void
+  onAcknowledgeEvidence: () => void
 }) {
   const { t, f, pick } = useI18n()
   const sensitive = c.flags.includes("sensitive")
@@ -104,6 +107,7 @@ export function CaseDetails({
           ))}
         </dl>
       </section>
+      <EvidencePanel legalCase={c} onAcknowledge={onAcknowledgeEvidence} />
       <ReferralHistory legalCase={c} />
       <RespondentPanel legalCase={c} onRelease={onReleaseNotice} />
       <CallNotes legalCase={c} />

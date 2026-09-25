@@ -931,7 +931,7 @@ export const en = {
   evidence: {
     title: "Documents and evidence",
     hint: "Files sent with the application, and court orders from the lawyer.",
-    restricted: "Access restricted: viewable only by the authorized receiving DLAO (Role B6).",
+    restricted: "Access Restricted - Viewable only by Authorized Receiving DLAO (Role B6).",
     authorized:
       "You are the authorized receiving DLAO (Role B6). Opening the files is recorded in the case history.",
     show: "Show the files",
@@ -942,15 +942,16 @@ export const en = {
     sentBy: (office: string) => `Sent by ${office}.`,
     acknowledged: (name: string, when: string) =>
       `Receipt acknowledged by ${name}, ${when}. The sending office sees this.`,
-    acknowledge: "Acknowledge receipt",
+    acknowledge: "Acknowledge Receipt",
+    openFailed: "The files could not be opened. Please try again.",
     acknowledgedToast: (id: string) => `${id}: receipt of the evidence acknowledged`,
   },
   pattern: {
     eyebrow: "Pattern alert: lawyer inactivity",
     warning: (missed: string, cases: string) =>
-      `Inactivity threshold reached: missed ${missed} updates across ${cases} cases.`,
+      `Inactivity Threshold Reached: Missed ${missed} updates across ${cases} cases.`,
     body: "Lawyers report every 2 weeks and within 3 days of each hearing. Without these reports, nobody can tell the applicants what is happening in court.",
-    review: "Review and reassign",
+    review: "Review & Reassign",
     title: "Move this lawyer's cases",
     description: (name: string) =>
       `${name} has stopped reporting. Choose the cases to move and the lawyer who takes them. Each move is saved in the case history with your name.`,

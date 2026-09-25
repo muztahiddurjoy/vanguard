@@ -934,6 +934,7 @@ export const bn: Messages = {
     acknowledged: (name, when) =>
       `${name} প্রাপ্তি স্বীকার করেছেন, ${when}। প্রেরক অফিস তা দেখতে পায়।`,
     acknowledge: "প্রাপ্তি স্বীকার করুন",
+    openFailed: "ফাইলগুলো খোলা যায়নি। আবার চেষ্টা করুন।",
     acknowledgedToast: (id) => `${id}: প্রমাণ পাওয়ার স্বীকৃতি দেওয়া হয়েছে`,
   },
   pattern: {

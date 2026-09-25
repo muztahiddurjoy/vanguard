@@ -48,6 +48,16 @@ export function createFormatters(lang: Lang) {
     month: "long",
   })
   const month = new Intl.DateTimeFormat(locale, { month: "short" })
+  const kilobytes = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "kilobyte",
+    maximumFractionDigits: 0,
+  })
+  const megabytes = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "megabyte",
+    maximumFractionDigits: 1,
+  })
   const monthYear = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" })
 
   return {
@@ -61,6 +71,11 @@ export function createFormatters(lang: Lang) {
     longDate: (d: Date | string) => longDate.format(new Date(d)),
     month: (d: Date | string) => month.format(new Date(d)),
     monthYear: (d: Date | string) => monthYear.format(new Date(d)),
+    /** A file size, "820 kB" or "2.4 MB", in the UI's digits. */
+    size: (bytes: number) =>
+      bytes < 1_000_000
+        ? kilobytes.format(Math.max(1, Math.round(bytes / 1000)))
+        : megabytes.format(bytes / 1_000_000),
     /** "Today", "Tomorrow", or e.g. "Friday, 25 September". */
     dayLabel(iso: string, now = Date.now()) {
       const startOf = (t: number) => new Date(t).setHours(0, 0, 0, 0)

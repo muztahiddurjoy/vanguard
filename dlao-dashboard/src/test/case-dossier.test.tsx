@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { DEMO_OFFICER } from "@/data/officer"
 import { renderApp } from "@/test/render-app"
 
 // The sample cases are dated from when they load; keep the clock on today.
@@ -17,8 +18,13 @@ afterEach(() => {
 
 const queueList = () => screen.getByRole("list", { name: "Cases, most urgent first" })
 
-async function openCase(id: string, name: string, tab = "Case information") {
-  const { user } = renderApp()
+async function openCase(
+  id: string,
+  name: string,
+  tab = "Case information",
+  options: Parameters<typeof renderApp>[0] = {},
+) {
+  const { user } = renderApp(options)
   const row = within(queueList())
     .getAllByRole("listitem")
     .find((r) => r.getAttribute("data-case-id") === id)!
@@ -123,5 +129,64 @@ describe("transfers between offices (ping-pong)", () => {
         "Escalated to the Chief Legal Aid Officer after other offices sent it back",
       ),
     ).toBeInTheDocument()
+  })
+})
+
+describe("sensitive evidence (A3)", () => {
+  const evidence = (dialog: HTMLElement) =>
+    within(dialog).getByRole("region", { name: "Documents and evidence" })
+
+  it("stays blurred and unnamed until the authorized receiving DLAO opens it", async () => {
+    const { user, dialog } = await openCase("APP-2026-012", "Nabila")
+    const panel = evidence(dialog)
+    expect(panel).toHaveTextContent(
+      "Access Restricted - Viewable only by Authorized Receiving DLAO (Role B6).",
+    )
+    expect(panel).toHaveTextContent(
+      "Sent by Legal aid office, Dhaka. Waiting for the receiving officer to acknowledge receipt.",
+    )
+    const files = within(panel).getAllByRole("listitem")
+    expect(files).toHaveLength(3)
+    expect(files[0]).toHaveAttribute("data-locked", "true")
+    expect(files[0]).toHaveTextContent("File 1Image · 2.4 MB")
+    expect(panel).not.toHaveTextContent("Facebook post screenshots.png")
+
+    await user.click(within(panel).getByRole("button", { name: "Show the files" }))
+    expect(await within(panel).findByText("Facebook post screenshots.png")).toBeInTheDocument()
+    expect(within(panel).getAllByRole("listitem")[0]).toHaveAttribute("data-locked", "false")
+
+    await user.click(within(panel).getByRole("button", { name: "Acknowledge Receipt" }))
+    expect(panel).toHaveTextContent(
+      /Receipt acknowledged by Farhana Rahman, .+\. The sending office sees this\./,
+    )
+    expect(
+      within(panel).queryByRole("button", { name: "Acknowledge Receipt" }),
+    ).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole("tab", { name: "History" }))
+    expect(within(dialog).getByText("Sensitive evidence opened")).toBeInTheDocument()
+    expect(
+      within(dialog).getByText("Receipt of the sensitive evidence acknowledged"),
+    ).toBeInTheDocument()
+  })
+
+  it("cannot be opened by an officer without Role B6", async () => {
+    const clerk = { ...DEMO_OFFICER, id: "DLAO-RGP-0207", sensitiveAccess: false }
+    const { dialog } = await openCase("APP-2026-012", "Nabila", "Case information", {
+      officer: clerk,
+    })
+    const panel = evidence(dialog)
+    expect(panel).toHaveTextContent("Access Restricted")
+    expect(within(panel).queryByRole("button", { name: "Show the files" })).not.toBeInTheDocument()
+    expect(
+      within(panel).queryByRole("button", { name: "Acknowledge Receipt" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("names the files of a case that is not sensitive", async () => {
+    const { dialog } = await openCase("DLAS-2026-045", "Abdul Malek")
+    const panel = evidence(dialog)
+    expect(panel).toHaveTextContent("Khatian (record of rights).pdfPDF document · 820 kB")
+    expect(panel).not.toHaveTextContent("Access Restricted")
   })
 })

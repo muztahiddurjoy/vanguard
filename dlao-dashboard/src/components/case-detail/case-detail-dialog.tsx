@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { EyeOff } from "lucide-react"
 
+import { useOfficer } from "@/auth/use-auth"
 import { CaseFlags } from "@/components/case/case-flags"
 import { DoNotCallAlert } from "@/components/case/do-not-call"
 import { TrackBadge } from "@/components/case/track-badge"
@@ -42,6 +43,7 @@ export function CaseDetailDialog({
   onOpenDuplicate: (c: LegalCase) => void
 }) {
   const { t, pick } = useI18n()
+  const officer = useOfficer()
   const [tab, setTab] = useState<CaseTab>(initialTab)
   const at = () => new Date().toISOString()
   const sensitive = c.flags.includes("sensitive")
@@ -134,6 +136,9 @@ export function CaseDetailDialog({
               legalCase={c}
               onReleaseNotice={(justification) =>
                 dispatch({ type: "releaseNotice", id: c.id, justification, at: at() })
+              }
+              onAcknowledgeEvidence={() =>
+                dispatch({ type: "acknowledgeEvidence", id: c.id, by: officer.id, at: at() })
               }
             />
           </TabsContent>

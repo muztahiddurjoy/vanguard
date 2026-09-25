@@ -6,7 +6,7 @@ import { RouterProvider } from "react-router/dom"
 import { AuthProvider } from "@/auth/auth-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { DEMO_OFFICER } from "@/data/officer"
-import type { Lang } from "@/data/types"
+import type { Lang, Officer } from "@/data/types"
 import { I18nProvider } from "@/i18n/provider"
 import { PreferencesProvider } from "@/preferences/preferences-provider"
 import { routes } from "@/routes"
@@ -16,13 +16,14 @@ export function renderApp({
   path = "/queue",
   signedIn = true,
   lang = "en",
-}: { path?: string; signedIn?: boolean; lang?: Lang } = {}) {
+  officer = DEMO_OFFICER,
+}: { path?: string; signedIn?: boolean; lang?: Lang; officer?: Officer } = {}) {
   const user = userEvent.setup()
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(
     <I18nProvider initialLang={lang}>
       <PreferencesProvider>
-        <AuthProvider initialUser={signedIn ? DEMO_OFFICER : null}>
+        <AuthProvider initialUser={signedIn ? officer : null}>
           <TooltipProvider>
             <RouterProvider router={router} />
           </TooltipProvider>
