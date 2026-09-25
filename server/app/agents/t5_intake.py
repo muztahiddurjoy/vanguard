@@ -18,11 +18,15 @@ utterance in, one reply out. Each turn the graph
 
 A caller cannot read out a 10- or 17-digit NID on a call, so they give their
 name and answer security questions only they should know (father's name,
-permanent district and date of birth, as on their NID). They may apply for
-themselves or for their father, mother, brother or sister: the relative is
-confirmed through the registry's parent links. When the registry cannot
-confirm someone, intake carries on and the application is marked unverified;
-nobody is turned away.
+permanent district and date of birth, as on their NID). When they cannot
+answer, or their answers match no one twice, the registry is searched
+instead: the SIM they are calling from is registered to an NID, and if the
+name they gave is that person's, or a family member's on their NID record
+(a wife calling on her husband's phone), they are confirmed. They may apply
+for themselves or for their father, mother, brother or sister: the relative
+is confirmed through the registry's parent links. When the registry cannot
+confirm someone, intake carries on and the application is marked
+unverified; nobody is turned away.
 
 The questions are short and plain because callers may be frightened, may be
 calling for someone else, and may be overheard. Conversation state is kept by
@@ -650,34 +654,75 @@ def build_intake_graph(
         nudge = NOT_LEGAL if kind == "other" else KEEP_LISTENING
         return {"asks": asks, "ack": nudge[lang].format(helpline=helpline)}
 
+    def confirmed(state: IntakeState, caller: Citizen, via: str, lang: Lang) -> IntakeState:
+        phone = state.get("caller_phone")
+        return {
+            "identity": "verified",
+            "identity_via": via,
+            "caller_record": caller.model_dump(mode="json"),
+            "caller_sim_registered": bool(phone and phone in caller.phones),
+            "ack": VERIFIED[lang].format(name=_name_in(caller, lang)),
+        }
+
     def verify_caller(state: IntakeState, slots: dict[str, Any], lang: Lang) -> IntakeState:
-        """Match the caller's name and security answers to exactly one NID record."""
-        born = parse_date(slots["date_of_birth"]) if slots["date_of_birth"] else None
-        matches: list[Citizen] | None = []
-        if registry is not None and slots["father_name"] and slots["permanent_district"] and born:
-            matches = registry.match(
-                name=slots["caller_name"],
-                father_name=slots["father_name"],
-                permanent_district=slots["permanent_district"],
-                date_of_birth=born,
-            )
+        """Match the caller's name and security answers to exactly one NID record.
+
+        A caller who cannot answer, or whose answers match no one twice, is
+        looked up through the SIM they are calling from instead.
+        """
+        assert registry is not None
+        # Some answers may still be missing: one the caller could not give is enough.
+        born = parse_date(slots.get("date_of_birth") or "")
+        answered = slots.get("father_name") and slots.get("permanent_district") and born
+        if not (slots["caller_name"] and answered):
+            return caller_by_sim(state, slots["caller_name"], lang)
+        matches = registry.match(
+            name=slots["caller_name"],
+            father_name=slots["father_name"],
+            permanent_district=slots["permanent_district"],
+            date_of_birth=born,
+        )
         if matches is None:
             return {"identity": "unavailable", "ack": REGISTRY_DOWN[lang]}
         if len(matches) == 1:
-            caller = matches[0]
-            caller_phone = state.get("caller_phone")
-            return {
-                "identity": "verified",
-                "caller_record": caller.model_dump(mode="json"),
-                "caller_sim_registered": bool(caller_phone and caller_phone in caller.phones),
-                "ack": VERIFIED[lang].format(name=_name_in(caller, lang)),
-            }
+            return confirmed(state, matches[0], "answers", lang)
         attempts = state.get("verify_attempts", 0) + 1
         if attempts < MAX_VERIFY_ATTEMPTS:
             for key in IDENTITY_SLOTS:
                 slots.pop(key, None)
             return {"verify_attempts": attempts, "ack": RETRY[lang]}
-        return {"identity": "failed", "verify_attempts": attempts, "ack": NOT_VERIFIED[lang]}
+        return {"verify_attempts": attempts, **caller_by_sim(state, slots["caller_name"], lang)}
+
+    def caller_by_sim(state: IntakeState, name: str, lang: Lang) -> IntakeState:
+        """Whether the caller is who their phone is registered to, or in that person's family."""
+        assert registry is not None
+        phone = state.get("caller_phone")
+        not_verified: IntakeState = {"identity": "failed", "ack": NOT_VERIFIED[lang]}
+        if not (phone and name):
+            return not_verified
+        nid = registry.sim_owner(phone)
+        owner = registry.citizen(nid) if nid else None
+        if nid is None or (nid and owner is None):
+            return {"identity": "unavailable", "ack": REGISTRY_DOWN[lang]}
+        if owner is None:
+            return not_verified  # the SIM is not registered to anyone
+        if name_similarity(name, owner.name.en, owner.name.bn) >= FAMILY_MATCH:
+            return confirmed(state, owner, "sim", lang)
+        family = registry.family(owner.nid)
+        if family is None:
+            return {"identity": "unavailable", "ack": REGISTRY_DOWN[lang]}
+        relatives = [
+            family.father,
+            family.mother,
+            family.spouse,
+            *family.siblings,
+            *family.children,
+        ]
+        scored = [(name_similarity(name, c.name.en, c.name.bn), c) for c in relatives if c]
+        score, best = max(scored, key=lambda sc: sc[0], default=(0.0, None))
+        if best is None or score < FAMILY_MATCH:
+            return not_verified
+        return confirmed(state, best, "sim_family", lang)
 
     def find_relative(caller: Citizen, filing: str, said: str, lang: Lang) -> IntakeState:
         """Follow the caller's NID parent links to the relative they named."""
@@ -743,8 +788,12 @@ def build_intake_graph(
             update.update(part)
             state.update(part)  # later steps in this turn see the result
 
-        if state.get("identity") == "pending" and all(
-            k in slots for k in ("caller_name", *IDENTITY_SLOTS)
+        # Once every security answer is in, or one of them is not known.
+        answers = [slots.get(k) for k in IDENTITY_SLOTS]
+        if (
+            state.get("identity") == "pending"
+            and "caller_name" in slots
+            and (None not in answers or "" in answers)
         ):
             merge(verify_caller(state, slots, lang))
             if state.get("identity") == "pending":  # asked again: each question starts over

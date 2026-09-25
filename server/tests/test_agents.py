@@ -211,6 +211,42 @@ def test_a_question_is_asked_twice_at_most_then_skipped():
     assert s["slots"]["district"] == "" and s["asking"] == "respondent_name"
 
 
+def test_caller_who_cannot_answer_is_found_through_the_sim_they_call_from():
+    registry = FakeRegistry()
+    conv = IntakeConversation(use_default_llm=False, registry=registry)
+    conv.start("x1", channel="hotline_16699", language="en", caller_phone="01811223344")
+    s = talk(conv, "x1", WAGES, "for myself", "Rafiqul Islam", "I don't know")
+    # One unknown answer is enough: the other security questions are not asked.
+    assert (s["identity"], s["identity_via"]) == ("verified", "sim")
+    assert s["caller_record"]["nid"] == "4600000003" and s["caller_sim_registered"] is True
+    assert s["reply"] == (
+        "Thank you, Rafiqul Islam. Your identity is confirmed. "
+        + t5_intake.QUESTIONS["respondent_name"]["en"]
+    )
+    assert registry.calls == ["sim_owner", "citizen"]
+
+
+def test_wife_calling_on_her_husbands_phone_is_found_through_his_nid_family():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    conv.start("x2", channel="hotline_16699", caller_phone="01722000333")  # Jalal's SIM
+    s = talk(conv, "x2", "আমার স্বামী আমাকে প্রতিদিন মারধর করে", "আমার নিজের জন্য",
+             "আমার নাম ময়ূরী আক্তার", "জানি না")  # fmt: skip
+    assert (s["identity"], s["identity_via"]) == ("verified", "sim_family")
+    assert s["caller_record"]["nid"] == "4600000012"
+    assert s["caller_sim_registered"] is False  # the phone is his, not hers
+
+
+def test_wrong_answers_twice_then_a_sim_that_is_not_theirs_leaves_them_unverified():
+    conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
+    conv.start("x3", channel="hotline_16699", language="en", caller_phone="01911000001")
+    s = talk(conv, "x3", WAGES, "myself", "Rafiqul Islam", "Abdul Karim", "Rangpur",
+             "3 June 1994", "Abdul Karim", "Rangpur", "4 June 1994")  # fmt: skip
+    # Kamal's SIM, and Kamal's NID record has no Rafiqul Islam in his family.
+    assert (s["identity"], s["verify_attempts"]) == ("failed", 2)
+    assert s["reply"].startswith(t5_intake.NOT_VERIFIED["en"])
+    assert "caller_record" not in s
+
+
 def test_registry_outage_skips_verification_without_retrying():
     registry = FakeRegistry(down=True)
     conv = IntakeConversation(use_default_llm=False, registry=registry)

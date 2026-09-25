@@ -76,6 +76,9 @@ class IntakeState(TypedDict, total=False):
     # NID checks: "pending" | "verified" | "failed" | "unavailable" for the caller;
     # the applicant and respondent statuses add "unverified", "not_found", "none", ...
     identity: str
+    # How a verified caller was confirmed: "answers" (the security questions), "sim"
+    # (the SIM they called from is theirs) or "sim_family" (it is a relative's).
+    identity_via: str
     verify_attempts: int
     applicant_status: str
     respondent_status: str
