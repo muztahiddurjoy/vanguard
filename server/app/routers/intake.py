@@ -10,7 +10,6 @@ import contextlib
 import uuid
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -55,9 +54,9 @@ from app.routers.dlao import (
 )
 from app.routers.duplicates import cases_of, find_duplicates_for
 from app.services.adnsms import normalize_bd_mobile
-from app.services.crypto import sha256_hex
 from app.services.nid_registry import Citizen
 from app.services.notices import send_intake_notices
+from app.services.uploads import MAX_UPLOAD_BYTES, save_upload
 
 router = APIRouter(prefix="/intake", tags=["intake"], dependencies=[Depends(require_api_token)])
 
@@ -295,14 +294,6 @@ def udc_intake(
 
 # --- documents (T6) ----------------------------------------------------------
 
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-ALLOWED_TYPES = {
-    "application/pdf": ".pdf",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "text/plain": ".txt",
-}
-
 
 def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -> DocumentState:
     """Run T6 on the new document and rebuild the case checklist.
@@ -315,7 +306,8 @@ def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -
     docs: list[dict[str, Any]] = [
         {"id": d.id, "kind": d.kind, "content_type": d.content_type, "text": d.extracted_text}
         for d in existing
-        if d.kind != DocumentKind.SETTLEMENT_DRAFT
+        # Not intake evidence: drafts are generated here, court orders come from the lawyer.
+        if d.kind not in (DocumentKind.SETTLEMENT_DRAFT, DocumentKind.COURT_ORDER)
     ]
     docs.append(
         {
@@ -359,34 +351,10 @@ def store_document(
     actor: str,
 ) -> dict[str, Any]:
     """Validate, store and read one document, and refresh the checklist. Caller commits."""
-    ctype = (content_type or "").split(";")[0].strip()
-    if ctype not in ALLOWED_TYPES:
-        raise HTTPException(
-            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Upload a PDF, JPEG, PNG or text file"
-        )
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Files must be 10 MB or smaller")
-    if not data:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The file is empty")
-
-    digest = sha256_hex(data)
-    folder = Path(get_settings().upload_dir) / str(case.id)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{digest}{ALLOWED_TYPES[ctype]}"
-    path.write_bytes(data)
-
-    doc = Document(
-        case_id=case.id,
-        kind=kind,
-        filename=(filename or "upload")[:255],
-        content_type=ctype,
-        storage_path=str(path),
-        size_bytes=len(data),
-        sha256=digest,
-        uploaded_by=actor,
+    doc = save_upload(
+        db, case, data=data, filename=filename, content_type=content_type, kind=kind, actor=actor
     )
-    db.add(doc)
-    db.flush()
+    digest = doc.sha256
     out = refresh_checklist(db, case, doc, data)
     record_audit(
         db,

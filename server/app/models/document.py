@@ -21,6 +21,8 @@ class DocumentKind(StrEnum):
     PHOTO_EVIDENCE = "photo_evidence"
     INCOME_PROOF = "income_proof"
     SETTLEMENT_DRAFT = "settlement_draft"
+    # An order sheet or certified copy a panel lawyer sent with a court update.
+    COURT_ORDER = "court_order"
     OTHER = "other"
 
 
