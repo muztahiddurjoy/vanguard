@@ -11,11 +11,12 @@ decision.
 
 ## How a case moves
 
-1. **Someone calls the hotline.** The AI asks who the application is for (themselves, or their
-   father, mother, brother or sister), the caller's name, and three NID security questions:
-   father's name, permanent district and date of birth. It confirms them, and any relative,
-   against the NID registry, then asks what happened and who it is against. It notes
-   everything the caller says.
+1. **Someone calls the hotline.** The AI greets them and listens: it asks nothing until the
+   caller has said what happened. Danger in those first words gets the 999 line at once. Once
+   it sounds like a case, the AI asks only what it still needs: who the application is for,
+   the caller's name and three NID security questions (father's name, permanent district,
+   date of birth). If the caller cannot answer, it searches the NID registry itself, through
+   the SIM they are calling from. It notes everything the caller says.
 2. **Danger changes everything.** If the caller seems to be held hostage, or the call is cut
    while they describe violence, the case is marked **Do not call this number**. Calls and SMS
    to them are blocked, and what they said before the line went dead is kept.

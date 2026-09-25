@@ -68,7 +68,7 @@ tests/
 | T2 | Referrals between district offices; ping-pong is escalated, not forwarded | `/referrals` |
 | T3 | Group incidents linking cases from one event, with suggestions | `/incidents` |
 | T4 | Fuzzy duplicate detection on every intake; merge blocked when NIDs differ | `/duplicates` |
-| T5 | Conversational intake for the hotline, UDC and web: NID security questions, filing for a parent or sibling, respondent lookup, call notes, cut calls | `/intake/conversations`, telephony |
+| T5 | Conversational intake for the hotline, UDC and web: listens to what happened first, NID security questions with a SIM search when they fail, filing for a parent or sibling, respondent lookup, call notes, cut calls | `/intake/conversations`, telephony |
 | T6 | Document reading (OCR), summaries and a missing-documents checklist | `POST /intake/cases/{ref}/documents` |
 | T7 | Settlement drafting under Section 21C, LASA 2000 | `POST /mediation/cases/{ref}/settlement-draft` |
 | T8 | Triage: categorization → compliance → urgency → track (advice / mediation / sensitive mark) | runs on every intake; `/dlao/cases/{ref}/triage/*`, `/dlao/cases/{ref}/track` |
@@ -85,29 +85,55 @@ either reference: `APP-2026-001` or, once promoted, `DLAS-2026-045`.
 
 ## A call to the hotline, step by step
 
-1. **Who is it for?** The caller applies for themselves, or for their father, mother,
+1. **Greet, then listen.** The line answers "লিগ্যাল এইড। আমি শুনছি, বলুন কী হয়েছে।"
+   ("Legal aid. I'm listening, tell me what happened.") and asks nothing until the
+   caller has said what happened. While they talk, a pause has to be longer
+   (`STT_STORY_END_OF_TURN_MS`) before the line answers, and the caller can always
+   talk over the line. "Hello?" and fragments only get encouragement to go on.
+2. **Does it sound like a case?** A known problem (land, wages, dowry, ...), a warning
+   sign, or an account of some length is enough by rules. With a model configured, it
+   also reads the account: a case, clearly not a legal matter (told what the line is
+   for and given `HELPLINE_NUMBER`), or not said yet. The model can only add: a problem
+   the rules know is never turned away. After three tries a short account is taken as
+   it is; a caller who never says anything is asked to call again. The account, in
+   the caller's own words, is the application's narrative, and anything already said
+   (who it is for, who it is against, where they live) is not asked again.
+3. **Who is it for?** The caller applies for themselves, or for their father, mother,
    brother or sister (or someone else, such as a neighbour).
-2. **Who is calling?** The caller gives their name, then answers three security
+4. **Who is calling?** The caller gives their name, then answers three security
    questions from their NID: father's name, permanent district and date of birth.
    Callers cannot read a 10- or 17-digit NID aloud, so these stand in for it. Exactly
-   one matching registry record verifies them. A mismatch gets one retry; after that,
-   or if the registry is down, intake carries on and the application is marked
-   unverified. Nobody is turned away.
-3. **The relative.** A parent is found through the caller's NID parent links and a
+   one matching registry record verifies them. A mismatch gets one retry.
+5. **When they cannot answer, the registry is searched.** A caller who does not know
+   an answer, or whose answers match no one twice, is looked up through the SIM they
+   are calling from: if the name they gave is its owner's, or a relative's on the
+   owner's NID record (a wife calling on her husband's phone), they are confirmed.
+   The case records which way (`identity.callerVerifiedBy`: answers, SIM or a
+   relative's SIM) and the dashboard shows it. Otherwise, or if the registry is down,
+   intake carries on and the application is marked unverified. Nobody is turned away.
+6. **The relative.** A parent is found through the caller's NID parent links and a
    sibling through shared parents; the name the caller gives must match. The
    applicant's details (address, NID, parents, date of birth) then come from the
    record.
-4. **What happened**, and **who it is against**. The respondent is looked up by name,
-   father's name and district to find the SIMs registered under their NID. The caller
-   is asked whether it is safe to send them an SMS now.
-5. **Contact.** The caller ID is used for someone applying for themselves; otherwise
-   the caller is asked for a safe number, and when it is safe to call.
-6. **The application** is created with everything said as call notes, triaged by T8
+7. **Who it is against.** The respondent is looked up by name, father's name and
+   district to find the SIMs registered under their NID. If the caller does not know
+   those, the respondent is looked for among the applicant's relatives on their NID
+   record (a husband by his first name). The caller is asked whether it is safe to
+   send them an SMS now.
+8. **Contact.** The caller ID is used for someone applying for themselves, unless the
+   registry shows the phone belongs to someone else (it may be the abuser's); then,
+   as for anyone applying for someone else, the caller is asked for a safe number,
+   and when it is safe to call.
+9. **The application** is created with everything said as call notes, triaged by T8
    (priority and the advice / mediation / sensitive mark), and the notices go out
    (below). The caller hears their tracking number, digit by digit.
 
-Throughout, T5 listens for danger. Immediate danger ends the call with the 999 line
-and an escalated, critical application. Signs that the caller is being held
+No question is asked more than twice: one the caller cannot answer is recorded as
+not known, and an officer follows up.
+
+Throughout, T5 listens for danger, from the first words: the rules' phrases, or the
+model hearing that someone is in danger right now. Immediate danger ends the call
+with the 999 line and an escalated, critical application. Signs that the caller is being held
 ("locked me in", "আটকে রেখেছে") make the applicant **do-not-call**: the caller is told
 we will not call back, intake carries on quietly, and if the line goes dead what was
 said is still filed. A call cut while the caller was describing violence is marked
@@ -250,7 +276,11 @@ operation that made the case.
    Replies stream over HTTP, since the WebSocket endpoint rejects the Bangla models, in
    the call's language (`language_code`). `eleven_v3` usually starts within about a
    second but sometimes stalls, so a reply with no audio after
-   `ELEVENLABS_FIRST_AUDIO_TIMEOUT_S` (2.5 s) is requested once more.
+   `ELEVENLABS_FIRST_AUDIO_TIMEOUT_S` (2.5 s) is requested once more. `eleven_v3`
+   speaks slowly and ignores ElevenLabs' `speed` setting, so the server speeds the
+   audio up itself, `VOICE_SPEED` times (default 1.2) at the same pitch
+   (`services/audio.py`, WSOLA). `eleven_v3_conversational` also speaks Bangla and
+   starts about 0.6 s sooner; listen to it before switching `ELEVENLABS_MODEL_ID`.
 3. Set `TWILIO_AUTH_TOKEN`. Signature checks are always on when
    `ENVIRONMENT=production`.
 4. Set `OPENAI_API_KEY` for speech-to-text. Without it, callers hear a short message
@@ -264,10 +294,12 @@ line. The model accepts 24 kHz PCM and has no voice detection, so the service
 (`services/audio.py`) decodes Twilio's μ-law, upsamples it, and marks the caller's
 turns itself:
 
-- A turn starts after 200 ms of speech. The line stops talking at once (barge-in) and
-  the turn is sent with half a second of pre-roll.
-- A turn ends after `STT_END_OF_TURN_MS` (700 ms) of quiet. It is committed, and its
-  transcript becomes the agent's next input. Only turns are sent, never the silence
+- A turn starts after 200 ms of speech. The line stops talking at once (barge-in),
+  including audio already sent to Twilio but not yet played, and the turn is sent with
+  half a second of pre-roll.
+- A turn ends after `STT_END_OF_TURN_MS` (700 ms) of quiet, or
+  `STT_STORY_END_OF_TURN_MS` (1200 ms) while an intake caller is still saying what
+  happened. It is committed, and its transcript becomes the agent's next input. Only turns are sent, never the silence
   (or our own reply echoing) between them.
 - Speech means three times the line's learned noise floor and at least
   `STT_MIN_SPEECH_RMS`. Raise it if line noise interrupts the replies; lower it if
@@ -337,6 +369,10 @@ See `.env.example` for every setting. For production, set at least:
   legal advice. Have them checked by the legal aid office. The hostage terms are
   person-specific on purpose ("আটকে রেখেছে" alone also means withheld wages), and a
   past event can still trip them: an officer lifts do-not-call after checking.
+- **Identity by SIM:** confirming a caller through the SIM they call from relies on
+  caller ID, which can be spoofed, and on the name they give. It is only a fallback
+  for a caller who cannot answer the security questions, and the dashboard says when
+  it was used.
 - **NID registry:** `nid-server` holds fictional records. A real Election Commission
   integration needs its own agreement, client and data-protection review.
 - **Helpline tracking** is by the eight-digit number alone, with no rate limit yet;
