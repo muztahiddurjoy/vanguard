@@ -24,7 +24,6 @@ from app.config import get_settings
 from app.database import as_utc, get_db, utcnow
 from app.models import (
     AuditAction,
-    AuditEntry,
     Case,
     CaseStatus,
     CourtStage,
@@ -41,6 +40,7 @@ from app.services.court_progress import (
     missed_updates,
     next_hearing,
     next_hearing_view,
+    reminded_at,
     update_due_at,
     update_view,
 )
@@ -118,6 +118,8 @@ def lawyer_case_view(case: Case, now: datetime) -> dict[str, Any]:
         ),
         "updateDueAt": due.isoformat() if due else None,
         "missedUpdates": missed,
+        # The office is waiting for this lawyer's report.
+        "remindedAt": reminded.isoformat() if (reminded := reminded_at(case)) else None,
         "nextHearing": next_hearing_view(case),
         "courtStage": latest_stage(case),
         "updates": [update_view(u) for u in case.lawyer_updates],
@@ -155,22 +157,7 @@ def my_case(
         db, actor=lawyer.id, action=AuditAction.CASE_VIEWED, entity_type="case", entity_id=case.id
     )
     db.commit()
-    view = lawyer_case_view(case, utcnow())
-    # Reminders the office sent this lawyer, so they know the office is waiting.
-    view["reminders"] = [
-        as_utc(at).isoformat()
-        for at, details in db.execute(
-            select(AuditEntry.occurred_at, AuditEntry.details)
-            .where(
-                AuditEntry.entity_type == "case",
-                AuditEntry.entity_id == str(case.id),
-                AuditEntry.action == AuditAction.LAWYER_REMINDED,
-            )
-            .order_by(AuditEntry.seq)
-        )
-        if (details or {}).get("lawyerId") == lawyer.id
-    ]
-    return view
+    return lawyer_case_view(case, utcnow())
 
 
 class AttachmentIn(BaseModel):

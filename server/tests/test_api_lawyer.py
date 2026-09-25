@@ -191,3 +191,40 @@ def test_reassigned_case_moves_to_the_new_lawyer_with_its_history(client):
     assert post_update(client).status_code == 403
     [case] = client.get("/lawyer/cases", headers={"X-Lawyer-Id": "LAW-07"}).json()
     assert [u["lawyerId"] for u in case["updates"]] == ["LAW-21"]
+
+
+def test_reminder_reaches_the_lawyer_and_waits_one_period(client, db):
+    create_moyuri(client)
+    assert client.post(f"/dlao/cases/{REF}/lawyer-reminder").status_code == 409
+    assign(client, "LAW-21")
+    case = db.scalars(select(Case)).one()
+    case.lawyer_last_update_at = utcnow() - timedelta(days=20)
+    db.commit()
+    assert "alerts" in client.get(f"/dlao/cases/{REF}").json()["queues"]
+
+    r = client.post(f"/dlao/cases/{REF}/lawyer-reminder", headers=OFFICER)
+    assert r.status_code == 200
+    # Still late, but now waiting on the lawyer rather than the officer.
+    assert "lawyerInactivity" in r.json()["flags"] and "alerts" not in r.json()["queues"]
+    assert r.json()["lawyer"]["remindedAt"] is not None
+    mine = client.get(f"/lawyer/cases/{REF}", headers=LAWYER).json()
+    assert mine["remindedAt"] == r.json()["lawyer"]["remindedAt"]
+    entry = client.get(f"/dlao/cases/{REF}").json()["activity"][-1]
+    assert entry["action"] == "lawyer.reminded" and entry["details"] == {"lawyerId": "LAW-21"}
+
+    # A reminder answered by an update is done with.
+    post_update(client)
+    assert client.get(f"/lawyer/cases/{REF}", headers=LAWYER).json()["remindedAt"] is None
+
+
+def test_unanswered_reminder_raises_the_alert_again(client, db):
+    create_moyuri(client)
+    assign(client, "LAW-21")
+    case = db.scalars(select(Case)).one()
+    case.lawyer_last_update_at = utcnow() - timedelta(days=40)
+    case.notices = {
+        **case.notices,
+        "lawyerReminder": {"lawyerId": "LAW-21", "at": (utcnow() - timedelta(days=15)).isoformat()},
+    }
+    db.commit()
+    assert "alerts" in client.get(f"/dlao/cases/{REF}").json()["queues"]

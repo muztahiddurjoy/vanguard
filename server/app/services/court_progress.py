@@ -80,6 +80,21 @@ def update_due_at(case: Case) -> datetime | None:
     return min(due, after_hearing) if after_hearing else due
 
 
+def reminded_at(case: Case) -> datetime | None:
+    """When the office last reminded the current lawyer, if they have not reported since."""
+    reminder = (case.notices or {}).get("lawyerReminder") or {}
+    if reminder.get("lawyerId") != case.lawyer_id or not reminder.get("at"):
+        return None
+    at = as_utc(datetime.fromisoformat(reminder["at"]))
+    return at if at > _last_report(case) else None
+
+
+def waiting_after_reminder(case: Case, now: datetime) -> bool:
+    """A reminder gives the lawyer one more reporting period before the alert returns."""
+    at = reminded_at(case)
+    return at is not None and now - at < timedelta(days=get_settings().lawyer_inactivity_days)
+
+
 def missed_updates(case: Case, now: datetime) -> int:
     """Fortnightly reports missed since the last one; a missed hearing report counts too."""
     if not case.lawyer_id:

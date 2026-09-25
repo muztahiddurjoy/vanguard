@@ -43,8 +43,10 @@ from app.services.court_progress import (
     latest_stage,
     missed_updates,
     next_hearing_view,
+    reminded_at,
     update_due_at,
     update_view,
+    waiting_after_reminder,
 )
 from app.services.panel import get_lawyer
 
@@ -109,7 +111,9 @@ def queues_for(case: Case, flags: list[str], now: datetime) -> list[str]:
     # Set when T4 queues a review, cleared once no review for its parties is pending.
     if "possibleDuplicate" in flags:
         queues.append("duplicates")
-    if {"overdue", "lawyerInactivity", "jurisdictionEscalation"} & set(flags):
+    # A late lawyer who was just reminded is waiting on the lawyer, not the officer.
+    late_lawyer = "lawyerInactivity" in flags and not waiting_after_reminder(case, now)
+    if {"overdue", "jurisdictionEscalation"} & set(flags) or late_lawyer:
         queues.append("alerts")
     return queues
 
@@ -147,6 +151,7 @@ def lawyer_view(case: Case, now: datetime) -> dict[str, Any]:
         ),
         "missedUpdates": missed_updates(case, now),
         "updateDueAt": due.isoformat() if due else None,
+        "remindedAt": reminded.isoformat() if (reminded := reminded_at(case)) else None,
     }
 
 
@@ -609,6 +614,30 @@ def lawyer_update_received(
         raise HTTPException(status.HTTP_409_CONFLICT, "No lawyer assigned")
     case.lawyer_last_update_at = utcnow()
     case.remove_flag("lawyerInactivity")
+    db.commit()
+    return case_view(case)
+
+
+@router.post("/cases/{ref}/lawyer-reminder")
+def remind_lawyer(
+    ref: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """Ask the lawyer for their overdue report. They see it on their own dashboard."""
+    case = get_case_or_404(db, ref)
+    if not case.lawyer_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No lawyer assigned")
+    case.notices = {
+        **(case.notices or {}),
+        "lawyerReminder": {"lawyerId": case.lawyer_id, "at": utcnow().isoformat()},
+    }
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.LAWYER_REMINDED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"lawyerId": case.lawyer_id},
+    )
     db.commit()
     return case_view(case)
 
