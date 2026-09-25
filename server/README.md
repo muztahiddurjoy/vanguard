@@ -243,8 +243,14 @@ operation that made the case.
    (add `?lang=en` for an English line) and the status callback at `/telephony/status`.
    Point the query helpline's number (`HELPLINE_NUMBER`) at
    `/telephony/voice?line=helpline`.
-2. Set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`. Choose an `ELEVENLABS_MODEL_ID`
-   that supports Bangla for the voice you use.
+2. Set `ELEVENLABS_API_KEY`, and `ELEVENLABS_VOICE_ID` for a voice that speaks Bangla
+   natively. `ELEVENLABS_MODEL_ID` must speak Bangla too. The default, `eleven_v3`,
+   does. `eleven_flash_v2_5` and the turbo models do not, and read Bangla with a Hindi
+   accent. `GET https://api.elevenlabs.io/v1/models` lists each model's languages.
+   Replies stream over HTTP, since the WebSocket endpoint rejects the Bangla models, in
+   the call's language (`language_code`). `eleven_v3` usually starts within about a
+   second but sometimes stalls, so a reply with no audio after
+   `ELEVENLABS_FIRST_AUDIO_TIMEOUT_S` (2.5 s) is requested once more.
 3. Set `TWILIO_AUTH_TOKEN`. Signature checks are always on when
    `ENVIRONMENT=production`.
 4. Set `OPENAI_API_KEY` for speech-to-text. Without it, callers hear a short message
