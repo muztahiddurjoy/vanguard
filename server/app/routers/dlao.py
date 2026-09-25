@@ -431,16 +431,21 @@ def get_case(
             .order_by(AuditEntry.seq)
         )
     ]
-    view["documents"] = [
-        {
-            "id": d.id,
-            "kind": d.kind,
-            "filename": d.filename,
-            "status": d.status,
-            "summary": d.summary,
-        }
-        for d in db.scalars(select(Document).where(Document.case_id == case.id))
-    ]
+    # A sensitive case's file names and summaries can reveal what the files show:
+    # they are given only on request, and each request is audited (evidence/view).
+    view["documents"] = documents_view(db, case, withhold="sensitive" in (case.flags or []))
+    receipt = db.scalars(
+        select(AuditEntry)
+        .where(
+            AuditEntry.entity_type == "case",
+            AuditEntry.entity_id == str(case.id),
+            AuditEntry.action == AuditAction.EVIDENCE_ACKNOWLEDGED,
+        )
+        .order_by(AuditEntry.seq.desc())
+    ).first()
+    view["evidenceReceipt"] = (
+        {"at": as_utc(receipt.occurred_at).isoformat(), "by": receipt.actor} if receipt else None
+    )
     view["checklist"] = [
         {"key": i.item_key, "label": i.label, "labelBn": i.label_bn, "required": i.required,
          "status": i.status, "documentId": i.document_id}
@@ -462,6 +467,77 @@ def get_case(
         for r in case.referrals
     ]
     return view
+
+
+def documents_view(db: Session, case: Case, *, withhold: bool) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": d.id,
+            "kind": d.kind,
+            "filename": None if withhold else d.filename,
+            "contentType": d.content_type,
+            "sizeBytes": d.size_bytes,
+            "status": d.status,
+            "summary": None if withhold else d.summary,
+            "withheld": withhold,
+        }
+        for d in db.scalars(
+            select(Document).where(Document.case_id == case.id).order_by(Document.id)
+        )
+    ]
+
+
+def evidence_acknowledged(db: Session, case: Case) -> bool:
+    return (
+        db.scalars(
+            select(AuditEntry.id).where(
+                AuditEntry.entity_type == "case",
+                AuditEntry.entity_id == str(case.id),
+                AuditEntry.action == AuditAction.EVIDENCE_ACKNOWLEDGED,
+            )
+        ).first()
+        is not None
+    )
+
+
+@router.post("/cases/{ref}/evidence/view")
+def view_evidence(
+    ref: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """The documents in full, for the officer allowed to see a sensitive case's evidence."""
+    case = get_case_or_404(db, ref)
+    documents = documents_view(db, case, withhold=False)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.EVIDENCE_VIEWED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documents": len(documents)},
+    )
+    db.commit()
+    return {"documents": documents}
+
+
+@router.post("/cases/{ref}/evidence/receipt")
+def acknowledge_evidence(
+    ref: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """The receiving officer confirms the evidence arrived and is in their keeping (A3)."""
+    case = get_case_or_404(db, ref)
+    if evidence_acknowledged(db, case):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Receipt has already been acknowledged")
+    count = db.scalars(select(Document.id).where(Document.case_id == case.id)).all()
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.EVIDENCE_ACKNOWLEDGED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documents": len(count)},
+    )
+    db.commit()
+    return case_view(case)
 
 
 @router.get("/alerts")
