@@ -18,6 +18,7 @@ STATUS = {
     "track": None,
     "office": "Rangpur",
     "nextMediation": None,
+    "nextHearing": None,
 }
 
 
@@ -167,3 +168,30 @@ def test_phone_call_on_the_helpline_line_reads_the_case_stage(db_engine):
     assert manager.case_ref is None  # the helpline never files anything
     with factory() as db:
         assert len(db.scalars(select(Case)).all()) == 1
+
+
+def test_reads_the_next_court_date_the_lawyer_reported(client, db):
+    body = {
+        "applicant": {"name": "Abdul Malek", "district": "Rangpur"},
+        "narrative": "My cousins have taken my inherited farmland. I have the deed and khatian.",
+    }
+    ref = client.post("/intake/web", json=body).json()["id"]
+    client.post(f"/dlao/cases/{ref}/promote")
+    client.post(f"/dlao/cases/{ref}/lawyer", json={"lawyer_id": "LAW-07"})
+    update = {
+        "stage": "plaintFiled",
+        "summary": "Plaint and vakalatnama filed; summons issued to the cousins.",
+        "court": "Joint District Judge Court 2, Rangpur",
+        "next_hearing_at": (utcnow() + timedelta(days=9)).isoformat(),
+    }
+    reply = client.post(
+        f"/lawyer/cases/{ref}/updates", json=update, headers={"X-Lawyer-Id": "LAW-07"}
+    )
+    assert reply.status_code == 201, reply.text
+    case = db.scalars(select(Case)).one()
+    status = client.get(f"/helpline/track/{case.tracking_token}").json()
+    assert status["stage"] == "lawyerAssigned" and status["nextHearing"] is not None
+    assert "Joint District" not in str(status)
+    assert helpline.describe(status, "en").endswith(
+        "The next court hearing is on " + helpline.say_date(status["nextHearing"], "en") + "."
+    )

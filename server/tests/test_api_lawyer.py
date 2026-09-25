@@ -228,3 +228,15 @@ def test_unanswered_reminder_raises_the_alert_again(client, db):
     }
     db.commit()
     assert "alerts" in client.get(f"/dlao/cases/{REF}").json()["queues"]
+
+
+def test_hearings_list_the_dates_lawyers_reported(client, db):
+    create_moyuri(client)
+    assign(client, "LAW-21")
+    assert client.get("/dlao/hearings").json() == []
+    post_update(client, {**UPDATE, "next_hearing_at": later(days=3)})
+    [hearing] = client.get("/dlao/hearings").json()
+    assert hearing["caseId"] == REF and hearing["kind"] == "court"
+    assert hearing["place"] == UPDATE["court"] and hearing["lawyerId"] == "LAW-21"
+    assert hearing["stage"] == "evidenceRecorded"
+    assert client.get("/dlao/hearings", params={"days": 2}).json() == []

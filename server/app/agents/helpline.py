@@ -118,6 +118,7 @@ STAGES: dict[str, dict[str, str]] = {
     "closed": _t("Your case {ref} is closed.", "আপনার মামলা {ref} নিষ্পত্তি হয়েছে।"),
 }
 NEXT_MEDIATION = _t("The next mediation session is on {date}.", "পরবর্তী মধ্যস্থতা সভা {date} তারিখে।")
+NEXT_HEARING = _t("The next court hearing is on {date}.", "আদালতে পরবর্তী শুনানি {date} তারিখে।")
 TRACK_DECIDED = {
     "advice": _t(
         "The officer expects it can be resolved through advice.",
@@ -235,6 +236,8 @@ def describe(status: dict[str, Any], lang: Lang) -> str:
     ]
     if status.get("nextMediation"):
         parts.append(NEXT_MEDIATION[lang].format(date=say_date(status["nextMediation"], lang)))
+    if status.get("nextHearing"):
+        parts.append(NEXT_HEARING[lang].format(date=say_date(status["nextHearing"], lang)))
     if (track := status.get("track")) in TRACK_DECIDED:
         parts.append(TRACK_DECIDED[track][lang])
     return " ".join(parts)

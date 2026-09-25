@@ -24,6 +24,8 @@ from app.models import (
     ChecklistItem,
     Document,
     DoNotCallReason,
+    MediationSession,
+    MediationStatus,
     PartyRole,
     Priority,
     ReferralStatus,
@@ -42,6 +44,7 @@ from app.services import notices, safe_contact
 from app.services.court_progress import (
     latest_stage,
     missed_updates,
+    next_hearing,
     next_hearing_view,
     reminded_at,
     update_due_at,
@@ -538,6 +541,49 @@ def acknowledge_evidence(
     )
     db.commit()
     return case_view(case)
+
+
+@router.get("/hearings")
+def hearings(
+    days: int = Query(14, ge=1, le=90), db: Session = Depends(get_db)
+) -> list[dict[str, Any]]:
+    """Court dates the lawyers reported and mediation meetings, soonest first."""
+    now = utcnow()
+    start, end = now - timedelta(hours=1), now + timedelta(days=days)
+    out: list[dict[str, Any]] = []
+    for case in db.scalars(select(Case).where(Case.status.in_(OPEN_STATUSES))):
+        found = next_hearing(case)
+        if found and start <= found[0] <= end:
+            out.append(
+                {
+                    "id": f"court-{case.id}",
+                    "caseId": case.display_id,
+                    "at": found[0].isoformat(),
+                    "kind": "court",
+                    "place": found[1],
+                    "lawyerId": case.lawyer_id,
+                    "stage": latest_stage(case),
+                }
+            )
+    sessions = db.execute(
+        select(MediationSession, Case)
+        .join(Case, Case.id == MediationSession.case_id)
+        .where(MediationSession.status == MediationStatus.SCHEDULED)
+    )
+    for session, case in sessions:
+        at = as_utc(session.scheduled_for)
+        if start <= at <= end:
+            out.append(
+                {
+                    "id": f"mediation-{session.id}",
+                    "caseId": case.display_id,
+                    "at": at.isoformat(),
+                    "kind": "mediation",
+                    "mode": session.mode,
+                    "lawyerId": None,
+                }
+            )
+    return sorted(out, key=lambda h: h["at"])
 
 
 @router.get("/alerts")
