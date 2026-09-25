@@ -198,7 +198,7 @@ class StreamManager:
     async def _play(self, text: str, mark: str) -> None:
         assert self.tts is not None
         try:
-            async with contextlib.aclosing(self.tts.stream(text)) as audio:
+            async with contextlib.aclosing(self.tts.stream(text, self.language)) as audio:
                 async for chunk in audio:
                     await self._send(
                         {
@@ -299,6 +299,9 @@ class StreamManager:
                 await self._listen_task
         if self.transcriber:
             await self.transcriber.close()
+        if self.tts is not None:
+            await self._stop_speaking(clear=False)  # a reply the listener started meanwhile
+            await self.tts.aclose()
         if self._conversation_open and self.call_sid:
             state = await asyncio.to_thread(self.intake.state, self.call_sid)
             await asyncio.to_thread(self._finish, state, dropped=True)

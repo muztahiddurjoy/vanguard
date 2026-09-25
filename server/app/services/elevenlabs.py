@@ -1,18 +1,21 @@
-"""ElevenLabs streaming TTS over WebSocket, producing μ-law 8 kHz for telephony.
+"""ElevenLabs streaming TTS over HTTP, producing μ-law 8 kHz for telephony.
 
 ``ulaw_8000`` is exactly what Twilio media streams play, so audio chunks can
-be forwarded to the call without transcoding. One WebSocket is opened per
-reply: replies are short, and a fresh connection keeps barge-in (cancelling
-a reply mid-sentence) simple.
+be forwarded to the call without transcoding. Each reply is one streamed
+``POST /v1/text-to-speech/{voice}/stream``; the call's replies share one HTTP
+connection, and closing the stream mid-reply (barge-in) cancels it.
+
+HTTP rather than the WebSocket input-streaming endpoint because that one
+rejects the models that speak Bangla (``eleven_v3`` and newer): we always
+have the whole reply before speaking, so nothing is lost. The call's language
+is sent as ``language_code`` so the model does not guess (a model without
+Bangla reads Bangla script with a Hindi accent).
 """
 
-import base64
-import json
-from collections.abc import AsyncGenerator, Callable
-from typing import Any, Protocol
-from urllib.parse import urlencode
+from collections.abc import AsyncGenerator
+from typing import Protocol
 
-from websockets.asyncio.client import connect as ws_connect
+import httpx
 
 from app.config import Settings, get_settings
 
@@ -22,17 +25,24 @@ class TTSError(RuntimeError):
 
 
 class TextToSpeech(Protocol):
-    def stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    def stream(self, text: str, language: str | None = None) -> AsyncGenerator[bytes, None]:
         """Yield raw μ-law 8 kHz audio for ``text`` as it is generated."""
         ...
+
+    async def aclose(self) -> None: ...
 
 
 class ElevenLabsTTS:
     OUTPUT_FORMAT = "ulaw_8000"
 
-    def __init__(self, settings: Settings | None = None, connect: Callable[..., Any] | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.settings = settings or get_settings()
-        self._connect = connect or ws_connect
+        self._transport = transport
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def configured(self) -> bool:
@@ -40,28 +50,39 @@ class ElevenLabsTTS:
 
     def url(self) -> str:
         s = self.settings
-        query = urlencode({"model_id": s.elevenlabs_model_id, "output_format": self.OUTPUT_FORMAT})
-        base = s.elevenlabs_ws_base.rstrip("/")
-        return f"{base}/v1/text-to-speech/{s.elevenlabs_voice_id}/stream-input?{query}"
+        return (
+            f"{s.elevenlabs_base_url.rstrip('/')}/v1/text-to-speech/{s.elevenlabs_voice_id}/stream"
+        )
 
-    async def stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    def _http(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                headers={"xi-api-key": self.settings.elevenlabs_api_key},
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                transport=self._transport,
+            )
+        return self._client
+
+    async def stream(self, text: str, language: str | None = None) -> AsyncGenerator[bytes, None]:
         if not self.configured:
             raise TTSError("ElevenLabs is not configured")
-        headers = {"xi-api-key": self.settings.elevenlabs_api_key}
-        async with self._connect(self.url(), additional_headers=headers) as ws:
-            # Opening message primes the voice; "flush" asks for audio now; "" ends input.
-            await ws.send(
-                json.dumps(
-                    {"text": " ", "voice_settings": {"stability": 0.5, "similarity_boost": 0.8}}
-                )
-            )
-            await ws.send(json.dumps({"text": text.strip() + " ", "flush": True}))
-            await ws.send(json.dumps({"text": ""}))
-            async for raw in ws:
-                message = json.loads(raw)
-                if message.get("error") or (message.get("message") and "audio" not in message):
-                    raise TTSError(str(message.get("error") or message.get("message")))
-                if message.get("audio"):
-                    yield base64.b64decode(message["audio"])
-                if message.get("isFinal"):
-                    break
+        body: dict[str, str] = {"text": text.strip(), "model_id": self.settings.elevenlabs_model_id}
+        if language:
+            body["language_code"] = language
+        try:
+            async with self._http().stream(
+                "POST", self.url(), params={"output_format": self.OUTPUT_FORMAT}, json=body
+            ) as response:
+                if response.status_code != 200:
+                    detail = (await response.aread()).decode(errors="replace")[:300]
+                    raise TTSError(f"ElevenLabs {response.status_code}: {detail}")
+                async for chunk in response.aiter_bytes():
+                    if chunk:
+                        yield chunk
+        except httpx.HTTPError as exc:
+            raise TTSError(f"ElevenLabs request failed: {exc}") from exc
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None

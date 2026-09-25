@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
@@ -56,14 +57,20 @@ class FakeTwilio:
 class FakeTTS:
     def __init__(self, delay: float = 0):
         self.spoken: list[str] = []
+        self.languages: list[str | None] = []
         self.delay = delay
+        self.closed = False
 
-    async def stream(self, text: str):
+    async def stream(self, text: str, language: str | None = None):
         self.spoken.append(text)
+        self.languages.append(language)
         for _ in range(3):
             if self.delay:
                 await asyncio.sleep(self.delay)
             yield b"\xff" * 160
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class ScriptedTranscriber:
@@ -148,6 +155,7 @@ def test_call_collects_intake_and_creates_application(db_engine):
     assert tts.spoken[0].startswith("Are you applying for yourself")
     assert tts.spoken[-1].startswith("Thank you. Your application is recorded.")
     assert stt.fed == 160 and stt.closed
+    assert set(tts.languages) == {"en"} and tts.closed
     assert ws.closed
     media = ws.events("media")
     assert media and all(m["streamSid"] == "MZ123" for m in media)
@@ -273,28 +281,6 @@ def test_transcriber_is_openai_when_a_key_is_set(monkeypatch):
 # --- ElevenLabs client ------------------------------------------------------------
 
 
-class FakeElevenLabsSocket:
-    def __init__(self, replies):
-        self.replies = [json.dumps(r) for r in replies]
-        self.sent: list[dict] = []
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    async def send(self, data):
-        self.sent.append(json.loads(data))
-
-    def __aiter__(self):
-        return self._iter()
-
-    async def _iter(self):
-        for r in self.replies:
-            yield r
-
-
 def _settings(**kw):
     s = get_settings().model_copy()
     for k, v in {"elevenlabs_api_key": "xi", "elevenlabs_voice_id": "voice1", **kw}.items():
@@ -302,39 +288,53 @@ def _settings(**kw):
     return s
 
 
-def test_elevenlabs_streams_ulaw_audio():
-    sock = FakeElevenLabsSocket(
-        [
-            {"audio": base64.b64encode(b"\x01\x02").decode(), "isFinal": None},
-            {"audio": base64.b64encode(b"\x03").decode()},
-            {"isFinal": True},
-        ]
-    )
-    calls = {}
+def test_elevenlabs_streams_ulaw_audio_over_http():
+    seen: list[httpx.Request] = []
 
-    def connect(url, additional_headers):
-        calls["url"], calls["headers"] = url, additional_headers
-        return sock
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, content=b"\x01\x02\x03")
 
     async def collect():
-        return [c async for c in ElevenLabsTTS(_settings(), connect=connect).stream("নমস্কার")]
+        tts = ElevenLabsTTS(_settings(), transport=httpx.MockTransport(handler))
+        first = b"".join([c async for c in tts.stream(" নমস্কার ", "bn")])
+        second = b"".join([c async for c in tts.stream("hello")])
+        await tts.aclose()
+        return first, second
 
-    assert asyncio.run(collect()) == [b"\x01\x02", b"\x03"]
-    assert "voice1/stream-input" in calls["url"] and "output_format=ulaw_8000" in calls["url"]
-    assert calls["headers"] == {"xi-api-key": "xi"}
-    assert sock.sent[1] == {"text": "নমস্কার ", "flush": True}
-    assert sock.sent[-1] == {"text": ""}
+    first, second = asyncio.run(collect())
+    assert first == second == b"\x01\x02\x03"
+    request = seen[0]
+    assert request.method == "POST"
+    assert request.url.path == "/v1/text-to-speech/voice1/stream"
+    assert request.url.params["output_format"] == "ulaw_8000"
+    assert request.headers["xi-api-key"] == "xi"
+    assert json.loads(request.content) == {
+        "text": "নমস্কার",
+        "model_id": "eleven_v3",
+        "language_code": "bn",
+    }
+    assert "language_code" not in json.loads(seen[1].content)
 
 
-def test_elevenlabs_error_message_raises():
-    sock = FakeElevenLabsSocket([{"message": "quota exceeded", "error": "quota_exceeded"}])
+def test_elevenlabs_errors_raise_tts_error():
+    def rejected(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"detail": {"code": "model_access_denied"}})
 
-    async def collect():
-        tts = ElevenLabsTTS(_settings(), connect=lambda url, additional_headers: sock)
-        return [c async for c in tts.stream("hi")]
+    def offline(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline")
 
-    with pytest.raises(TTSError):
-        asyncio.run(collect())
+    async def collect(handler):
+        tts = ElevenLabsTTS(_settings(), transport=httpx.MockTransport(handler))
+        try:
+            return [c async for c in tts.stream("hi", "en")]
+        finally:
+            await tts.aclose()
+
+    with pytest.raises(TTSError, match=r"401.*model_access_denied"):
+        asyncio.run(collect(rejected))
+    with pytest.raises(TTSError, match="offline"):
+        asyncio.run(collect(offline))
 
 
 # --- Twilio HTTP ----------------------------------------------------------------------
@@ -392,7 +392,7 @@ def test_media_websocket_route_runs_the_stream_manager(client, monkeypatch):
     spoken: list[str] = []
 
     class RecordingTTS(FakeTTS):
-        async def stream(self, text):
+        async def stream(self, text, language=None):
             spoken.append(text)
             yield b"\xff" * 160
 

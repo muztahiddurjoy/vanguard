@@ -58,8 +58,10 @@ class Settings(BaseSettings):
 
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
-    elevenlabs_model_id: str = "eleven_flash_v2_5"
-    elevenlabs_ws_base: str = "wss://api.elevenlabs.io"
+    # Must speak the line's language: eleven_v3 has Bangla; the flash and turbo
+    # models do not (they read Bangla script with a Hindi accent).
+    elevenlabs_model_id: str = "eleven_v3"
+    elevenlabs_base_url: str = "https://api.elevenlabs.io"
 
     adnsms_api_key: str = ""
     adnsms_api_secret: str = ""
