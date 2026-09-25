@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from app.agents import t5_intake
 from app.agents.t5_intake import IntakeConversation
 from app.config import get_settings
 from app.models import Case
@@ -215,6 +216,46 @@ def test_barge_in_clears_a_reply_that_was_fully_sent_but_is_still_playing(db_eng
     ]
     # It has finished playing: there is nothing to clear.
     assert asyncio.run(scenario(echo_marks=True)).events("clear") == []
+
+
+def test_emergency_line_is_spoken_before_the_application_is_filed(db_engine, monkeypatch):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    order: list[str] = []
+
+    async def scenario():
+        ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            intake=IntakeConversation(use_default_llm=False, use_default_registry=False),
+            session_factory=factory,
+        )
+        speak, finish = manager._speak, manager._finish
+
+        async def speaking(text: str) -> str:
+            order.append(text)
+            return await speak(text)
+
+        def filing(state, **kw) -> None:
+            order.append("filed")
+            finish(state, **kw)
+
+        monkeypatch.setattr(manager, "_speak", speaking)
+        monkeypatch.setattr(manager, "_finish", filing)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        stt.say("He is beating me right now, help me now")
+        await asyncio.wait_for(runner, 5)
+        return ws
+
+    ws = asyncio.run(scenario())
+    assert order[1:3] == [t5_intake.EMERGENCY["en"], "filed"]
+    assert order[3].startswith("Your tracking number is")
+    assert ws.closed
+    with factory() as db:
+        case = db.scalars(select(Case)).one()
+    assert "escalated" in case.flags and case.priority == "critical"
 
 
 def test_call_cut_mid_intake_is_recorded_and_marked_do_not_call(db_engine):

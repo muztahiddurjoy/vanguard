@@ -580,9 +580,10 @@ def build_intake_graph(
             story = _join(story, utterance.strip())
         found = extract_by_rules(story, None) if listening else extract_by_rules(utterance, asking)
 
-        # The model's reading of this turn, when there is one.
+        # The model's reading of this turn, when there is one. Not when the rules already
+        # hear immediate danger: the 999 line must not wait for it.
         danger_now, kind = False, None
-        if llm is not None and new_words:
+        if llm is not None and new_words and not has_any(utterance, DANGER_TERMS):
             if listening:
                 context = "The caller is saying what happened, in their own words."
             else:

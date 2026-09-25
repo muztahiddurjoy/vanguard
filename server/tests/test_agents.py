@@ -382,6 +382,14 @@ def test_not_a_legal_matter_is_pointed_to_the_helpline_then_the_call_ends():
     assert "problem" not in s["slots"]
 
 
+def test_danger_the_rules_hear_is_not_kept_waiting_for_the_model():
+    llm = FakeLLM(LLMOpening(kind="case"))
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
+    conv.start("e1", channel="hotline_16699")
+    s = conv.turn("e1", "ও এখনই আমাকে মেরে ফেলবে")
+    assert s["emergency"] is True and llm.calls == []
+
+
 def test_a_hello_is_not_sent_to_the_model():
     llm = FakeLLM()
     conv = IntakeConversation(llm=llm, use_default_registry=False)

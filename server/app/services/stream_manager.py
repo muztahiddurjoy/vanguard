@@ -13,6 +13,8 @@ whose ``ulaw_8000`` output Twilio plays as-is.
 - Patience: while an intake caller is saying what happened, before any
   question, their turn ends after a longer pause (``STT_STORY_END_OF_TURN_MS``),
   so a story told with pauses is not answered halfway through.
+- Emergency: the 999 line is spoken at once and the application created while
+  it plays; the tracking number follows. Nothing is looked up first.
 - Ending: after the closing line has actually finished playing (Twilio echoes
   our ``mark``), the socket is closed and Twilio moves on to the TwiML after
   ``<Connect>``, which hangs up.
@@ -281,6 +283,10 @@ class StreamManager:
                 state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
                 self._set_patience(state)
                 reply = state["reply"]
+                if state.get("emergency"):
+                    log.debug("call %s: replying %r", self.call_sid, reply)
+                    await self._emergency(state)
+                    return
                 if state.get("complete"):
                     await asyncio.to_thread(self._finish, state)
                     reply = with_token(reply, self.tracking_token, self.language)
@@ -289,6 +295,19 @@ class StreamManager:
                 await self._say_and_hang_up(reply)
                 return
             await self._speak(reply)
+
+    async def _emergency(self, state: Any) -> None:
+        """The 999 line at once; the application is created while it plays.
+
+        Its tracking number follows, if it is ready, and then the call ends.
+        """
+        mark = await self._speak(state["reply"])
+        await asyncio.to_thread(self._finish, state)
+        await self._wait_played(mark)
+        if token_line := with_token("", self.tracking_token, self.language):
+            await self._say_and_hang_up(token_line)
+        else:
+            await self.ws.close()
 
     def _finish(self, state: Any, *, dropped: bool = False) -> None:
         from app.routers.intake import finish_conversation
