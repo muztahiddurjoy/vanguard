@@ -9,15 +9,8 @@
       "category": null,
       "priority": "critical",
       "priorityChanged": false,
-      "queues": [
-        "actionToday",
-        "pendingTriage"
-      ],
-      "flags": [
-        "sensitive",
-        "doNotCall",
-        "callDropped"
-      ],
+      "queues": ["actionToday", "pendingTriage"],
+      "flags": ["sensitive", "doNotCall", "callDropped"],
       "channel": "online",
       "summary": "My husband has locked me in the room",
       "summaryBn": null,
@@ -176,9 +169,7 @@
         "category": null,
         "categoryConfidence": 0.0,
         "categorySource": "rules",
-        "complianceNotes": [
-          "Possibly held hostage: do not call or text the applicant's number."
-        ],
+        "complianceNotes": ["Possibly held hostage: do not call or text the applicant's number."],
         "recommendedSafetyLevel": "standard",
         "track": {
           "key": "sensitive",
@@ -201,13 +192,8 @@
       "category": "domesticViolence",
       "priority": "high",
       "priorityChanged": false,
-      "queues": [
-        "actionToday",
-        "pendingTriage"
-      ],
-      "flags": [
-        "sensitive"
-      ],
+      "queues": ["actionToday", "pendingTriage"],
+      "flags": ["sensitive"],
       "channel": "hotline",
       "summary": "My husband beats me every day",
       "summaryBn": null,
@@ -267,10 +253,7 @@
         },
         "respondent": {
           "status": "held",
-          "reasons": [
-            "callerDidNotAgree",
-            "sensitive"
-          ],
+          "reasons": ["callerDidNotAgree", "sensitive"],
           "at": "2026-09-25T21:19:32.924863+00:00"
         }
       },
@@ -400,12 +383,8 @@
       "category": "familyMaintenance",
       "priority": "low",
       "priorityChanged": false,
-      "queues": [
-        "pendingTriage"
-      ],
-      "flags": [
-        "proxyReported"
-      ],
+      "queues": ["pendingTriage"],
+      "flags": ["proxyReported"],
       "channel": "proxy",
       "summary": "My mother's former husband Kamal Hossain has not paid her maintenance",
       "summaryBn": null,
@@ -470,9 +449,7 @@
         },
         "respondent": {
           "status": "held",
-          "reasons": [
-            "callerDidNotAgree"
-          ],
+          "reasons": ["callerDidNotAgree"],
           "at": "2026-09-25T21:19:32.848361+00:00"
         }
       },
@@ -586,9 +563,7 @@
         "category": "familyMaintenance",
         "categoryConfidence": 1.0,
         "categorySource": "rules",
-        "complianceNotes": [
-          "Reported by a proxy: confirm consent with the applicant directly."
-        ],
+        "complianceNotes": ["Reported by a proxy: confirm consent with the applicant directly."],
         "recommendedSafetyLevel": "standard",
         "track": {
           "key": "mediation",
@@ -611,9 +586,7 @@
       "category": null,
       "priority": "low",
       "priorityChanged": false,
-      "queues": [
-        "pendingTriage"
-      ],
+      "queues": ["pendingTriage"],
       "flags": [],
       "channel": "online",
       "summary": "My cousins have occupied 22 decimals of my inherited farmland.",
@@ -802,12 +775,8 @@
     "category": "familyMaintenance",
     "priority": "low",
     "priorityChanged": false,
-    "queues": [
-      "pendingTriage"
-    ],
-    "flags": [
-      "proxyReported"
-    ],
+    "queues": ["pendingTriage"],
+    "flags": ["proxyReported"],
     "channel": "proxy",
     "summary": "My mother's former husband Kamal Hossain has not paid her maintenance",
     "summaryBn": null,
@@ -874,9 +843,7 @@
       },
       "respondent": {
         "status": "held",
-        "reasons": [
-          "callerDidNotAgree"
-        ],
+        "reasons": ["callerDidNotAgree"],
         "at": "2026-09-25T21:19:32.848361+00:00"
       }
     },
@@ -990,9 +957,7 @@
       "category": "familyMaintenance",
       "categoryConfidence": 1.0,
       "categorySource": "rules",
-      "complianceNotes": [
-        "Reported by a proxy: confirm consent with the applicant directly."
-      ],
+      "complianceNotes": ["Reported by a proxy: confirm consent with the applicant directly."],
       "recommendedSafetyLevel": "standard",
       "track": {
         "key": "mediation",
@@ -1050,9 +1015,7 @@
         "action": "notice.held",
         "details": {
           "notice": "respondent",
-          "reasons": [
-            "callerDidNotAgree"
-          ]
+          "reasons": ["callerDidNotAgree"]
         },
         "justification": null
       },

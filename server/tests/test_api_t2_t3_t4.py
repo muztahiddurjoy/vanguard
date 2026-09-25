@@ -192,6 +192,8 @@ def test_case_bounced_twice_is_escalated_to_the_chief_officer(client):
         client.post(f"/referrals/{referral['id']}/respond", json={"accept": False, "note": note})
     listed = next(c for c in client.get("/dlao/cases").json() if c["id"] == ref)
     assert listed["timesReturned"] == 2
+    # The second bounce is an alert: the officer must escalate.
+    assert "jurisdictionEscalation" in listed["flags"] and "alerts" in listed["queues"]
 
     detail = client.get(f"/dlao/cases/{ref}").json()
     first = detail["referrals"][0]

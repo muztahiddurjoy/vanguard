@@ -133,6 +133,11 @@ def respond(
     if body.accept:
         case.current_office = referral.to_office
         case.remove_flag("jurisdictionEscalation")
+    else:
+        returned = sum(1 for r in case.referrals if r.status == ReferralStatus.RETURNED)
+        # Sent back as often as the ping-pong limit: someone above district level must decide.
+        if returned >= get_settings().referral_escalation_hops and "escalated" not in case.flags:
+            case.add_flag("jurisdictionEscalation")
     case.status = CaseStatus.ACTIVE if case.case_number else CaseStatus.APPLICATION
     record_audit(
         db,

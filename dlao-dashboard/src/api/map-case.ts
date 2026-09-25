@@ -212,7 +212,9 @@ function actionsFor(c: LegalCase, status: string): NextAction[] {
   const actions: NextAction[] = []
   if (c.triage?.status === "pending") actions.push("reviewTriage")
   if (c.flags.includes("overdue")) actions.push("resolveOverdue")
-  if (c.flags.includes("jurisdictionEscalation")) actions.push("escalateJurisdiction")
+  // Sent back twice (T2): escalate, even from a server that does not flag it yet.
+  const bounced = (c.timesReturned ?? 0) >= 2 && !c.flags.includes("escalated")
+  if (c.flags.includes("jurisdictionEscalation") || bounced) actions.push("escalateJurisdiction")
   // A reminded lawyer has one more period to answer: the office is waiting on them.
   if (c.flags.includes("lawyerInactivity") && !c.lawyer?.reminded) actions.push("followUpLawyer")
   if (c.safeContact && !c.doNotCall) actions.push("scheduleSafeCall")

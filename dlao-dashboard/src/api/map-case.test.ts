@@ -158,6 +158,14 @@ describe("toLegalCase", () => {
     expect(c.evidence).toBeUndefined()
   })
 
+  it("asks for escalation once a case has been sent back twice", () => {
+    const base = list.find((c) => c.applicant?.name === "Abdul Malek")!
+    const twice = toLegalCase({ ...base, flags: [], timesReturned: 2 })
+    expect(twice.actions).toContain("escalateJurisdiction")
+    const done = toLegalCase({ ...base, flags: ["escalated"], timesReturned: 2 })
+    expect(done.actions).not.toContain("escalateJurisdiction")
+  })
+
   it("keeps a sensitive case's file names withheld until they are opened", () => {
     const c = toLegalCase({
       ...detail,
