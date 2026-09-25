@@ -1,7 +1,7 @@
 """SQLAlchemy engine, session factory and declarative base."""
 
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import create_engine, event
@@ -16,7 +16,7 @@ class Base(DeclarativeBase):
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def make_engine(url: str, **kwargs: Any) -> Engine:
