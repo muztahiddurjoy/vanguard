@@ -3,9 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderApp } from "@/test/render-app"
 
+// The sample data is dated relative to when it was loaded (today), so the fake
+// clock must stay on today too: 10:00, for "Good morning" and a hearing later today.
+const MORNING = new Date()
+MORNING.setHours(10, 0, 0, 0)
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] })
-  vi.setSystemTime(new Date("2026-09-23T10:00:00"))
+  vi.setSystemTime(MORNING)
 })
 
 afterEach(() => {
