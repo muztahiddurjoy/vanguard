@@ -6,6 +6,7 @@ from app.agents.spoken import (
     clean_name,
     find_district,
     find_phone,
+    name_similarity,
     parse_date,
     parse_safe_window,
     yes_or_no,
@@ -51,6 +52,12 @@ def test_spoken_dates_names_and_answers():
     assert t5_intake.filing_for_from("for my mother-in-law") == "other"
     assert t5_intake.respondent_from("আমার স্বামী জালালের বিরুদ্ধে") == ("জালাল", "husband")
     assert yes_or_no("No, don't send it now") is False
+    # Speech-to-text spells Bangla names more than one way; different names stay apart.
+    assert name_similarity("মোয়ুরি আখতার", "Moyuri Akter", "ময়ূরী আক্তার") == 100
+    assert name_similarity("রাহিমা খাতুন", "রহিমা খাতুন") == 100
+    for said, other in (("মোয়ুরি আখতার", "শিরিন আক্তার"), ("রফিকুল ইসলাম", "রবিউল ইসলাম"),
+                        ("নাসরিন আক্তার", "নাসিমা আক্তার")):  # fmt: skip
+        assert name_similarity(said, other) < t5_intake.FAMILY_MATCH, (said, other)
 
 
 def talk(conv: IntakeConversation, sid: str, *utterances: str) -> dict:
@@ -229,8 +236,9 @@ def test_caller_who_cannot_answer_is_found_through_the_sim_they_call_from():
 def test_wife_calling_on_her_husbands_phone_is_found_through_his_nid_family():
     conv = IntakeConversation(use_default_llm=False, registry=FakeRegistry())
     conv.start("x2", channel="hotline_16699", caller_phone="01722000333")  # Jalal's SIM
-    s = talk(conv, "x2", "আমার স্বামী আমাকে প্রতিদিন মারধর করে", "আমার নিজের জন্য",
-             "আমার নাম ময়ূরী আক্তার", "জানি না")  # fmt: skip
+    s = talk(
+        conv, "x2", "আমার স্বামী আমাকে প্রতিদিন মারধর করে", "আমার নিজের জন্য", "আমার নাম মোয়ুরি আখতার", "জানি না"
+    )  # fmt: skip (spelt as speech-to-text did)
     assert (s["identity"], s["identity_via"]) == ("verified", "sim_family")
     assert s["caller_record"]["nid"] == "4600000012"
     assert s["caller_sim_registered"] is False  # the phone is his, not hers

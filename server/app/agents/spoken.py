@@ -7,6 +7,7 @@ is worse than one more question.
 """
 
 import re
+import unicodedata
 from datetime import date
 
 from rapidfuzz import fuzz
@@ -143,11 +144,50 @@ def normalize_name(name: str) -> str:
     return " ".join(w for w in words(name) if w not in _HONORIFICS)
 
 
+# Sounds speech-to-text writes either way in Bangla names: aspiration (খ/ক),
+# the three s-sounds, the two n-sounds.
+_BN_SOUNDS = str.maketrans({
+    "খ": "ক", "ঘ": "গ", "ছ": "চ", "ঝ": "জ", "ঠ": "ট", "ঢ": "ড", "থ": "ত", "ধ": "দ", "ফ": "প",
+    "ভ": "ব", "শ": "স", "ষ": "স", "ণ": "ন", "ঙ": "ং",
+})  # fmt: skip
+# Vowel signs (their length too: ি/ী, ু/ূ), the virama joining consonants, the nukta.
+_BN_MARKS = set("ািীুূৃেৈোৌ্ঁ়ৗ")
+
+
+def _sound_word(word: str) -> str:
+    """A name word by its consonants: "মোয়ুরি" and "ময়ূরী" are both "মযর".
+
+    A final "া" is kept: it tells রহিমা from রহিম.
+    """
+    folded = unicodedata.normalize("NFD", word).translate(_BN_SOUNDS)
+    ending = "া" if folded.endswith("া") else ""
+    return "".join(ch for ch in folded if ch not in _BN_MARKS) + ending
+
+
+def sound_words(name: str) -> list[str]:
+    return sorted(_sound_word(w) for w in normalize_name(name).split())
+
+
+def sounds_alike(said: str, recorded: str) -> bool:
+    """Every word sounds the same ("মোয়ুরি আখতার" / "ময়ূরী আক্তার"), however it was spelt."""
+    said_words = sound_words(said)
+    return bool(said_words) and said_words == sound_words(recorded)
+
+
 def name_similarity(said: str, *recorded: str | None) -> float:
-    """Best 0-100 similarity between what was said and any recorded spelling."""
+    """Best 0-100 similarity between what was said and any recorded spelling.
+
+    A name that sounds the same word for word scores 100: speech-to-text spells
+    Bangla names in more than one way.
+    """
     target = normalize_name(said)
     return max(
-        (fuzz.token_sort_ratio(target, normalize_name(r)) for r in recorded if r), default=0.0
+        (
+            100.0 if sounds_alike(said, r) else fuzz.token_sort_ratio(target, normalize_name(r))
+            for r in recorded
+            if r
+        ),
+        default=0.0,
     )
 
 

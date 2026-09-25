@@ -52,9 +52,9 @@ from app.agents.spoken import (
     has_word,
     is_dont_know,
     name_similarity,
-    normalize_name,
     parse_date,
     say_digits,
+    sound_words,
     words,
     yes_or_no,
 )
@@ -556,10 +556,8 @@ def _named(said: str, c: Citizen) -> bool:
     """
     if name_similarity(said, c.name.en, c.name.bn) >= FAMILY_MATCH:
         return True
-    given = set(normalize_name(said).split())
-    return bool(given) and any(
-        given <= set(normalize_name(n).split()) for n in (c.name.en, c.name.bn)
-    )
+    given = set(sound_words(said))
+    return bool(given) and any(given <= set(sound_words(n)) for n in (c.name.en, c.name.bn))
 
 
 def build_intake_graph(
