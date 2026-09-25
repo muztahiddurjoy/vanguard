@@ -15,6 +15,9 @@ Bangla reads Bangla script with a Hindi accent).
 stalls for 5-10 s before the first audio. A caller would hear dead air, so a
 reply with no audio after ``ELEVENLABS_FIRST_AUDIO_TIMEOUT_S`` is requested
 once more (without a limit the second time).
+
+``eleven_v3`` speaks slowly and ignores the API's ``voice_settings.speed``, so
+the audio is sped up here instead, ``VOICE_SPEED`` times at the same pitch.
 """
 
 import asyncio
@@ -26,6 +29,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.config import Settings, get_settings
+from app.services.audio import TempoChanger, ulaw_decode, ulaw_encode
 
 log = logging.getLogger(__name__)
 
@@ -89,14 +93,31 @@ class ElevenLabsTTS:
                         log.warning("ElevenLabs gave no audio in %.1fs; asking again", timeout)
                         timeout = None
                         continue
-                    if first:
-                        yield first
-                    async for chunk in chunks:
-                        if chunk:
-                            yield chunk
+                    async for chunk in self._at_voice_speed(first, chunks):
+                        yield chunk
                     return
         except httpx.HTTPError as exc:
             raise TTSError(f"ElevenLabs request failed: {exc}") from exc
+
+    async def _at_voice_speed(
+        self, first: bytes, chunks: AsyncIterator[bytes]
+    ) -> AsyncGenerator[bytes, None]:
+        speed = self.settings.voice_speed
+        if speed == 1.0:
+            if first:
+                yield first
+            async for chunk in chunks:
+                if chunk:
+                    yield chunk
+            return
+        tempo = TempoChanger(speed)
+        if faster := ulaw_encode(tempo.process(ulaw_decode(first))):
+            yield faster
+        async for chunk in chunks:
+            if faster := ulaw_encode(tempo.process(ulaw_decode(chunk))):
+                yield faster
+        if rest := ulaw_encode(tempo.flush()):
+            yield rest
 
     async def _start(
         self, stack: contextlib.AsyncExitStack, body: dict[str, Any]

@@ -17,6 +17,7 @@ os.environ.update(
         "ELEVENLABS_API_KEY": "",
         # Defaults, not whatever a developer's .env tunes them to.
         "ELEVENLABS_MODEL_ID": "eleven_v3",
+        "VOICE_SPEED": "1.2",
         "OPENAI_MODEL": "gpt-6-luna",
         "OPENAI_STT_MODEL": "gpt-live-transcribe",
         "OPENAI_STT_DELAY": "low",

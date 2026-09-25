@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import itertools
 import json
+import math
 
 import httpx
 import pytest
@@ -11,6 +13,7 @@ from app.agents.t5_intake import IntakeConversation
 from app.config import get_settings
 from app.models import Case
 from app.routers import telephony
+from app.services.audio import ulaw_decode, ulaw_encode
 from app.services.elevenlabs import ElevenLabsTTS, TTSError
 from app.services.speech_to_text import OpenAITranscriber, TranscriptEvent
 from app.services.stream_manager import (
@@ -315,6 +318,30 @@ def test_elevenlabs_streams_ulaw_audio_over_http():
         "language_code": "bn",
     }
     assert "language_code" not in json.loads(seen[1].content)
+
+
+def test_elevenlabs_audio_plays_at_voice_speed_with_the_same_pitch():
+    tone = ulaw_encode(
+        round(8000 * math.sin(2 * math.pi * 200 * n / 8000)) for n in range(2 * 8000)
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "voice_settings" not in json.loads(request.content)  # eleven_v3 ignores it
+        return httpx.Response(200, content=tone)
+
+    async def collect(speed: float) -> bytes:
+        tts = ElevenLabsTTS(_settings(voice_speed=speed), transport=httpx.MockTransport(handler))
+        try:
+            return b"".join([c async for c in tts.stream("hi", "en")])
+        finally:
+            await tts.aclose()
+
+    faster = asyncio.run(collect(1.25))
+    assert len(faster) == pytest.approx(len(tone) / 1.25, abs=240)
+    samples = ulaw_decode(faster)
+    crossings = sum(1 for a, b in itertools.pairwise(samples) if (a < 0) != (b < 0))
+    assert crossings / 2 / (len(samples) / 8000) == pytest.approx(200, rel=0.01)
+    assert asyncio.run(collect(1.0)) == tone
 
 
 def test_elevenlabs_errors_raise_tts_error():

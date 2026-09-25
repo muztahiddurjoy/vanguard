@@ -4,6 +4,7 @@ from functools import lru_cache
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +65,9 @@ class Settings(BaseSettings):
     elevenlabs_base_url: str = "https://api.elevenlabs.io"
     # A reply with no audio after this long is requested again (0 turns it off).
     elevenlabs_first_audio_timeout_s: float = 2.5
+    # How much faster than generated the line speaks, at the same pitch. Done on our
+    # side (services.audio.TempoChanger): eleven_v3 ignores ElevenLabs' own speed.
+    voice_speed: float = Field(default=1.2, ge=0.5, le=2.0)
 
     adnsms_api_key: str = ""
     adnsms_api_secret: str = ""
