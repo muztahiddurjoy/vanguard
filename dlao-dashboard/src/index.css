@@ -2,12 +2,18 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/anek-bangla";
 
 @custom-variant dark (&:is(.dark *));
 
+/* Not inline: utilities reference var(--font-sans), so :lang(bn) can swap it at runtime. */
+@theme {
+    --font-sans: 'Inter Variable', 'Anek Bangla Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -25,6 +31,18 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-danger: var(--danger);
+    --color-danger-foreground: var(--danger-foreground);
+    --color-danger-surface: var(--danger-surface);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-warning-surface: var(--warning-surface);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-success-surface: var(--success-surface);
+    --color-info: var(--info);
+    --color-info-foreground: var(--info-foreground);
+    --color-info-surface: var(--info-surface);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -48,83 +66,151 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * DLAS palette: institutional navy primary on white, with urgency tokens.
+ * Each urgency colour has three roles:
+ *   --x          solid fill / icon / border
+ *   --x-surface  tinted background
+ *   --x-foreground  text on the surface (>= 4.5:1 contrast)
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: oklch(0.984 0.004 255);
+    --foreground: oklch(0.21 0.035 262);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.21 0.035 262);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --popover-foreground: oklch(0.21 0.035 262);
+    --primary: oklch(0.33 0.1 262);
+    --primary-foreground: oklch(0.985 0.005 255);
+    --secondary: oklch(0.955 0.012 258);
+    --secondary-foreground: oklch(0.28 0.07 262);
+    --muted: oklch(0.962 0.008 258);
+    --muted-foreground: oklch(0.47 0.03 260);
+    --accent: oklch(0.945 0.02 258);
+    --accent-foreground: oklch(0.28 0.08 262);
+    --destructive: oklch(0.55 0.21 27);
+    --border: oklch(0.905 0.012 258);
+    --input: oklch(0.87 0.015 258);
+    --ring: oklch(0.5 0.16 262);
+
+    --danger: oklch(0.58 0.21 27);
+    --danger-foreground: oklch(0.42 0.16 27);
+    --danger-surface: oklch(0.965 0.025 20);
+    --warning: oklch(0.76 0.16 70);
+    --warning-foreground: oklch(0.43 0.1 55);
+    --warning-surface: oklch(0.975 0.045 88);
+    --success: oklch(0.6 0.14 152);
+    --success-foreground: oklch(0.4 0.09 152);
+    --success-surface: oklch(0.97 0.03 155);
+    --info: oklch(0.55 0.15 255);
+    --info-foreground: oklch(0.38 0.12 260);
+    --info-surface: oklch(0.965 0.02 255);
+
+    /* Categorical chart slots, fixed order, validated (dataviz validate_palette:
+       adjacent CVD ΔE ≥ 9.1, normal-vision ≥ 22.9). Slots 3–4 are < 3:1 on white,
+       so charts using them must show values as text (legend values / table view). */
+    --chart-1: #2a78d6;
+    --chart-2: #eb6834;
+    --chart-3: #1baf7a;
+    --chart-4: #eda100;
+    --chart-5: #e87ba4;
+    --radius: 0.5rem;
+
+    --sidebar: oklch(0.25 0.07 263);
+    --sidebar-foreground: oklch(0.93 0.015 258);
+    --sidebar-primary: oklch(0.985 0.005 255);
+    --sidebar-primary-foreground: oklch(0.25 0.07 263);
+    --sidebar-accent: oklch(0.33 0.08 263);
+    --sidebar-accent-foreground: oklch(0.99 0 0);
+    --sidebar-border: oklch(0.34 0.06 263);
+    --sidebar-ring: oklch(0.8 0.1 255);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --background: oklch(0.17 0.025 262);
+    --foreground: oklch(0.96 0.008 258);
+    --card: oklch(0.21 0.03 262);
+    --card-foreground: oklch(0.96 0.008 258);
+    --popover: oklch(0.21 0.03 262);
+    --popover-foreground: oklch(0.96 0.008 258);
+    --primary: oklch(0.78 0.1 258);
+    --primary-foreground: oklch(0.2 0.05 262);
+    --secondary: oklch(0.27 0.035 262);
+    --secondary-foreground: oklch(0.96 0.008 258);
+    --muted: oklch(0.26 0.03 262);
+    --muted-foreground: oklch(0.74 0.025 258);
+    --accent: oklch(0.28 0.045 262);
+    --accent-foreground: oklch(0.96 0.008 258);
+    --destructive: oklch(0.7 0.19 22);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 18%);
+    --ring: oklch(0.7 0.12 258);
+
+    --danger: oklch(0.7 0.19 22);
+    --danger-foreground: oklch(0.85 0.09 22);
+    --danger-surface: oklch(0.3 0.08 22);
+    --warning: oklch(0.8 0.15 75);
+    --warning-foreground: oklch(0.88 0.1 85);
+    --warning-surface: oklch(0.3 0.06 70);
+    --success: oklch(0.72 0.14 152);
+    --success-foreground: oklch(0.87 0.08 152);
+    --success-surface: oklch(0.28 0.05 152);
+    --info: oklch(0.72 0.12 255);
+    --info-foreground: oklch(0.87 0.06 255);
+    --info-surface: oklch(0.28 0.05 258);
+
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+
+    --sidebar: oklch(0.15 0.03 263);
+    --sidebar-foreground: oklch(0.93 0.015 258);
+    --sidebar-primary: oklch(0.78 0.1 258);
+    --sidebar-primary-foreground: oklch(0.15 0.03 263);
+    --sidebar-accent: oklch(0.24 0.045 263);
+    --sidebar-accent-foreground: oklch(0.99 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --sidebar-ring: oklch(0.7 0.12 258);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
-    @apply bg-background text-foreground;
-    }
+    @apply bg-background text-foreground antialiased;
+  }
   html {
     @apply font-sans;
+  }
+  /* Bengali glyphs have tall conjuncts and matras; give them more room. */
+  :lang(bn) body {
+    line-height: 1.6;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
     }
+  }
+}
+
+/* Bangla UI: Anek Bangla leads so Bengali and the Latin bits mixed into it
+   (case IDs, "EN") share one typeface. English keeps Inter. */
+/* Everything is sized in rem, so scaling the root scales the whole UI:
+   --text-scale comes from the officer's text-size setting,
+   --lang-scale compensates for Anek Bangla's smaller apparent size. */
+:root {
+    --text-scale: 1;
+    --lang-scale: 1;
+    font-size: calc(100% * var(--text-scale) * var(--lang-scale));
+}
+
+:root:lang(bn) {
+    --font-sans: 'Anek Bangla Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+    --lang-scale: 1.0625;
 }

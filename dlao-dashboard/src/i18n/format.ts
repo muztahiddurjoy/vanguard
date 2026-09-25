@@ -1,0 +1,92 @@
+import type { Lang, SafeContactWindow } from "@/data/types"
+
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+
+export function localeOf(lang: Lang) {
+  // en-GB matches Bangladeshi English conventions (day-month order, 24h clock).
+  return lang === "bn" ? "bn-BD" : "en-GB"
+}
+
+export function createFormatters(lang: Lang) {
+  const locale = localeOf(lang)
+  const number = new Intl.NumberFormat(locale)
+  const plain = new Intl.NumberFormat(locale, { useGrouping: false })
+  const percent = new Intl.NumberFormat(locale, { style: "percent" })
+  const date = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+  const dateTime = new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+  const weekday = new Intl.DateTimeFormat(locale, {
+    weekday: lang === "bn" ? "long" : "short",
+  })
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+  const longDate = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+  const dayMonth = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  const month = new Intl.DateTimeFormat(locale, { month: "short" })
+  const monthYear = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" })
+
+  return {
+    num: (n: number) => number.format(n),
+    /** No thousands separator — for years and IDs. */
+    plain: (n: number) => plain.format(n),
+    pct: (x: number) => percent.format(x),
+    date: (iso: string) => date.format(new Date(iso)),
+    dateTime: (d: string | Date) => dateTime.format(new Date(d)),
+    time: (d: Date | string) => time.format(new Date(d)),
+    longDate: (d: Date | string) => longDate.format(new Date(d)),
+    month: (d: Date | string) => month.format(new Date(d)),
+    monthYear: (d: Date | string) => monthYear.format(new Date(d)),
+    /** "Today", "Tomorrow", or e.g. "Friday, 25 September". */
+    dayLabel(iso: string, now = Date.now()) {
+      const startOf = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+      const days = Math.round((startOf(Date.parse(iso)) - startOf(now)) / DAY)
+      if (days === 0 || days === 1) {
+        const word = rtf.format(days, "day")
+        return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1)
+      }
+      return dayMonth.format(new Date(iso))
+    },
+    relative(iso: string, now = Date.now()) {
+      const diff = new Date(iso).getTime() - now
+      const abs = Math.abs(diff)
+      if (abs < HOUR) return rtf.format(Math.round(diff / MINUTE), "minute")
+      if (abs < DAY) return rtf.format(Math.round(diff / HOUR), "hour")
+      if (abs < 45 * DAY) return rtf.format(Math.round(diff / DAY), "day")
+      return rtf.format(Math.round(diff / (30 * DAY)), "month")
+    },
+    /** e.g. "Tue 14:00–16:00" / "মঙ্গলবার ১৪:০০–১৬:০০" */
+    safeWindow(w: SafeContactWindow) {
+      // 4 Jan 2026 is a Sunday, so 4 + day lands on the right weekday.
+      const start = new Date(2026, 0, 4 + w.day, w.startHour)
+      const end = new Date(2026, 0, 4 + w.day, w.endHour)
+      return `${weekday.format(start)} ${time.format(start)}–${time.format(end)}`
+    },
+  }
+}
+
+export type Formatters = ReturnType<typeof createFormatters>
