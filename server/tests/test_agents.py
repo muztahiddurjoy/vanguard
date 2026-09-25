@@ -199,6 +199,18 @@ def test_wrong_security_answers_get_one_retry_then_intake_continues_unverified()
     )
 
 
+def test_a_question_is_asked_twice_at_most_then_skipped():
+    conv = IntakeConversation(use_default_llm=False, use_default_registry=False)
+    conv.start("q1", channel="hotline_16699", language="en")
+    s = talk(conv, "q1", WAGES, "umm")
+    assert s["asking"] == "filing_for"  # asked again
+    s = conv.turn("q1", "what?")
+    # Not understood twice: taken as applying for themselves, which an officer can correct.
+    assert s["slots"]["filing_for"] == "self" and s["asking"] == "caller_name"
+    s = talk(conv, "q1", "Rafiqul Islam", "a village near the river", "far from here")
+    assert s["slots"]["district"] == "" and s["asking"] == "respondent_name"
+
+
 def test_registry_outage_skips_verification_without_retrying():
     registry = FakeRegistry(down=True)
     conv = IntakeConversation(use_default_llm=False, registry=registry)

@@ -93,6 +93,10 @@ MAX_LISTENS = 3
 # An account this long (not counting "hello"s) is taken as a case even with no keywords.
 STORY_WORDS = 6
 MAX_VERIFY_ATTEMPTS = 2
+# A question not understood this many times is not asked again: it is recorded as
+# not known (or as below), and an officer follows up.
+MAX_ASKS = 2
+GIVEN_UP: dict[str, Any] = {"filing_for": "self", "notify_respondent": False}
 # Name similarity (0-100) for accepting a relative found through NID parent links.
 FAMILY_MATCH = 85
 
@@ -727,6 +731,12 @@ def build_intake_graph(
         acks = [state.get("ack") or ""]
         update: IntakeState = {}
 
+        asking, asks = state.get("asking"), dict(state.get("asks") or {})
+        if asking in SLOTS and asking not in slots and state.get("utterance", "").strip():
+            asks[asking] = asks.get(asking, 0) + 1
+            if asks[asking] >= MAX_ASKS:
+                slots[asking] = GIVEN_UP.get(asking, "")
+
         def merge(part: IntakeState) -> None:
             if ack := part.pop("ack", None):
                 acks.append(ack)
@@ -737,6 +747,9 @@ def build_intake_graph(
             k in slots for k in ("caller_name", *IDENTITY_SLOTS)
         ):
             merge(verify_caller(state, slots, lang))
+            if state.get("identity") == "pending":  # asked again: each question starts over
+                for key in IDENTITY_SLOTS:
+                    asks.pop(key, None)
 
         filing = slots.get("filing_for")
         caller = _citizen(state.get("caller_record"))
@@ -775,7 +788,7 @@ def build_intake_graph(
             elif "respondent_father_name" in slots and "respondent_district" in slots:
                 merge(find_respondent(state, slots))
 
-        return {**update, "slots": slots, "ack": _join(*acks)}
+        return {**update, "slots": slots, "asks": asks, "ack": _join(*acks)}
 
     def respond(state: IntakeState) -> IntakeState:
         lang = state.get("language", "bn")
