@@ -83,6 +83,17 @@ class IntakeState(TypedDict, total=False):
     hostage: bool
 
 
+class HelplineState(TypedDict, total=False):
+    language: Literal["bn", "en"]
+    utterance: str
+    turns: int
+    reply: str
+    complete: bool
+    intent: str | None
+    # "token" right after we asked for the tracking number, so a bare number fills it.
+    awaiting: str | None
+
+
 class DocumentState(TypedDict, total=False):
     category: str | None
     # [{"id", "kind", "filename", "content_type", "text", "data_b64"}]

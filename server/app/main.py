@@ -11,6 +11,7 @@ from app.database import init_db
 from app.routers import (
     dlao,
     duplicates,
+    helpline,
     incidents,
     intake,
     mediation,
@@ -40,7 +41,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    for module in (intake, dlao, duplicates, referrals, incidents, mediation, sync, telephony):
+    for module in (
+        intake,
+        dlao,
+        duplicates,
+        referrals,
+        incidents,
+        mediation,
+        sync,
+        helpline,
+        telephony,
+    ):
         app.include_router(module.router)
 
     @app.get("/health", tags=["meta"])

@@ -1,4 +1,7 @@
-"""Twilio voice webhook and media-stream WebSocket for the 16699 hotline.
+"""Twilio voice webhook and media-stream WebSocket for the legal aid phone lines.
+
+Two lines share these endpoints: the application hotline (T5 intake, the
+default) and the query helpline printed in SMS (``?line=helpline``).
 
 Twilio cannot send our bearer token, so these endpoints are authenticated by
 Twilio's request signature instead (``X-Twilio-Signature``), which is always
@@ -66,7 +69,7 @@ def twiml(body: str) -> Response:
 
 
 @router.post("/voice")
-async def voice(request: Request, lang: str = "bn") -> Response:
+async def voice(request: Request, lang: str = "bn", line: str = "intake") -> Response:
     form = {k: str(v) for k, v in (await request.form()).items()}
     _check_signature(
         request.headers.get("X-Twilio-Signature"),
@@ -77,6 +80,8 @@ async def voice(request: Request, lang: str = "bn") -> Response:
         return twiml(f'<Say language="en-IN">{escape(UNAVAILABLE)}</Say><Hangup/>')
     language = "en" if lang == "en" else "bn"
     params = f'<Parameter name="language" value={quoteattr(language)}/>'
+    if line == "helpline":
+        params += '<Parameter name="line" value="helpline"/>'
     if caller := form.get("From"):
         params += f'<Parameter name="caller" value={quoteattr(caller)}/>'
     # When our side closes the stream, Twilio continues with <Hangup/>.
