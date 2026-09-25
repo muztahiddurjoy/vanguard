@@ -44,7 +44,14 @@ export function HearingCard({
         </p>
         <p className="text-base font-semibold">
           {legalCase ? pick(legalCase.applicant.name) : h.caseId}
-          <span className="font-normal text-muted-foreground"> — {pick(h.purpose)}</span>
+          <span className="font-normal text-muted-foreground">
+            {" — "}
+            {h.purpose
+              ? pick(h.purpose)
+              : h.stage
+                ? t.hearings.afterStage(t.courtStage[h.stage])
+                : t.hearings.reported}
+          </span>
         </p>
         <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
           <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />

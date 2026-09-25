@@ -1,11 +1,16 @@
-import { Bot, Cog, UserRound, type LucideIcon } from "lucide-react"
+import { Bot, BriefcaseBusiness, Cog, UserRound, type LucideIcon } from "lucide-react"
 
 import { useOfficer } from "@/auth/use-auth"
 import type { ActivityEvent, LegalCase } from "@/data/types"
-import { ACTOR, describeEvent, type Actor } from "@/i18n/activity-text"
+import { ACTOR, describeEvent, lawyerName, type Actor } from "@/i18n/activity-text"
 import { useI18n } from "@/i18n/use-i18n"
 
-const ACTOR_ICON: Record<Actor, LucideIcon> = { system: Cog, ai: Bot, officer: UserRound }
+const ACTOR_ICON: Record<Actor, LucideIcon> = {
+  system: Cog,
+  ai: Bot,
+  officer: UserRound,
+  lawyer: BriefcaseBusiness,
+}
 
 export function ActivityLog({ legalCase: c }: { legalCase: LegalCase }) {
   const i18n = useI18n()
@@ -14,8 +19,14 @@ export function ActivityLog({ legalCase: c }: { legalCase: LegalCase }) {
 
   const describe = (e: ActivityEvent) => describeEvent(e, i18n)
 
-  const actorName = (actor: Actor) =>
-    actor === "officer" ? pick(officer.name) : actor === "ai" ? t.activity.ai : t.activity.system
+  const actorName = (e: ActivityEvent, actor: Actor) => {
+    if (actor === "lawyer" && e.type === "lawyerUpdate") return lawyerName(e.lawyerId, pick)
+    return actor === "officer"
+      ? pick(officer.name)
+      : actor === "ai"
+        ? t.activity.ai
+        : t.activity.system
+  }
 
   const events = [...c.activity].reverse()
 
@@ -34,14 +45,15 @@ export function ActivityLog({ legalCase: c }: { legalCase: LegalCase }) {
             </span>
             <p className="text-sm font-medium">{describe(e)}</p>
             <p className="text-xs text-muted-foreground">
-              {actorName(actor)} · <time dateTime={e.at}>{f.dateTime(e.at)}</time>
+              {actorName(e, actor)} · <time dateTime={e.at}>{f.dateTime(e.at)}</time>
             </p>
-            {e.type === "priorityOverride" && (
-              <blockquote className="mt-1 rounded-md border-l-2 border-info bg-info-surface px-3 py-2 text-sm text-info-foreground">
-                <span className="font-medium">{t.activity.justification}: </span>
-                {e.justification}
-              </blockquote>
-            )}
+            {(e.type === "priorityOverride" || e.type === "lawyerReassigned") &&
+              e.justification && (
+                <blockquote className="mt-1 rounded-md border-l-2 border-info bg-info-surface px-3 py-2 text-sm text-info-foreground">
+                  <span className="font-medium">{t.activity.justification}: </span>
+                  {e.justification}
+                </blockquote>
+              )}
           </li>
         )
       })}

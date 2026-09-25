@@ -146,7 +146,7 @@ describe("queue filters", () => {
   it("filters to the alerts queue, including Abdul Malek's lawyer inactivity", async () => {
     const { user } = renderApp()
     await user.click(screen.getByRole("tab", { name: /Overdue \/ Alerts/ }))
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 3 of 3")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 4 of 4")
     expect(
       within(rowFor("DLAS-2026-045")).getByText("Lawyer Inactivity: missed 2 updates"),
     ).toBeInTheDocument()
