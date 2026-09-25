@@ -39,6 +39,7 @@ from app.models import (
 from app.models.case import PRIORITY_RANK
 from app.routers import current_actor, require_api_token
 from app.services import notices, safe_contact
+from app.services.panel import get_lawyer
 
 router = APIRouter(prefix="/dlao", tags=["dlao"], dependencies=[Depends(require_api_token)])
 
@@ -557,14 +558,26 @@ def promote_to_case(
 
 class LawyerIn(BaseModel):
     lawyer_id: str = Field(min_length=1, max_length=20)
+    # Why the case moves to another lawyer (e.g. the last one stopped reporting).
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 @router.post("/cases/{ref}/lawyer")
 def assign_lawyer(
     ref: str, body: LawyerIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
 ) -> dict[str, Any]:
+    """Assign a panel lawyer, or move the case to another one."""
     case = get_case_or_404(db, ref)
-    case.lawyer_id = body.lawyer_id
+    lawyer = get_lawyer(body.lawyer_id)
+    if lawyer is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"{body.lawyer_id} is not on the panel"
+        )
+    if case.lawyer_id == lawyer.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{lawyer.id} already has this case")
+    previous = case.lawyer_id
+    case.lawyer_id = lawyer.id
+    # The new lawyer's reporting clock starts now.
     case.lawyer_last_update_at = utcnow()
     case.remove_flag("lawyerInactivity")
     record_audit(
@@ -573,7 +586,8 @@ def assign_lawyer(
         action=AuditAction.LAWYER_ASSIGNED,
         entity_type="case",
         entity_id=case.id,
-        details={"lawyerId": body.lawyer_id},
+        details={"lawyerId": lawyer.id, **({"from": previous} if previous else {})},
+        justification=(body.reason or "").strip() or None,
     )
     db.commit()
     return case_view(case)
