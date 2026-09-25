@@ -3,16 +3,17 @@
 A stand-in for the Election Commission's National ID (NID) verification service,
 holding **fictional** citizen records. The DLAS backend (`../server`) calls it over
 HTTP to verify that a caller is who they say they are, to find their registered
-relatives (for filing on behalf of a parent, sibling or spouse), and to find which
-NID a SIM number is registered under.
+relatives (when someone applies for their father, mother, brother or sister), and to
+find the SIMs registered under an NID (so the person a case is filed against can be
+sent an SMS).
 
 FastAPI · pydantic · rapidfuzz · read-only, in-memory data
 
 > [!WARNING]
 > **The people are fictional, but the phone numbers are well-formed Bangladeshi mobile
 > numbers and may belong to real subscribers.** Keep the main server's SMS in dry run
-> (`SMS_DRY_RUN=true`, the default) or restrict sending to an SMS allowlist whenever it
-> is connected to this registry. Never point a live SMS gateway at these numbers.
+> (`SMS_DRY_RUN=true`, the default) or limit live sends with its `SMS_ALLOWLIST` whenever
+> it is connected to this registry. Never point a live SMS gateway at these numbers.
 
 ## Quick start
 

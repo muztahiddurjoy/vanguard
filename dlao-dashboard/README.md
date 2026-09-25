@@ -1,9 +1,10 @@
 # DLAO Dashboard — Digital Legal Aid System
 
 The **District Legal Aid Officer (DLAO)** dashboard for the Digital Legal Aid System (DLAS).
-It runs entirely in the browser: cases, lawyers and hearings are sample data held in React state
-(there is no backend yet), so you can work through the whole officer workflow and reset it by
-reloading the page.
+Connected to the backend (`../server`), it shows the office's live cases, including those filed
+by phone through the AI hotline, and saves officer decisions there. Without a backend it runs
+on built-in cases held in React state, so you can work through the whole officer workflow and
+reset it by reloading the page.
 
 It is built to be understood by anyone. Every screen opens with a sentence saying what it is for.
 Every case says why it needs attention and offers one clear button for the next step. Technical
@@ -21,6 +22,20 @@ npm run dev        # http://localhost:5173
 ```
 
 Sign in with **Fill in the demo account** (or any officer ID and a password of 4+ characters).
+
+### Live cases from the backend
+
+```bash
+cp .env.example .env.local   # then set VITE_API_URL=http://localhost:8000
+npm run dev
+```
+
+Start `../server` first (and `../nid-server` for NID checks). The signed-in officer ID is sent
+with every request for the server's audit trail. Opening a case fetches its history and call
+notes. These decisions are saved on the server: accepting or overriding triage, confirming or
+changing the advice / mediation / sensitive mark, sending a held SMS to the other side, and
+assigning a lawyer. The remaining steps (lawyer reminders, transfers, safe-call booking,
+duplicate decisions) are kept on screen only for now.
 
 | Script              | What it does                                   |
 | ------------------- | ---------------------------------------------- |
@@ -41,7 +56,7 @@ rewrite rules.
 | **Sign in** | Officer ID + password, show/hide password, keep me signed in, forgot-password help, one-click demo account |
 | **Home** | Greeting, four summary numbers, the three most urgent cases ("Start here"), your lists, upcoming hearings |
 | **Work queue** | Every open case that needs you, filtered by _Needs Action Today_, _Pending AI Triage_, _Duplicates for Review_, _Overdue / Alerts_; one button per case |
-| **Case** (dialog) | Safety warning, "What to do now", AI triage recommendation, case information and history |
+| **Case** (dialog) | Safety warning (safe window, or **Do not call this number**), "What to do now", AI triage recommendation, the AI's advice / mediation / sensitive mark to confirm or change, case information (who filed it, National ID checks, tracking number, the other side and their SMS, the caller's words) and history |
 | **Duplicate check** (dialog) | "Is this the same person?" — side-by-side records, 85% fuzzy match, merge blocked, confirm as distinct |
 | **All cases** | Register of open and closed cases, with how each closed case ended |
 | **Lawyers** | Panel lawyers, their open cases, who has stopped reporting, send a reminder |
@@ -56,7 +71,10 @@ rewrite rules.
 
 1. **Sign in** with the demo account. Switch **EN / বাংলা** at any time — labels, case data,
    digits and dates all change.
-2. **Home → Start here:** Moyuri Akter is first. Note the red **Do not call now** line.
+2. **Home → Start here:** Parvin Akter is first: her hotline call was cut after she said she was
+   locked in, so the case reads **Do not call: possible hostage situation**. Open it to see the
+   **DO NOT CALL THIS NUMBER** banner, the locked Call button and, under _Case information_,
+   what she said before the line went dead. Moyuri Akter is next, with **Do not call now**.
 3. **Moyuri Akter (APP-2026-001):** press **Review AI suggestion**.
    - The **DO NOT CALL NOW · Safe Contact Window: Tue 14:00–16:00** banner blocks the Call button
      outside the window (it uses the real clock).
@@ -65,14 +83,20 @@ rewrite rules.
      Restricted`, …), each with the check that found it.
    - **Override Priority** requires a new priority and a **Justification for Override**
      (20+ characters). Saving updates the queue badge ("Changed by officer") and the history.
-4. **Rohima Begum (APP-2026-023):** press **Compare records**. Fuzzy Match Confidence 85%, the
+4. **Jahanara Parvin (APP-2026-027):** her son called for her. _AI suggestion_ ends with
+   **Suggested way forward: Can be resolved through mediation**. Confirm it, or change it
+   with a reason. _Case information_ shows both identities confirmed with the National ID
+   register, the tracking number, and the SMS asking her former husband to visit the office.
+   On Moyuri's case that SMS is **held** (sensitive case; the caller said not yet), and you can
+   send it with a reason.
+5. **Rohima Begum (APP-2026-023):** press **Compare records**. Fuzzy Match Confidence 85%, the
    same name/phone/village highlighted, **Merge Records** blocked (different National IDs),
    **Confirm as Distinct Individuals** resolves it.
-5. **Abdul Malek (DLAS-2026-045):** _Lawyer Inactivity Alert_ — remind the lawyer from the case or
+6. **Abdul Malek (DLAS-2026-045):** _Lawyer Inactivity Alert_ — remind the lawyer from the case or
    from the **Lawyers** page.
-6. **Nabila (APP-2026-012):** _Sensitive_, _Cyber Harassment_, _Jurisdiction Escalation_ — details
+7. **Nabila (APP-2026-012):** _Sensitive_, _Cyber Harassment_, _Jurisdiction Escalation_ — details
    hidden in lists; transfer the case.
-7. **Profile** now counts the decisions you just made; **Settings → Text size → Extra large**
+8. **Profile** now counts the decisions you just made; **Settings → Text size → Extra large**
    enlarges the whole interface.
 
 ## Project structure
@@ -82,6 +106,7 @@ src/
   main.tsx                    providers + hash router
   routes.tsx                  every screen and its URL
   pages/                      one file per screen
+  api/                        backend client, server case view -> LegalCase, contract fixture
   auth/                       sign-in (session storage) + route guard
   state/                      case reducer (pure, tested) + provider that owns the case dialogs
   preferences/                text size and notification choices
