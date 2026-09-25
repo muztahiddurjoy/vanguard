@@ -19,7 +19,14 @@ createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         <TooltipProvider>
           <RouterProvider router={router} />
-          <Toaster theme="light" position="bottom-right" richColors closeButton />
+          <Toaster
+            theme="light"
+            position="bottom-right"
+            richColors
+            closeButton
+            // Phones: above the bottom navigation bar, not over it.
+            mobileOffset={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}
+          />
         </TooltipProvider>
       </AuthProvider>
     </I18nProvider>

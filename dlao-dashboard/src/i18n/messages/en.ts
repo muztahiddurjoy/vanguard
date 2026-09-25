@@ -1,3 +1,6 @@
+/** English plurals: counts arrive formatted, and English writes 1 as "1". */
+const count = (n: string, one: string, many: string) => `${n} ${n === "1" ? one : many}`
+
 // English is the source of truth for the message shape; bn.ts must match it.
 // Function messages receive values that are already locale-formatted.
 //
@@ -142,7 +145,7 @@ export const en = {
     status: {
       ok: "Up to date",
       free: "Available for new cases",
-      late: (n: string) => `Missed ${n} updates`,
+      late: (n: string) => `Missed ${count(n, "update", "updates")}`,
       reminded: "Reminder sent — waiting for a reply",
     },
     theirCases: "Their open cases",
@@ -400,7 +403,7 @@ export const en = {
     reminded: "Reminder sent",
     remindHint: "Texts the lawyer and applicant the date, time and place.",
     remindedToast: (name: string) => `Reminder sent for ${name}'s hearing`,
-    summary: (n: string) => `${n} hearings in the next two weeks`,
+    summary: (n: string) => `${count(n, "hearing", "hearings")} in the next two weeks`,
     afterStage: (stage: string) => `Next date after: ${stage}`,
     mode: {
       in_person: "Mediation room, District Legal Aid Office",
@@ -508,7 +511,7 @@ export const en = {
     doNotCall: "Do not call this number",
     callDropped: "Call was cut",
     proxyBy: (name: string) => `Proxy Reported by ${name}`,
-    lawyerMissed: (n: string) => `Lawyer Inactivity: missed ${n} updates`,
+    lawyerMissed: (n: string) => `Lawyer Inactivity: missed ${count(n, "update", "updates")}`,
   },
   action: {
     reviewTriage: "Review AI suggestion",
@@ -524,7 +527,8 @@ export const en = {
   reason: {
     reviewTriage: (p: string) => `The AI suggests ${p} priority. It needs your check.`,
     reviewDuplicate: (id: string) => `May be the same person as ${id}.`,
-    followUpLawyer: (n: string) => `The lawyer has missed ${n} progress updates.`,
+    followUpLawyer: (n: string) =>
+      `The lawyer has missed ${count(n, "progress update", "progress updates")}.`,
     escalateJurisdiction:
       "The accused lives outside this district, so the case must be transferred.",
     returned: (n: string) =>
@@ -681,7 +685,7 @@ export const en = {
   followUp: {
     lawyerTitle: "The lawyer has stopped reporting",
     lawyerMissed: (name: string, n: string) =>
-      `${name} has missed ${n} progress updates in a row (they are due every 2 weeks).`,
+      `${name} has missed ${count(n, "progress update", "progress updates in a row")} (they are due every 2 weeks).`,
     lawyerLast: (rel: string) => `Last update ${rel}`,
     sendReminder: "Send reminder to lawyer",
     reminderToast: (name: string) => `Reminder sent to ${name}`,
@@ -891,7 +895,8 @@ export const en = {
     none: "No reports yet.",
     lastReport: (rel: string) => `Last report ${rel}`,
     dueBy: (when: string) => `Next report due ${when}`,
-    late: (n: string, when: string) => `${n} reports missed. The last one was due ${when}.`,
+    late: (n: string, when: string) =>
+      `${count(n, "report", "reports")} missed. The last one was due ${when}.`,
     reminded: "Reminder sent: waiting for the lawyer's report.",
     from: (name: string) => `From ${name}`,
     heldOn: (date: string) => `Hearing held ${date}`,
@@ -914,7 +919,7 @@ export const en = {
   referral: {
     title: "Transfers between offices",
     hint: "Each time the case was sent to another office, and what that office did.",
-    sentBack: (n: string) => `Sent back ${n} times`,
+    sentBack: (n: string) => `Sent back ${n === "1" ? "once" : `${n} times`}`,
     office: (name: string) => `Legal aid office, ${name}`,
     hop: (from: string, to: string) => `From ${from} to ${to}`,
     status: {
@@ -949,26 +954,27 @@ export const en = {
   pattern: {
     eyebrow: "Pattern alert: lawyer inactivity",
     warning: (missed: string, cases: string) =>
-      `Inactivity Threshold Reached: Missed ${missed} updates across ${cases} cases.`,
+      `Inactivity Threshold Reached: Missed ${count(missed, "update", "updates")} across ${count(cases, "case", "cases")}.`,
     body: "Lawyers report every 2 weeks and within 3 days of each hearing. Without these reports, nobody can tell the applicants what is happening in court.",
     review: "Review & Reassign",
     title: "Move this lawyer's cases",
     description: (name: string) =>
       `${name} has stopped reporting. Choose the cases to move and the lawyer who takes them. Each move is saved in the case history with your name.`,
     cases: "Cases to move",
-    late: (n: string) => `Missed ${n} updates`,
+    late: (n: string) => `Missed ${count(n, "update", "updates")}`,
     upToDate: "Up to date",
     nextHearing: (when: string) => `Next hearing ${when}`,
     newLawyer: "New lawyer",
     choose: "Choose a lawyer",
-    option: (name: string, n: string) => `${name} (${n} open cases)`,
+    option: (name: string, n: string) => `${name} (${count(n, "open case", "open cases")})`,
     errors: {
       cases: "Choose at least one case.",
       lawyer: "Choose the lawyer who will take the cases.",
     },
-    move: (n: string) => `Move ${n} cases`,
+    move: (n: string) => `Move ${count(n, "case", "cases")}`,
     cancel: "Cancel",
-    movedToast: (n: string, from: string, to: string) => `${n} cases moved from ${from} to ${to}`,
+    movedToast: (n: string, from: string, to: string) =>
+      `${count(n, "case", "cases")} moved from ${from} to ${to}`,
   },
   server: {
     loading: "Loading cases…",

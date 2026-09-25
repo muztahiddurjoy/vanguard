@@ -54,7 +54,7 @@ export function CaseDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         closeLabel={t.detail.close}
-        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto p-5 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none max-sm:pt-[max(1.25rem,env(safe-area-inset-top))] max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-4xl sm:p-7"
+        className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] gap-6 overflow-x-hidden overflow-y-auto p-5 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none max-sm:pt-[max(1.25rem,env(safe-area-inset-top))] max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-4xl sm:p-7"
       >
         <DialogHeader className="gap-2.5 pr-10">
           <p className="text-sm text-muted-foreground">
@@ -101,24 +101,27 @@ export function CaseDetailDialog({
         />
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as CaseTab)}>
-          <TabsList
-            variant="line"
-            aria-label={t.detail.tabsLabel}
-            className="h-auto w-full justify-start gap-0 border-b"
-          >
-            {(
-              [
-                ["triage", t.detail.tabTriage],
-                ["details", t.detail.tabDetails],
-                ...(inCourt ? [["court", t.detail.tabCourt] as const] : []),
-                ["activity", t.detail.tabActivity],
-              ] as const
-            ).map(([value, label]) => (
-              <TabsTrigger key={value} value={value} className="h-10 flex-none px-4 text-sm">
-                {label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* Phones: the tabs scroll on their own, so the case never slides sideways. */}
+          <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
+            <TabsList
+              variant="line"
+              aria-label={t.detail.tabsLabel}
+              className="h-auto w-full min-w-max justify-start gap-0 border-b"
+            >
+              {(
+                [
+                  ["triage", t.detail.tabTriage],
+                  ["details", t.detail.tabDetails],
+                  ...(inCourt ? [["court", t.detail.tabCourt] as const] : []),
+                  ["activity", t.detail.tabActivity],
+                ] as const
+              ).map(([value, label]) => (
+                <TabsTrigger key={value} value={value} className="h-10 flex-none px-4 text-sm">
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           <TabsContent value="triage" className="flex flex-col gap-8 pt-5">
             <TriagePanel

@@ -152,7 +152,7 @@ describe("with a backend (VITE_API_URL)", () => {
     expect(
       await screen.findByText(/Next date after: Case filed \(plaint and vakalatnama\)/),
     ).toBeInTheDocument()
-    expect(screen.getByRole("status")).toHaveTextContent("1 hearings in the next two weeks")
+    expect(screen.getByRole("status")).toHaveTextContent("1 hearing in the next two weeks")
   })
 
   it("saves reminders, moves, escalations and evidence decisions on the server", async () => {
