@@ -17,9 +17,10 @@ whose ``ulaw_8000`` output Twilio plays as-is.
   it is created from what was said so far; a caller who seemed to be held, or
   who was describing violence when the line went dead, is marked do-not-call.
 
-No speech-to-text provider ships with this service: implement ``Transcriber``
-and return it from ``build_transcriber``. Until then callers hear
-``NO_SPEECH_INPUT`` and the call ends.
+Speech-to-text is OpenAI ``gpt-live-transcribe`` (``services.speech_to_text``)
+when ``OPENAI_API_KEY`` is set. Without it callers hear ``NO_SPEECH_INPUT``
+and the call ends; if it fails during a call, they hear ``STT_FAILED`` and the
+call ends as a cut call.
 """
 
 import asyncio
@@ -27,17 +28,18 @@ import base64
 import contextlib
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
 from app.agents.helpline import HelplineConversation, helpline
 from app.agents.t5_intake import IntakeConversation, conversations, with_token
+from app.config import get_settings
 from app.database import SessionLocal
 from app.services.case_status import lookup_token
 from app.services.elevenlabs import TextToSpeech, TTSError
+from app.services.speech_to_text import OpenAITranscriber, Transcriber
 
 log = logging.getLogger(__name__)
 
@@ -50,23 +52,18 @@ NO_SPEECH_INPUT = {
     "To apply, please visit your Union Digital Centre.",
 }
 
-
-@dataclass
-class TranscriptEvent:
-    kind: Literal["speech_started", "final"]
-    text: str = ""
-
-
-class Transcriber(Protocol):
-    async def feed(self, ulaw: bytes) -> None: ...
-
-    def events(self) -> AsyncIterator[TranscriptEvent]: ...
-
-    async def close(self) -> None: ...
+STT_FAILED = {
+    "bn": "দুঃখিত, এই মুহূর্তে আপনার কথা শোনা যাচ্ছে না। একটু পরে আবার ফোন করুন। "
+    "আপনি বিপদে থাকলে ৯৯৯ নম্বরে ফোন করুন।",
+    "en": "Sorry, we cannot hear you right now. Please call again a little later. "
+    "If you are in danger, call 999.",
+}
 
 
 def build_transcriber(language: str) -> Transcriber | None:
     """Return the speech-to-text adapter for ``language`` ("bn" or "en"), if one is set up."""
+    if get_settings().stt_enabled:
+        return OpenAITranscriber(language)
     return None
 
 
@@ -243,9 +240,15 @@ class StreamManager:
             if event.kind == "speech_started":
                 await self._stop_speaking(clear=True)  # barge-in
                 continue
+            if event.kind == "error":
+                # We can no longer hear the caller: say so rather than fall silent.
+                await self._say_and_hang_up(STT_FAILED[self.language])
+                return
             text = event.text.strip()
             if not text:
                 continue
+            # What callers say is sensitive: only ever at DEBUG, for local testing.
+            log.debug("call %s: caller said %r", self.call_sid, text)
             state: Any
             if self.line == "helpline":
                 state = await asyncio.to_thread(
@@ -258,6 +261,7 @@ class StreamManager:
                 if state.get("complete"):
                     await asyncio.to_thread(self._finish, state)
                     reply = with_token(reply, self.tracking_token, self.language)
+            log.debug("call %s: replying %r", self.call_sid, reply)
             if state.get("complete"):
                 await self._say_and_hang_up(reply)
                 return

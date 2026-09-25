@@ -6,7 +6,7 @@ registry; AI-assisted triage, document review and settlement drafting; SMS notic
 both parties; an AI helpline that answers questions about a case; and the District
 Legal Aid Officer (DLAO) dashboard's queues, alerts and decisions.
 
-FastAPI · SQLAlchemy 2 · LangGraph · Claude (optional) · Twilio media streams · ElevenLabs TTS · ADN SMS · NID registry (`../nid-server`)
+FastAPI · SQLAlchemy 2 · LangGraph · Claude or OpenAI (optional) · Twilio media streams · OpenAI `gpt-live-transcribe` · ElevenLabs TTS · ADN SMS · NID registry (`../nid-server`)
 
 ## Quick start
 
@@ -34,6 +34,7 @@ created at startup; there are no migrations yet).
 | `.venv/bin/mypy` | Type check |
 | `docker build -t dlas-backend .` | Production image (serves on port 8000) |
 | `.venv/bin/python -m scripts.dashboard_fixture` | Refresh the dashboard's API contract fixture |
+| `.venv/bin/python -m scripts.simulate_call turn1.wav …` | Call a phone line from recorded turns, without Twilio (see *Test a call without a phone*) |
 
 If your shell exports a `PYTHONPATH` (ROS, for example), run the tools with
 `env -u PYTHONPATH …` so foreign pytest plugins are not loaded.
@@ -47,14 +48,15 @@ app/
               party.py (safety level, provenance, accessibility, safe windows, duplicate reviews)
               document.py (files, T6 checklist items, T11 signatures)
               audit.py (hash-chained ledger, T9 sync receipts)
-  agents/     state.py  llm.py (optional Claude access)  spoken.py (reading callers' answers)
+  agents/     state.py  llm.py (optional Claude or OpenAI access)  spoken.py (reading callers' answers)
               t5_intake.py  t6_document.py  t7_settlement.py  t8_triage.py
               helpline.py (the AI query helpline)
   routers/    intake.py  dlao.py  duplicates.py  referrals.py  incidents.py
               mediation.py  sync.py  helpline.py  telephony.py
   services/   safe_contact.py  adnsms.py  crypto.py  elevenlabs.py  stream_manager.py
+              speech_to_text.py (gpt-live-transcribe)  audio.py (μ-law, resampling, voice detection)
               nid_registry.py  notices.py (SMS to both parties)  case_status.py
-scripts/      dashboard_fixture.py
+scripts/      dashboard_fixture.py  simulate_call.py
 tests/
 ```
 
@@ -134,7 +136,7 @@ number, it reads out only the stage the case has reached, the next mediation dat
 the officer's decision on how it will be resolved (`services/case_status.py`). Anyone
 could say a number, so it gives no names, narrative or contact details. It explains
 what the respondent's SMS means, and answers questions about the office, documents,
-mediation, fees and applying from fixed facts. Claude, when configured, answers other
+mediation, fees and applying from fixed facts. The model, when configured, answers other
 questions using the same facts, and rules take over on any failure.
 
 ## Safety by design
@@ -159,7 +161,7 @@ questions using the same facts, and rules take over on any failure.
   you own in `SMS_ALLOWLIST`, whenever the registry is connected.
 - **Humans decide.** Triage priority comes from transparent rules and is only a
   recommendation. The advice / mediation / sensitive track is a mark the officer
-  confirms or changes (with a reason); Claude may choose between advice and mediation
+  confirms or changes (with a reason); the model may choose between advice and mediation
   but never lowers a sensitive mark. Overrides need a 20+ character justification. Duplicates are never
   merged automatically. Settlement drafts need officer approval before anyone can sign,
   and drafting is refused when violence is on record, unless the officer acknowledges
@@ -171,22 +173,31 @@ questions using the same facts, and rules take over on any failure.
   creates a critical, escalated application for an urgent callback, even if details
   are missing. Caller ID is used when no number was given.
 
-## AI agents and Claude
+## AI agents: Claude or OpenAI
 
-The agents are LangGraph graphs that work without any model. When `ANTHROPIC_API_KEY`
-is set, Claude (`LLM_MODEL`, default `claude-opus-5`) is consulted only where rules are
-weak:
+The agents are LangGraph graphs that work without any model. `LLM_PROVIDER` picks the
+model they consult:
+
+- `anthropic` (the default): Claude (`LLM_MODEL`, default `claude-opus-5`) when
+  `ANTHROPIC_API_KEY` is set.
+- `openai`: `OPENAI_MODEL` (default `gpt-6-luna`) when `OPENAI_API_KEY` is set.
+
+The model is consulted where rules are weak:
 
 - **T8:** narratives the keyword rules cannot categorize confidently (priority stays
   rule-based).
-- **T5:** free-form speech (validated formats such as phone numbers still come from
-  rules).
+- **T5:** every caller turn, alongside the rules, for free-form speech (validated
+  formats such as phone numbers still come from rules). On the phone this adds the
+  model's response time to each reply.
 - **T6:** reading scans and PDFs.
 - **T7:** drafting. A draft that drops a term, a party or the statutory reference fails
   review and is replaced by the template.
 
-Requests use structured outputs and server-side refusal fallback (`fallbacks: "default"`).
-Any failure (network, rate limit, refusal, invalid output) falls back to rules.
+Requests use structured outputs. Claude requests add server-side refusal fallback
+(`fallbacks: "default"`); OpenAI requests go through the Responses API with
+`store=False`, so applications are not kept by OpenAI, and the agents' image and PDF
+blocks are converted to its input parts. Any failure (network, rate limit, refusal,
+invalid output) falls back to rules.
 
 ## Offline sync (T9)
 
@@ -236,10 +247,52 @@ operation that made the case.
    that supports Bangla for the voice you use.
 3. Set `TWILIO_AUTH_TOKEN`. Signature checks are always on when
    `ENVIRONMENT=production`.
-4. **Plug in speech-to-text.** No STT provider is bundled. Implement `Transcriber` in
-   `services/stream_manager.py` (feed μ-law 8 kHz audio; emit `speech_started` and
-   `final` events) and return it from `build_transcriber`. Until then, callers hear a
-   short message (call 999 if in danger; apply at a UDC) and the call ends.
+4. Set `OPENAI_API_KEY` for speech-to-text. Without it, callers hear a short message
+   (call 999 if in danger; apply at a UDC) and the call ends.
+
+### Speech-to-text
+
+Each call opens one OpenAI Realtime transcription session with `gpt-live-transcribe`
+(`services/speech_to_text.py`), expecting Bangla and English (`bn`, `en`) on the Bangla
+line. The model accepts 24 kHz PCM and has no voice detection, so the service
+(`services/audio.py`) decodes Twilio's μ-law, upsamples it, and marks the caller's
+turns itself:
+
+- A turn starts after 200 ms of speech. The line stops talking at once (barge-in) and
+  the turn is sent with half a second of pre-roll.
+- A turn ends after `STT_END_OF_TURN_MS` (700 ms) of quiet. It is committed, and its
+  transcript becomes the agent's next input. Only turns are sent, never the silence
+  (or our own reply echoing) between them.
+- Speech means three times the line's learned noise floor and at least
+  `STT_MIN_SPEECH_RMS`. Raise it if line noise interrupts the replies; lower it if
+  quiet callers are missed.
+- `OPENAI_STT_DELAY` trades earlier text for accuracy (`minimal` … `xhigh`).
+
+If the session cannot open, is rejected (bad key, model or language), or drops, the
+caller hears that we cannot hear them and to call again (999 in danger), and the call
+ends as a cut call: what they said is filed. The reason is logged. Transcripts are
+never logged, except at `LOG_LEVEL=DEBUG`, which is for local testing only.
+
+### Test a call without a phone
+
+`scripts/simulate_call.py` plays Twilio's part: it streams recorded caller turns in
+real time, plays the line's replies, and saves the call as a stereo WAV (left: caller,
+right: the line).
+
+```bash
+# each turn: 8 kHz mono 16-bit WAV
+ffmpeg -i answer1.m4a -ar 8000 -ac 1 -c:a pcm_s16le turn1.wav
+
+# the server, with speech-to-text and the debug log (keep SMS a dry run)
+LOG_LEVEL=DEBUG SMS_DRY_RUN=true .venv/bin/uvicorn app.main:app --port 8000
+
+.venv/bin/python -m scripts.simulate_call turn1.wav turn2.wav --lang bn
+.venv/bin/python -m scripts.simulate_call q1.wav --line helpline --lang en
+```
+
+Each turn plays once the previous reply has finished; the server log shows what was
+heard and what was replied. `GET /health` shows whether speech-to-text is on. An intake
+call that reaches the problem files a real application and its SMS notices.
 
 ## Configuration
 
@@ -253,6 +306,8 @@ See `.env.example` for every setting. For production, set at least:
 - `SMS_DRY_RUN=false` with the ADN credentials
 - `NID_SERVER_URL` and `NID_SERVER_API_KEY` (the registry's `NID_API_KEY`)
 - `HELPLINE_NUMBER` (the number routed to the query helpline)
+- `OPENAI_API_KEY` (speech-to-text for both phone lines), and `LLM_PROVIDER` with its key
+  if the agents should use a model
 
 ## Known limitations
 
@@ -264,8 +319,12 @@ See `.env.example` for every setting. For production, set at least:
   switch to a shared LangGraph checkpointer (Postgres or Redis).
 - **T11 identity:** a signature proves the signer holds the key, not who they are.
   Binding keys to parties (for example, enrolment at a UDC) is still to do.
-- **Telephony:** needs a speech-to-text adapter (see above). Live transfer to an
-  officer during an emergency is not implemented.
+- **Telephony:** live transfer to an officer during an emergency is not implemented.
+- **Speech-to-text:** Bangla accuracy of `gpt-live-transcribe` on telephone audio is
+  not yet measured; test with real callers before relying on it. Voice detection is by
+  loudness, so a loud line, or a phone without echo cancellation, can interrupt
+  replies (tune `STT_MIN_SPEECH_RMS`). A turn that fails to transcribe is skipped
+  silently, and the caller has to repeat it.
 - **ADN SMS:** the request fields follow ADN's secure send-SMS API. Confirm them
   against your ADN account's documentation before going live.
 - **Keyword lists:** T6 checklists and T8 terms are a reviewed starting point, not

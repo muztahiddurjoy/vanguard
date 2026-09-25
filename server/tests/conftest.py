@@ -7,6 +7,8 @@ os.environ.update(
         "DATABASE_URL": "sqlite://",
         "API_TOKEN": "",
         "ANTHROPIC_API_KEY": "",
+        "OPENAI_API_KEY": "",
+        "LLM_PROVIDER": "anthropic",
         "SMS_DRY_RUN": "true",
         # Environment variables beat .env, so blanking these keeps a developer's
         # real gateway credentials out of tests that build Settings() directly.
