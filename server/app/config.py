@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     app_name: str = "DLAS Backend"
     environment: str = "development"
     database_url: str = "sqlite:///./dlas.db"
-    cors_origins: str = "http://localhost:5173"
+    # The DLAO dashboard and the panel lawyers' dashboard.
+    cors_origins: str = "http://localhost:5173,http://localhost:5174"
     # Shared bearer token for the dashboard and UDC clients. Empty disables the check.
     api_token: str = ""
     # The app's own log lines. DEBUG also shows what callers said and the replies:

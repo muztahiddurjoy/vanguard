@@ -4,7 +4,8 @@
 
 Runs four intakes against an in-memory database (a hostage call cut short,
 a son applying for his mother with NID matches, a wife confirmed through her
-husband's SIM, and a web form), then saves
+husband's SIM, and a web form), sends the mother's case to another district
+and back, gives it a panel lawyer who reports from court, then saves
 the case list and one case detail exactly as the API returns them to
 dlao-dashboard/src/api/fixtures/server-cases.json, which the dashboard's
 mapping tests read. Re-run it whenever the case view changes.
@@ -12,6 +13,7 @@ mapping tests read. Re-run it whenever the case view changes.
 
 import json
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Rules only (no model, whatever .env says), so the fixture is the same on every run.
@@ -80,9 +82,36 @@ def main() -> None:
                 "respondent": {"name": "Abdul Jalil", "relation": "cousin"},
             },
         )
+        family = next(
+            c for c in client.get("/dlao/cases").json() if c["identity"]["filingFor"] == "mother"
+        )
+        # The family case goes to a panel lawyer, who reports from court, after a
+        # transfer to the respondent's district that came back.
+        ref = family["id"]
+        referral = client.post(
+            "/referrals",
+            headers=OFFICER,
+            json={"case_ref": ref, "to_office": "Gaibandha",
+                  "reason": "The former husband lives in Gaibandha."},
+        ).json()  # fmt: skip
+        client.post(
+            f"/referrals/{referral['id']}/respond",
+            json={"accept": False, "note": "The applicant lives in Rangpur, so Rangpur acts."},
+        )
+        client.post(f"/dlao/cases/{ref}/lawyer", headers=OFFICER, json={"lawyer_id": "LAW-12"})
+        client.post(
+            f"/lawyer/cases/{ref}/updates",
+            headers={"X-Lawyer-Id": "LAW-12"},
+            json={
+                "stage": "plaintFiled",
+                "summary": "Maintenance suit filed at the Family Court; summons issued to "
+                "Kamal Hossain.",
+                "court": "Family Court, Rangpur",
+                "next_hearing_at": (datetime.now(UTC) + timedelta(days=10)).isoformat(),
+            },
+        )
         cases = client.get("/dlao/cases").json()
-        family = next(c for c in cases if c["identity"]["filingFor"] == "mother")
-        detail = client.get(f"/dlao/cases/{family['id']}", headers=OFFICER).json()
+        detail = client.get(f"/dlao/cases/{ref}", headers=OFFICER).json()
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(

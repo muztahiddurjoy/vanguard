@@ -78,6 +78,7 @@ describe("toLegalCase", () => {
       "aiTriage",
       "identityChecked",
       "noticeHeld",
+      "lawyerAssigned",
     ])
     expect(c.activity[2]).toMatchObject({ type: "identityChecked", verified: true })
     // The line listens first: what happened is the first thing on record.
