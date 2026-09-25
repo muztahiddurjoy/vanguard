@@ -1,4 +1,6 @@
+import { useState } from "react"
 import {
+  ArrowRightLeft,
   BellRing,
   CircleCheck,
   Clock,
@@ -10,6 +12,8 @@ import {
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
+import { PatternAlerts } from "@/components/lawyers/pattern-alert"
+import { ReassignDialog } from "@/components/lawyers/reassign-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -71,6 +75,11 @@ function LawyerCard({ lawyer, cases }: { lawyer: PanelLawyer; cases: LegalCase[]
     .filter((d): d is string => !!d)
     .sort()
     .at(-1)
+  const next = cases
+    .filter((c) => c.nextHearing && Date.parse(c.nextHearing.at) >= now)
+    .sort((a, b) => Date.parse(a.nextHearing!.at) - Date.parse(b.nextHearing!.at))[0]
+  const [moving, setMoving] = useState(false)
+  const [seq, setSeq] = useState(0)
 
   return (
     <Card className="h-full gap-4">
@@ -112,6 +121,22 @@ function LawyerCard({ lawyer, cases }: { lawyer: PanelLawyer; cases: LegalCase[]
               {lastUpdate ? f.relative(lastUpdate, now) : t.lawyers.never}
             </dd>
           </div>
+          <div className="col-span-2 flex flex-col gap-0.5">
+            <dt className="text-xs text-muted-foreground">{t.lawyers.nextHearing}</dt>
+            <dd className="font-medium">
+              {next ? (
+                <>
+                  <time dateTime={next.nextHearing!.at}>{f.dateTime(next.nextHearing!.at)}</time>
+                  <span className="font-normal text-muted-foreground">
+                    {" · "}
+                    {pick(next.applicant.name)}
+                  </span>
+                </>
+              ) : (
+                t.lawyers.none
+              )}
+            </dd>
+          </div>
         </dl>
 
         <div className="flex flex-col gap-1.5">
@@ -150,6 +175,18 @@ function LawyerCard({ lawyer, cases }: { lawyer: PanelLawyer; cases: LegalCase[]
             {t.lawyers.remind}
           </Button>
         )}
+        {standing.kind !== "free" && standing.kind !== "ok" && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSeq((n) => n + 1)
+              setMoving(true)
+            }}
+          >
+            <ArrowRightLeft aria-hidden data-icon="inline-start" />
+            {t.lawyers.moveCases}
+          </Button>
+        )}
         <Button
           variant="outline"
           aria-label={t.queue.actionFor(t.lawyers.call, name)}
@@ -159,6 +196,14 @@ function LawyerCard({ lawyer, cases }: { lawyer: PanelLawyer; cases: LegalCase[]
           {t.lawyers.call}
         </Button>
       </CardFooter>
+      <ReassignDialog
+        key={seq}
+        lawyer={lawyer}
+        cases={cases}
+        missed={cases.reduce((sum, c) => sum + (c.lawyer?.missedUpdates ?? 0), 0)}
+        open={moving}
+        onOpenChange={setMoving}
+      />
     </Card>
   )
 }
@@ -175,6 +220,7 @@ export function LawyersPage() {
       <p className="text-sm font-medium text-muted-foreground" role="status">
         {t.lawyers.summary(f.num(PANEL_LAWYERS.length), f.num(late))}
       </p>
+      <PatternAlerts cases={cases} />
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {PANEL_LAWYERS.map((lawyer) => (
           <li key={lawyer.id}>

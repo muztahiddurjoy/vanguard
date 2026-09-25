@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderApp } from "@/test/render-app"
@@ -63,6 +63,46 @@ describe("All cases", () => {
     await user.click(screen.getByRole("button", { name: "Open case: Abdul Malek" }))
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
+  })
+})
+
+describe("Pattern alert (T1)", () => {
+  it("flags a lawyer who stopped reporting across cases and moves their cases", async () => {
+    const { user } = renderApp({ path: "/" })
+    const alert = screen
+      .getByRole("heading", { name: /Adv\. Shahidul Islam/ })
+      .closest("section") as HTMLElement
+    expect(alert).toHaveTextContent("Pattern alert: lawyer inactivity")
+    expect(alert).toHaveTextContent(
+      "Inactivity Threshold Reached: Missed 3 updates across 3 cases.",
+    )
+
+    await user.click(within(alert).getByRole("button", { name: "Review & Reassign" }))
+    const dialog = await screen.findByRole("dialog", { name: "Move this lawyer's cases" })
+    const boxes = within(dialog).getAllByRole("checkbox")
+    expect(boxes).toHaveLength(3)
+    boxes.forEach((box) => expect(box).toBeChecked())
+
+    // Keep the up-to-date case with him; move the two late ones.
+    await user.click(within(dialog).getByRole("checkbox", { name: /Motaleb Mia/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Move 2 cases" }))
+    expect(within(dialog).getByText("Choose the lawyer who will take the cases.")).toBeVisible()
+
+    await user.click(within(dialog).getByRole("combobox", { name: "New lawyer" }))
+    await user.click(await screen.findByRole("option", { name: /Adv\. Taslima Akter/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Move 2 cases" }))
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: /Adv\. Shahidul Islam/ }),
+      ).not.toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole("link", { name: /^Lawyers$/ }))
+    const card = screen
+      .getByRole("heading", { name: "Adv. Taslima Akter" })
+      .closest("[data-slot=card]") as HTMLElement
+    expect(within(card).getByRole("button", { name: "Abdul Malek" })).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "Anwara Begum" })).toBeInTheDocument()
   })
 })
 

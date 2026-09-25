@@ -18,6 +18,7 @@ import { SafeContactLine } from "@/components/case/safe-contact-line"
 import { HearingCard } from "@/components/hearings/hearing-card"
 import { SummaryTiles } from "@/components/home/summary-tiles"
 import { PageHeader } from "@/components/layout/page-header"
+import { PatternAlerts } from "@/components/lawyers/pattern-alert"
 import { NextActionButton } from "@/components/queue/next-action-button"
 import { ButtonLink } from "@/components/ui/button-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -76,6 +77,8 @@ export function HomePage() {
       <PageHeader title={greet(firstName)} description={t.home.intro(f.longDate(now))} />
 
       <SummaryTiles cases={cases} />
+
+      <PatternAlerts cases={cases} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card className="gap-0 py-0">
