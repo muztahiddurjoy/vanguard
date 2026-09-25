@@ -13,6 +13,7 @@ import { Link } from "react-router"
 
 import { useOfficer } from "@/auth/use-auth"
 import { PriorityBadge } from "@/components/case/priority-badge"
+import { DoNotCallLine } from "@/components/case/do-not-call"
 import { SafeContactLine } from "@/components/case/safe-contact-line"
 import { HearingCard } from "@/components/hearings/hearing-card"
 import { SummaryTiles } from "@/components/home/summary-tiles"
@@ -116,7 +117,11 @@ export function HomePage() {
                     <p className="text-sm text-muted-foreground">
                       {c.flags.includes("sensitive") ? t.queue.sensitive : caseReason(c, i18n)}
                     </p>
-                    {c.safeContact && <SafeContactLine window={c.safeContact} className="w-fit" />}
+                    {c.doNotCall ? (
+                      <DoNotCallLine reason={c.doNotCall.reason} className="w-fit" />
+                    ) : (
+                      c.safeContact && <SafeContactLine window={c.safeContact} className="w-fit" />
+                    )}
                   </div>
                   <NextActionButton legalCase={c} onAction={runAction} className="sm:w-52" />
                 </li>

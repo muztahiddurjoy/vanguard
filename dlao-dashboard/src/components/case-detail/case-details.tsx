@@ -1,16 +1,43 @@
+import { CallNotes } from "@/components/case-detail/call-notes"
+import { RespondentPanel } from "@/components/case-detail/respondent-panel"
 import { PANEL_LAWYERS } from "@/data/cases"
 import type { LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 
-export function CaseDetails({ legalCase: c }: { legalCase: LegalCase }) {
+export function CaseDetails({
+  legalCase: c,
+  onReleaseNotice,
+}: {
+  legalCase: LegalCase
+  onReleaseNotice: (justification: string) => void
+}) {
   const { t, f, pick } = useI18n()
   const sensitive = c.flags.includes("sensitive")
   const lawyer = c.lawyer && PANEL_LAWYERS.find((l) => l.id === c.lawyer!.id)
+  const identity = c.identity
+  const identityText =
+    identity &&
+    [
+      identity.applicantVerified ? t.identity.verified : t.identity.notVerified,
+      identity.callerVerified && identity.filingFor !== "self" ? t.identity.callerVerified : "",
+      identity.callerSimRegistered ? t.identity.simRegistered : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
 
   const rows: { key: string; label: string; value: string }[] = [
     { key: "category", label: t.detail.category, value: t.category[c.category] },
     { key: "channel", label: t.detail.channel, value: t.channel[c.channel] },
     { key: "received", label: t.detail.received, value: f.dateTime(c.receivedAt) },
+    ...(identity
+      ? [
+          {
+            key: "filedHow",
+            label: t.detail.filedHow,
+            value: t.identity.filedFor[identity.filingFor],
+          },
+        ]
+      : []),
     ...(c.proxy
       ? [
           {
@@ -33,7 +60,23 @@ export function CaseDetails({ legalCase: c }: { legalCase: LegalCase }) {
     },
     { key: "guardian", label: t.detail.guardian, value: pick(c.applicant.guardian) },
     { key: "nid", label: t.detail.nid, value: c.applicant.nidMasked },
-    { key: "age", label: t.detail.age, value: f.num(c.applicant.age) },
+    ...(identityText ? [{ key: "identity", label: t.detail.identity, value: identityText }] : []),
+    ...(c.trackingToken
+      ? [
+          {
+            key: "token",
+            label: t.detail.trackingToken,
+            value: c.filerReceipt
+              ? `${c.trackingToken} · ${t.receipt[c.filerReceipt.status]}`
+              : c.trackingToken,
+          },
+        ]
+      : []),
+    {
+      key: "age",
+      label: t.detail.age,
+      value: c.applicant.age === undefined ? "—" : f.num(c.applicant.age),
+    },
     {
       key: "lawyer",
       label: t.detail.lawyer,
@@ -60,6 +103,8 @@ export function CaseDetails({ legalCase: c }: { legalCase: LegalCase }) {
           ))}
         </dl>
       </section>
+      <RespondentPanel legalCase={c} onRelease={onReleaseNotice} />
+      <CallNotes legalCase={c} />
     </div>
   )
 }

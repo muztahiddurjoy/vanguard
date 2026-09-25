@@ -87,7 +87,7 @@ export function DuplicateReviewDialog({
       case "nid":
         return a.nidMasked
       case "age":
-        return f.num(a.age)
+        return a.age === undefined ? "—" : f.num(a.age)
       case "category":
         return t.category[c.category]
       case "receivedAt":

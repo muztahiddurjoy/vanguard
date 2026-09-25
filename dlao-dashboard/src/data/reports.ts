@@ -5,7 +5,8 @@ import type { CaseCategory, CaseOutcome } from "@/data/types"
 export const CASES_PER_MONTH = [31, 38, 35, 44, 41, 47]
 export const CASES_LAST_MONTH = CASES_PER_MONTH.at(-2)!
 
-export const CASES_BY_TYPE: Record<CaseCategory, number> = {
+// Sorted cases only: "other" is a queue state, not a type of case to report.
+export const CASES_BY_TYPE: Record<Exclude<CaseCategory, "other">, number> = {
   domesticViolence: 58,
   familyMaintenance: 46,
   landDispute: 39,

@@ -17,6 +17,11 @@ export const ACTOR: Record<ActivityEvent["type"], Actor> = {
   overdueResolved: "officer",
   lawyerAssigned: "officer",
   safeCallScheduled: "officer",
+  trackReviewed: "officer",
+  noticeReleased: "officer",
+  doNotCallSet: "ai",
+  noticeHeld: "system",
+  identityChecked: "system",
 }
 
 /** One sentence per history entry, in the active language. */
@@ -48,5 +53,15 @@ export function describeEvent(e: ActivityEvent, { t, f, pick }: I18nValue): stri
     }
     case "safeCallScheduled":
       return t.activity.safeCallScheduled(f.dateTime(e.scheduledFor))
+    case "trackReviewed":
+      return t.activity.trackReviewed(t.track.label[e.to])
+    case "doNotCallSet":
+      return t.activity.doNotCallSet(t.doNotCall.short[e.reason])
+    case "noticeHeld":
+      return t.activity.noticeHeld
+    case "noticeReleased":
+      return t.activity.noticeReleased
+    case "identityChecked":
+      return e.verified ? t.activity.identityVerified : t.activity.identityNotVerified
   }
 }
