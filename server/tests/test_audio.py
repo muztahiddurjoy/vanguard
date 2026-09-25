@@ -1,3 +1,4 @@
+import itertools
 import math
 import struct
 import warnings
@@ -7,6 +8,7 @@ import pytest
 from app.services.audio import (
     FRAME_SAMPLES,
     ULAW_TO_LINEAR,
+    TempoChanger,
     Upsampler,
     VoiceActivityDetector,
     pcm16_bytes,
@@ -128,3 +130,53 @@ def test_a_turn_is_cut_at_the_maximum_length():
     assert decisions[14] == "start"
     assert decisions[64] == "end"
     assert decisions[74] == "start"  # still talking: the next turn begins
+
+
+# --- tempo -------------------------------------------------------------------------
+
+
+def sine(hz: float, seconds: float, amplitude: int = 8000) -> list[int]:
+    return [
+        round(amplitude * math.sin(2 * math.pi * hz * n / 8000)) for n in range(int(seconds * 8000))
+    ]
+
+
+def pitch(samples) -> float:
+    crossings = sum(1 for a, b in itertools.pairwise(samples) if (a < 0) != (b < 0))
+    return crossings / 2 / (len(samples) / 8000)
+
+
+def stretch(rate: float, samples: list[int], chunk: int) -> list[int]:
+    changer = TempoChanger(rate)
+    out: list[int] = []
+    for i in range(0, len(samples), chunk):
+        out.extend(changer.process(samples[i : i + chunk]))
+    return out + list(changer.flush())
+
+
+def test_tempo_speeds_speech_up_without_raising_its_pitch():
+    voice = sine(180, 3.0)
+    faster = stretch(1.25, voice, chunk=1000)
+    assert len(faster) == pytest.approx(len(voice) / 1.25, abs=TempoChanger.WINDOW)
+    assert pitch(faster) == pytest.approx(180, rel=0.01)
+    assert faster[: TempoChanger.HOP] == voice[: TempoChanger.HOP]  # the start is kept whole
+    slower = stretch(0.8, voice, chunk=1000)
+    assert len(slower) == pytest.approx(len(voice) / 0.8, abs=TempoChanger.WINDOW)
+    assert pitch(slower) == pytest.approx(180, rel=0.01)
+
+
+def test_tempo_output_does_not_depend_on_how_the_input_is_chunked():
+    voice = [a + b for a, b in zip(sine(150, 1.0), sine(410, 1.0, 3000), strict=True)]
+    assert stretch(1.2, voice, chunk=37) == stretch(1.2, voice, chunk=len(voice))
+
+
+def test_tempo_at_normal_speed_changes_nothing_and_short_input_comes_back_whole():
+    voice = sine(200, 0.5)
+    assert stretch(1.0, voice, chunk=160) == voice
+    changer = TempoChanger(1.3)
+    assert list(changer.process(voice[:100])) == []
+    assert list(changer.flush()) == voice[:100]
+    # Flushed, the changer starts over: a new stream keeps its start whole too.
+    assert list(changer.process(voice))[: TempoChanger.HOP] == voice[: TempoChanger.HOP]
+    with pytest.raises(ValueError):
+        TempoChanger(3.0)
