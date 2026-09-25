@@ -33,6 +33,7 @@ from app.models import (
 )
 from app.routers import current_actor, require_api_token
 from app.routers.dlao import apply_triage, case_view, due_at_for
+from app.routers.duplicates import cases_of, find_duplicates_for
 from app.services.adnsms import normalize_bd_mobile
 
 router = APIRouter(prefix="/intake", tags=["intake"], dependencies=[Depends(require_api_token)])
@@ -193,6 +194,9 @@ def create_application(
         details={"applicationId": case.application_id, "channel": case.channel},
     )
     apply_triage(db, case, actor="agent:t8")
+    for review in find_duplicates_for(db, applicant):
+        for linked in cases_of(db, review.party_a_id) + cases_of(db, review.party_b_id):
+            linked.add_flag("possibleDuplicate")
     return case
 
 

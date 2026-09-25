@@ -22,8 +22,6 @@ from app.models import (
     CaseStatus,
     ChecklistItem,
     Document,
-    DuplicateReview,
-    DuplicateStatus,
     PartyRole,
     Priority,
     ReferralStatus,
@@ -72,15 +70,6 @@ def mask_phone(phone: str | None) -> str | None:
     return f"{phone[:5]}-XXX-{phone[-3:]}" if phone and len(phone) == 11 else phone
 
 
-def pending_duplicate_party_ids(db: Session) -> set[int]:
-    rows = db.execute(
-        select(DuplicateReview.party_a_id, DuplicateReview.party_b_id).where(
-            DuplicateReview.status == DuplicateStatus.PENDING
-        )
-    )
-    return {pid for pair in rows for pid in pair}
-
-
 def live_flags(case: Case, now: datetime) -> list[str]:
     """Stored flags plus the ones that depend on the clock (T1)."""
     flags = list(case.flags or [])
@@ -100,9 +89,7 @@ def live_flags(case: Case, now: datetime) -> list[str]:
     return flags
 
 
-def queues_for(
-    case: Case, flags: list[str], duplicate_parties: set[int], now: datetime
-) -> list[str]:
+def queues_for(case: Case, flags: list[str], now: datetime) -> list[str]:
     if case.status not in OPEN_STATUSES:
         return []
     queues = []
@@ -113,7 +100,8 @@ def queues_for(
         queues.append("actionToday")
     if case.triage and case.triage_status == TriageStatus.PENDING:
         queues.append("pendingTriage")
-    if any(cp.party_id in duplicate_parties for cp in case.parties):
+    # Set when T4 queues a review, cleared once no review for its parties is pending.
+    if "possibleDuplicate" in flags:
         queues.append("duplicates")
     if {"overdue", "lawyerInactivity", "jurisdictionEscalation"} & set(flags):
         queues.append("alerts")
@@ -142,7 +130,6 @@ def party_view(party: Any, *, full_phone: bool) -> dict[str, Any]:
 def case_view(
     case: Case,
     *,
-    duplicate_parties: set[int] | None = None,
     now: datetime | None = None,
     full_phone: bool = False,
 ) -> dict[str, Any]:
@@ -160,7 +147,7 @@ def case_view(
         "category": case.category,
         "priority": case.priority,
         "priorityChanged": case.triage_status == TriageStatus.OVERRIDDEN,
-        "queues": queues_for(case, flags, duplicate_parties or set(), now),
+        "queues": queues_for(case, flags, now),
         "flags": flags,
         "channel": case.channel,
         "summary": case.summary,
@@ -250,11 +237,10 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
 @router.get("/queues")
 def queue_counts(db: Session = Depends(get_db)) -> dict[str, int]:
     cases = db.scalars(select(Case).where(Case.status.in_(OPEN_STATUSES))).all()
-    dupes = pending_duplicate_party_ids(db)
     now = utcnow()
     counts = {"all": len(cases), **{k: 0 for k in QUEUE_KEYS}}
     for case in cases:
-        for q in queues_for(case, live_flags(case, now), dupes, now):
+        for q in queues_for(case, live_flags(case, now), now):
             counts[q] += 1
     return counts
 
@@ -272,12 +258,11 @@ def list_cases(
         query = query.where(Case.status.in_(OPEN_STATUSES))
     if priority:
         query = query.where(Case.priority == priority)
-    dupes = pending_duplicate_party_ids(db)
     now = utcnow()
     needle = q.strip().casefold()
     views = []
     for case in db.scalars(query):
-        view = case_view(case, duplicate_parties=dupes, now=now)
+        view = case_view(case, now=now)
         if queue != "all" and queue not in view["queues"]:
             continue
         if needle:
@@ -301,7 +286,7 @@ def get_case(
         db, actor=actor, action=AuditAction.CASE_VIEWED, entity_type="case", entity_id=case.id
     )
     db.commit()
-    view = case_view(case, duplicate_parties=pending_duplicate_party_ids(db), full_phone=True)
+    view = case_view(case, full_phone=True)
     view["activity"] = [
         {
             "at": as_utc(e.occurred_at).isoformat(),
