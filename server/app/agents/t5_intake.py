@@ -53,13 +53,14 @@ from app.agents.spoken import (
     words,
     yes_or_no,
 )
-from app.agents.state import IntakeState
+from app.agents.state import IntakeState, OpeningKind
 from app.agents.t8_triage import (
     PHONE_MONITORED,
     categorize_by_rules,
     find_hostage_sign,
     has_risk_sign,
 )
+from app.config import get_settings
 from app.database import utcnow
 from app.services.adnsms import normalize_bd_mobile
 from app.services.nid_registry import Citizen, NidRegistry, default_registry
@@ -185,6 +186,21 @@ HEARD = _t(
     "Thank you for telling me. I will ask a few short questions.",
     "বুঝেছি, ধন্যবাদ। কয়েকটি ছোট প্রশ্ন করব।",
 )
+# The model heard something that is not a legal problem (a wrong number, a question
+# about an application already made): say what the line is for, and keep listening.
+NOT_LEGAL = _t(
+    "This line takes applications for legal aid, for problems like family, land, work or "
+    "violence. To ask about an application you made, call {helpline}. "
+    "If you need legal help, tell me what happened.",
+    "এই লাইনে আইনি সহায়তার আবেদন নেওয়া হয়, যেমন পরিবার, জমি, কাজ বা নির্যাতনের সমস্যায়। "
+    "আগের আবেদনের খোঁজ নিতে {helpline} নম্বরে ফোন করুন। আইনি সহায়তা দরকার হলে বলুন, কী হয়েছে।",
+)
+CLOSING_NOT_LEGAL = _t(
+    "Thank you for calling. If you need legal help, call this number again. "
+    "To ask about an application you made, call {helpline}.",
+    "ফোন করার জন্য ধন্যবাদ। আইনি সহায়তা দরকার হলে এই নম্বরে আবার ফোন করুন। "
+    "আগের আবেদনের খোঁজ নিতে {helpline} নম্বরে ফোন করুন।",
+)
 CLOSING_UNHEARD = _t(
     "Sorry, I could not understand what happened. Please call again. "
     "If you are in danger, call 999.",
@@ -303,19 +319,23 @@ def substance(text: str) -> int:
     return sum(1 for w in words(text) if w not in FILLER_WORDS)
 
 
-def sounds_like_case(text: str) -> bool:
-    """Whether the caller has said what happened, by rules alone.
-
-    Either a problem legal aid knows (land, wages, dowry, ...), a warning sign,
-    or simply an account of some length. "I need help" or "my husband" is not
-    yet: the caller is encouraged to go on rather than questioned.
-    """
+def names_a_problem(text: str) -> bool:
+    """A problem legal aid knows (land, wages, dowry, ...) or a warning sign."""
     return (
-        substance(text) >= STORY_WORDS
-        or categorize_by_rules(text)[0] is not None
+        categorize_by_rules(text)[0] is not None
         or has_risk_sign(text)
         or has_any(text, DANGER_TERMS)
     )
+
+
+def sounds_like_case(text: str) -> bool:
+    """Whether the caller has said what happened, by rules alone.
+
+    Either a known problem or warning sign, or simply an account of some
+    length. "I need help" or "my husband" is not yet: the caller is encouraged
+    to go on rather than questioned.
+    """
+    return substance(text) >= STORY_WORDS or names_a_problem(text)
 
 
 def filing_for_from(utterance: str) -> FilingFor | None:
@@ -423,6 +443,24 @@ class LLMSlots(BaseModel):
     )
     safe_to_call: str | None = Field(None, description="When it is safe to call back")
     phone_monitored: bool | None = Field(None, description="Someone checks their phone")
+    danger_now: bool | None = Field(
+        None,
+        description="True only if someone is in danger right now or about to be hurt "
+        "(being beaten now, the abuser is there now, threatened with death now); "
+        "not for harm that happened before",
+    )
+
+
+class LLMOpening(LLMSlots):
+    """The caller's account before any question: the details, and what kind of call it is."""
+
+    kind: OpeningKind = Field(
+        description="'case': a problem a legal aid office may help with (family, marriage, "
+        "dowry, violence, land, property, work or wages, money, harassment, custody, a court "
+        "or police matter), however vaguely told; 'other': clearly not a legal problem, a "
+        "wrong number, or a question about an application already made; 'unclear': they "
+        "have not yet said what happened (greetings, 'can you hear me', a fragment)"
+    )
 
 
 EXTRACT_SYSTEM = (
@@ -430,6 +468,11 @@ EXTRACT_SYSTEM = (
     "(Bangla, English or mixed, transcribed from speech). The caller may apply for "
     "themselves or for a relative. Return only details the caller actually stated in this "
     "turn; leave the rest null. Never guess names, dates or numbers."
+)
+OPENING_SYSTEM = (
+    f"{EXTRACT_SYSTEM} This is the caller's own account, given before any question. "
+    "Also say what kind of call it is (when in doubt it is a case: nobody who may need "
+    "help is turned away) and whether anyone is in danger right now."
 )
 
 
@@ -507,26 +550,32 @@ def build_intake_graph(
         slots = dict(state.get("slots") or {})
         asking = state.get("asking")
         # While we listen, everything said so far is read together as one account,
-        # and never as the answer to a question.
+        # and never as the answer to a question. A "hello" adds nothing to it.
         listening = asking == "problem"
         story = state.get("story", "")
-        if listening and substance(utterance):
+        new_words = substance(utterance) > 0 if listening else bool(utterance.strip())
+        if listening and new_words:
             story = _join(story, utterance.strip())
         found = extract_by_rules(story, None) if listening else extract_by_rules(utterance, asking)
 
-        if llm is not None and utterance.strip():
+        # The model's reading of this turn, when there is one.
+        danger_now, kind = False, None
+        if llm is not None and new_words:
             if listening:
                 context = "The caller is saying what happened, in their own words."
             else:
                 context = f"We had just asked about: {asking}." if asking else ""
             said = story if listening else utterance
             result = llm.structured(
-                system=EXTRACT_SYSTEM,
+                system=OPENING_SYSTEM if listening else EXTRACT_SYSTEM,
                 content=f"{context}\n<utterance>\n{said}\n</utterance>",
-                schema=LLMSlots,
+                schema=LLMOpening if listening else LLMSlots,
             )
             if result is not None:
-                for key, value in _llm_values(result.model_dump(exclude_none=True)).items():
+                values = result.model_dump(exclude_none=True)
+                danger_now = bool(values.pop("danger_now", False))
+                kind = values.pop("kind", None) if listening else None
+                for key, value in _llm_values(values).items():
                     if listening and key == "problem":
                         continue  # the caller's own words are kept, not a summary
                     # Rules win: their answers are validated formats.
@@ -555,11 +604,13 @@ def build_intake_graph(
             "notes": notes,
             "turns": state.get("turns", 0) + 1,
             "story": story,
+            "danger_now": danger_now,
+            "opening_kind": kind,
         }
 
     def check_danger(state: IntakeState) -> IntakeState:
         utterance = state.get("utterance", "")
-        emergency = has_any(utterance, DANGER_TERMS)
+        emergency = has_any(utterance, DANGER_TERMS) or bool(state.get("danger_now"))
         held = find_hostage_sign(utterance) is not None
         update: IntakeState = {
             "emergency": emergency,
@@ -578,15 +629,22 @@ def build_intake_graph(
         story = state.get("story", "")
         asks = dict(state.get("asks") or {})
         asks["problem"] = heard = asks.get("problem", 0) + 1
+        # The model decides when it has read the account, but a problem the rules
+        # know is never turned away.
+        kind = state.get("opening_kind")
+        told = sounds_like_case(story) if kind is None else kind == "case" or names_a_problem(story)
         # After a few tries a short account is taken as it is: an officer can follow up.
-        if sounds_like_case(story) or (heard >= MAX_LISTENS and substance(story) >= 3):
+        if told or (heard >= MAX_LISTENS and kind != "other" and substance(story) >= 3):
             slots = {**(state.get("slots") or {}), "problem": story}
             _categorized(slots)
             return {"slots": slots, "asks": asks, "ack": _join(state.get("ack"), HEARD[lang])}
+        helpline = say_digits(get_settings().helpline_number, lang)
         if heard >= MAX_LISTENS:
-            closing = CLOSING_UNHEARD[lang]
-            return {"asks": asks, "reply": closing, "complete": True, "asking": None, "ack": ""}
-        return {"asks": asks, "ack": KEEP_LISTENING[lang]}
+            closing = CLOSING_NOT_LEGAL if kind == "other" else CLOSING_UNHEARD
+            reply = closing[lang].format(helpline=helpline)
+            return {"asks": asks, "reply": reply, "complete": True, "asking": None, "ack": ""}
+        nudge = NOT_LEGAL if kind == "other" else KEEP_LISTENING
+        return {"asks": asks, "ack": nudge[lang].format(helpline=helpline)}
 
     def verify_caller(state: IntakeState, slots: dict[str, Any], lang: Lang) -> IntakeState:
         """Match the caller's name and security answers to exactly one NID record."""

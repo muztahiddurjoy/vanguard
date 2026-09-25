@@ -10,7 +10,7 @@ from app.agents.spoken import (
     parse_safe_window,
     yes_or_no,
 )
-from app.agents.t5_intake import IntakeConversation, LLMSlots
+from app.agents.t5_intake import IntakeConversation, LLMOpening
 from app.agents.t6_document import LLMReading, run_document_review
 from app.agents.t7_settlement import LLMDraft, run_settlement_draft
 from tests.nid_fakes import FakeRegistry
@@ -258,7 +258,8 @@ def test_hostage_sign_promises_no_callback_and_intake_carries_on():
 def test_llm_extraction_fills_free_form_answers_but_rules_win_on_phone():
     # start() has an empty utterance and never calls the model, so one result is enough.
     llm = FakeLLM(
-        LLMSlots(
+        LLMOpening(
+            kind="case",
             filing_for="other",
             name="Moyuri Akter",
             phone="01999999999",
@@ -269,13 +270,59 @@ def test_llm_extraction_fills_free_form_answers_but_rules_win_on_phone():
     )
     conv = IntakeConversation(llm=llm, use_default_registry=False)
     conv.start("d", channel="hotline_16699", language="en")
-    s = conv.turn("d", "Calling about Moyuri Akter, 01712345318, her husband beats her")
+    said = "Calling about Moyuri Akter, 01712345318, her husband beats her"
+    s = conv.turn("d", said)
     assert s["slots"]["filing_for"] == "other"
     assert s["slots"]["phone"] == "01712345318"
     assert s["slots"]["name"] == "Moyuri Akter"
     assert s["slots"]["phone_monitored"] is True
+    assert s["slots"]["problem"] == said  # the caller's words, not the model's summary
     assert "date_of_birth" not in s["slots"]  # the model's answer failed validation
-    assert len(llm.calls) == 1
+    assert len(llm.calls) == 1 and llm.calls[0]["schema"] is LLMOpening
+    # Everything the caller asked is known, so the next question is what is not.
+    assert s["asking"] == "caller_name"
+
+
+def test_llm_hears_a_case_the_rules_cannot_place_and_danger_without_keywords():
+    conv = IntakeConversation(llm=FakeLLM(LLMOpening(kind="case")), use_default_registry=False)
+    conv.start("k1", channel="hotline_16699", language="en")
+    s = conv.turn("k1", "He cheated me")
+    assert s["slots"]["problem"] == "He cheated me" and s["asking"] == "filing_for"
+
+    llm = FakeLLM(LLMOpening(kind="case", danger_now=True))
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
+    conv.start("k2", channel="hotline_16699", language="en")
+    s = conv.turn("k2", "He is outside the door, he says tonight is my last night")
+    assert s["emergency"] is True and s["complete"] is True
+    assert s["reply"] == t5_intake.EMERGENCY["en"]
+
+
+def test_llm_cannot_turn_away_a_problem_the_rules_know():
+    conv = IntakeConversation(llm=FakeLLM(LLMOpening(kind="unclear")), use_default_registry=False)
+    conv.start("k3", channel="hotline_16699")
+    s = conv.turn("k3", "যৌতুক")
+    assert s["slots"]["problem"] == "যৌতুক" and s["slots"]["category"] == "dowryHarassment"
+
+
+def test_not_a_legal_matter_is_pointed_to_the_helpline_then_the_call_ends():
+    other = LLMOpening(kind="other")
+    conv = IntakeConversation(llm=FakeLLM(other, other, other), use_default_registry=False)
+    conv.start("o1", channel="hotline_16699", language="en")
+    s = conv.turn("o1", "I want to know what is happening with my application")
+    assert s["asking"] == "problem" and s["complete"] is False
+    assert s["reply"] == t5_intake.NOT_LEGAL["en"].format(helpline="1 6 4 3 0")
+    s = talk(conv, "o1", "My application", "The application I made last month")
+    assert s["complete"] is True
+    assert s["reply"] == t5_intake.CLOSING_NOT_LEGAL["en"].format(helpline="1 6 4 3 0")
+    assert "problem" not in s["slots"]
+
+
+def test_a_hello_is_not_sent_to_the_model():
+    llm = FakeLLM()
+    conv = IntakeConversation(llm=llm, use_default_registry=False)
+    conv.start("o2", channel="hotline_16699")
+    conv.turn("o2", "হ্যালো, শুনতে পাচ্ছেন?")
+    assert llm.calls == []
 
 
 # --- T6 documents ----------------------------------------------------------

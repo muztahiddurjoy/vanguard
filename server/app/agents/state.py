@@ -7,6 +7,9 @@ wins, as no key here declares a reducer).
 from typing import Any, Literal, TypedDict
 
 AgentKey = Literal["intake", "risk", "safety", "jurisdiction"]
+# What the caller's opening account is: something legal aid may help with, clearly
+# not (a wrong number, a question about an existing application), or not said yet.
+OpeningKind = Literal["case", "other", "unclear"]
 Weight = Literal["high", "medium", "low"]
 
 
@@ -61,6 +64,10 @@ class IntakeState(TypedDict, total=False):
     story: str
     # How often each slot has been asked without an answer ("problem": turns listened).
     asks: dict[str, int]
+    # The model's reading of the latest turn (None without a model): what kind of call
+    # the account is, and whether it says someone is in danger right now.
+    opening_kind: OpeningKind | None
+    danger_now: bool
     # Everything the caller said: [{"at", "topic", "text"}]; kept as the case's call notes.
     notes: list[dict[str, str]]
     # The slot we last asked about, so a bare answer ("Rangpur") fills it.
