@@ -173,3 +173,26 @@ def test_adnsms_is_dry_run_without_credentials():
 
     result = adnsms.AdnSmsClient(Settings(sms_dry_run=False)).send("01712345318", "hi")
     assert result.dry_run and result.ok
+
+
+def test_adnsms_allowlist_sends_only_to_listed_numbers():
+    sent: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.content)
+        return httpx.Response(200, json={"api_response_code": 200, "sms_uid": "SMS9"})
+
+    from app.config import Settings
+
+    settings = Settings(
+        adnsms_api_key="k",
+        adnsms_api_secret="s",
+        sms_dry_run=False,
+        sms_allowlist="+8801811-223344, 01712345318",
+    )
+    client = adnsms.AdnSmsClient(
+        settings, http=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    assert client.send("01712345318", "hi").dry_run is False
+    assert client.send("01999888777", "hi").dry_run is True
+    assert len(sent) == 1

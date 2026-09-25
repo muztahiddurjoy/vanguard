@@ -59,7 +59,8 @@ class AdnSmsClient:
 
     def send(self, mobile: str, message: str) -> SmsResult:
         mobile = normalize_bd_mobile(mobile)
-        if self.dry_run:
+        allowlist = self.settings.sms_allowlist_numbers
+        if self.dry_run or (allowlist and mobile not in allowlist):
             log.info("SMS dry run to %s (%d chars)", mobile[:5] + "******", len(message))
             return SmsResult(ok=True, dry_run=True)
 
