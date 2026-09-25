@@ -188,7 +188,7 @@ class TempoChanger:
     samples to where its waveform best continues the previous cut, so the
     overlaps never break a pitch period (which is what makes a naive speed-up
     warble). The first cut is kept whole, and ``flush()`` returns the rest of
-    the input once the stream has ended.
+    the input once the stream has ended. ``rate`` may change between chunks.
     """
 
     WINDOW = 240  # 30 ms at 8 kHz
@@ -196,8 +196,6 @@ class TempoChanger:
     SEEK = 64  # 8 ms either way: half the pitch period of the deepest voices
 
     def __init__(self, rate: float):
-        if not 0.5 <= rate <= 2.0:
-            raise ValueError("rate must be between 0.5 and 2")
         self.rate = rate
         self._window = [
             0.5 - 0.5 * math.cos(2 * math.pi * i / self.WINDOW) for i in range(self.WINDOW)
@@ -211,10 +209,20 @@ class TempoChanger:
         self._last: int | None = None  # where the last cut started
         self._tail: list[float] = []  # the last cut's second half, faded out
 
+    @property
+    def rate(self) -> float:
+        return self._rate
+
+    @rate.setter
+    def rate(self, rate: float) -> None:
+        if not 0.5 <= rate <= 2.0:
+            raise ValueError("rate must be between 0.5 and 2")
+        self._rate = rate
+
     def process(self, samples: Sequence[int]) -> array:
         """The output ready so far, given the next 16-bit ``samples``."""
-        if self.rate == 1.0:
-            return array("h", samples)
+        if self.rate == 1.0 and self._last is None and not self._input:
+            return array("h", samples)  # nothing in progress: nothing to change
         self._input.extend(samples)
         out = array("h")
         while self._start + len(self._input) >= self._needed():
@@ -223,8 +231,6 @@ class TempoChanger:
 
     def flush(self) -> array:
         """The rest of the output once the input has ended; the changer starts over."""
-        if self.rate == 1.0:
-            return array("h")
         # From the middle of the last cut on, the input itself: its fade-in exactly
         # completes the faded-out tail.
         begin = 0 if self._last is None else self._last + self.HOP - self._start

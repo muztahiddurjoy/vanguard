@@ -18,18 +18,22 @@ once more (without a limit the second time).
 
 ``eleven_v3`` speaks slowly and ignores the API's ``voice_settings.speed``, so
 the audio is sped up here instead, ``VOICE_SPEED`` times at the same pitch.
+Twilio plays audio the moment it arrives, and at the start of a reply
+``eleven_v3`` sends it little faster than it plays: sped up then, the line
+would stutter. So audio is only sped up while enough is already queued.
 """
 
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any, Protocol
 
 import httpx
 
 from app.config import Settings, get_settings
-from app.services.audio import TempoChanger, ulaw_decode, ulaw_encode
+from app.services.audio import SAMPLE_RATE, TempoChanger, ulaw_decode, ulaw_encode
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +52,9 @@ class TextToSpeech(Protocol):
 
 class ElevenLabsTTS:
     OUTPUT_FORMAT = "ulaw_8000"
+    # Audio queued at Twilio before the rest of a reply is sped up (measured on
+    # eleven_v3: no more gaps than at normal speed).
+    CUSHION_S = 0.3
 
     def __init__(
         self,
@@ -111,10 +118,20 @@ class ElevenLabsTTS:
                     yield chunk
             return
         tempo = TempoChanger(speed)
-        if faster := ulaw_encode(tempo.process(ulaw_decode(first))):
+        queued_until = 0.0  # when the audio sent so far will have played
+
+        def at_speed(chunk: bytes) -> bytes:
+            nonlocal queued_until
+            now = time.monotonic()
+            tempo.rate = speed if queued_until - now >= self.CUSHION_S else 1.0
+            out = ulaw_encode(tempo.process(ulaw_decode(chunk)))
+            queued_until = max(queued_until, now) + len(out) / SAMPLE_RATE
+            return out
+
+        if faster := at_speed(first):
             yield faster
         async for chunk in chunks:
-            if faster := ulaw_encode(tempo.process(ulaw_decode(chunk))):
+            if faster := at_speed(chunk):
                 yield faster
         if rest := ulaw_encode(tempo.flush()):
             yield rest

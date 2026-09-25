@@ -412,9 +412,13 @@ def test_elevenlabs_audio_plays_at_voice_speed_with_the_same_pitch():
         round(8000 * math.sin(2 * math.pi * 200 * n / 8000)) for n in range(2 * 8000)
     )
 
+    async def streamed():
+        for i in range(0, len(tone), 400):  # as ElevenLabs sends it: small chunks
+            yield tone[i : i + 400]
+
     def handler(request: httpx.Request) -> httpx.Response:
         assert "voice_settings" not in json.loads(request.content)  # eleven_v3 ignores it
-        return httpx.Response(200, content=tone)
+        return httpx.Response(200, content=streamed())
 
     async def collect(speed: float) -> bytes:
         tts = ElevenLabsTTS(_settings(voice_speed=speed), transport=httpx.MockTransport(handler))
@@ -424,7 +428,10 @@ def test_elevenlabs_audio_plays_at_voice_speed_with_the_same_pitch():
             await tts.aclose()
 
     faster = asyncio.run(collect(1.25))
-    assert len(faster) == pytest.approx(len(tone) / 1.25, abs=240)
+    # The start plays at normal speed until enough is queued at Twilio, then faster.
+    cushion = int(ElevenLabsTTS.CUSHION_S * 8000)
+    expected = cushion + (len(tone) - cushion) / 1.25
+    assert len(faster) == pytest.approx(expected, abs=400 + 240)
     samples = ulaw_decode(faster)
     crossings = sum(1 for a, b in itertools.pairwise(samples) if (a < 0) != (b < 0))
     assert crossings / 2 / (len(samples) / 8000) == pytest.approx(200, rel=0.01)

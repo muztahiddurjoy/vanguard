@@ -173,6 +173,24 @@ def test_tempo_speeds_speech_up_without_raising_its_pitch():
     assert pitch(slower) == pytest.approx(180, rel=0.01)
 
 
+def test_tempo_can_change_between_chunks_without_a_break():
+    voice = sine(180, 2.0)
+    changer = TempoChanger(1.0)
+    out = list(changer.process(voice[:8000]))  # nothing in progress: passed through
+    assert out == voice[:8000]
+    changer.rate = 1.25
+    out += changer.process(voice[8000:12000])
+    changer.rate = 1.0  # mid-stream, the cuts carry on at normal speed
+    out += changer.process(voice[12000:])
+    out += changer.flush()
+    assert len(out) == pytest.approx(8000 + 4000 / 1.25 + 4000, abs=TempoChanger.WINDOW)
+    assert pitch(out) == pytest.approx(180, rel=0.01)
+    # No clicks where the speed changed: the waveform stays a smooth sine.
+    assert (
+        max(abs(b - a) for a, b in itertools.pairwise(out)) < 8000 * 2 * math.pi * 180 / 8000 * 1.1
+    )
+
+
 def test_tempo_output_does_not_depend_on_how_the_input_is_chunked():
     voice = [a + b for a, b in zip(sine(150, 1.0), sine(410, 1.0, 3000), strict=True)]
     assert stretch(1.2, voice, chunk=37) == stretch(1.2, voice, chunk=len(voice))
