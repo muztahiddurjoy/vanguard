@@ -1,6 +1,7 @@
 """Application settings, read from the environment (and `.env` in development)."""
 
 from functools import lru_cache
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,11 +23,31 @@ class Settings(BaseSettings):
     office_district: str = "Rangpur"
     timezone: str = "Asia/Dhaka"
 
+    # Which model the agents consult: Claude ("anthropic") or OpenAI ("openai").
+    # Without the chosen provider's key, the agents stay rule-based.
+    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    llm_timeout_seconds: float = 60.0
+
     # Claude. The SDK also reads ANTHROPIC_API_KEY itself; we only need to know
     # whether one is configured so agents can fall back to their rule-based path.
     anthropic_api_key: str = ""
     llm_model: str = "claude-opus-5"
-    llm_timeout_seconds: float = 60.0
+
+    # OpenAI: the agents' model when LLM_PROVIDER=openai, and live speech-to-text
+    # for the phone lines whenever a key is set.
+    openai_api_key: str = ""
+    openai_model: str = "gpt-6-luna"
+    openai_stt_model: str = "gpt-live-transcribe"
+    # "minimal" | "low" | "medium" | "high" | "xhigh": earlier text or a more accurate one.
+    openai_stt_delay: str = "low"
+    openai_realtime_url: str = "wss://api.openai.com/v1/realtime?intent=transcription"
+
+    # Our own voice activity detection on call audio (gpt-live-transcribe has none).
+    # A turn ends after this much silence.
+    stt_end_of_turn_ms: int = 700
+    # Loudness (RMS of 16-bit samples) below which audio never counts as speech.
+    # Raise it if line noise interrupts the replies; lower it for quiet callers.
+    stt_min_speech_rms: int = 500
 
     public_base_url: str = "http://localhost:8000"
     twilio_auth_token: str = ""
@@ -79,7 +100,13 @@ class Settings(BaseSettings):
 
     @property
     def llm_enabled(self) -> bool:
+        if self.llm_provider == "openai":
+            return bool(self.openai_api_key)
         return bool(self.anthropic_api_key)
+
+    @property
+    def stt_enabled(self) -> bool:
+        return bool(self.openai_api_key)
 
 
 @lru_cache
