@@ -15,6 +15,7 @@ from app.routers import (
     helpline,
     incidents,
     intake,
+    lawyer,
     mediation,
     referrals,
     sync,
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     for module in (
         intake,
         dlao,
+        lawyer,
         duplicates,
         referrals,
         incidents,
