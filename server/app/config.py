@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     # Shared bearer token for the dashboard and UDC clients. Empty disables the check.
     api_token: str = ""
+    # The app's own log lines. DEBUG also shows what callers said and the replies:
+    # sensitive, for local testing only.
+    log_level: str = "INFO"
 
     # Secret key for hashing National ID numbers. Must be set (and kept) in production.
     nid_hash_key: str = "dev-only-nid-key"
