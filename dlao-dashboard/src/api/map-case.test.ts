@@ -79,6 +79,7 @@ describe("toLegalCase", () => {
       "identityChecked",
       "noticeHeld",
       "lawyerAssigned",
+      "lawyerUpdate",
     ])
     expect(c.activity[2]).toMatchObject({ type: "identityChecked", verified: true })
     // The line listens first: what happened is the first thing on record.
@@ -117,5 +118,68 @@ describe("toLegalCase", () => {
       missedUpdates: 3,
     })
     expect(c.actions).toEqual(["reviewTriage", "followUpLawyer"])
+
+    // Once reminded, the office waits for the lawyer instead of chasing again.
+    const reminded = toLegalCase({
+      ...base,
+      status: "active",
+      flags: ["lawyerInactivity"],
+      lawyer: {
+        id: "LAW-07",
+        lastUpdateAt: "2026-08-01T00:00:00+00:00",
+        missedUpdates: 1,
+        remindedAt: "2026-09-24T09:00:00+00:00",
+      },
+    })
+    expect(reminded.lawyer).toMatchObject({ missedUpdates: 1, reminded: true })
+    expect(reminded.actions).not.toContain("followUpLawyer")
+  })
+
+  it("maps the lawyer's court reports, the next hearing and transfers", () => {
+    const c = toLegalCase(detail)
+    expect(c.lawyer).toMatchObject({ id: "LAW-12", missedUpdates: 0 })
+    expect(c.lawyer?.updateDueAt).toBeDefined()
+    expect(c.courtStage).toBe("plaintFiled")
+    expect(c.nextHearing?.court).toEqual({
+      en: "Family Court, Rangpur",
+      bn: "Family Court, Rangpur",
+    })
+    const [update] = c.lawyerUpdates!
+    expect(update).toMatchObject({ lawyerId: "LAW-12", stage: "plaintFiled" })
+    expect(update.summary.en).toMatch(/^Maintenance suit filed/)
+    expect(c.timesReturned).toBe(1)
+    expect(c.referrals?.[0]).toMatchObject({
+      from: { en: "Rangpur", bn: "Rangpur" },
+      to: { en: "Gaibandha", bn: "Gaibandha" },
+      status: "returned",
+      response: { en: "The applicant lives in Rangpur, so Rangpur acts." },
+    })
+    // Not a sensitive case: no evidence hand-over to acknowledge.
+    expect(c.evidence).toBeUndefined()
+  })
+
+  it("keeps a sensitive case's file names withheld until they are opened", () => {
+    const c = toLegalCase({
+      ...detail,
+      flags: [...detail.flags, "sensitive"],
+      documents: [
+        {
+          id: 7,
+          kind: "screenshot",
+          filename: null,
+          contentType: "image/png",
+          sizeBytes: 2048,
+          status: "processed",
+          summary: null,
+          withheld: true,
+        },
+      ],
+      evidenceReceipt: { at: "2026-09-25T10:00:00+00:00", by: "DLAO-RGP-0142" },
+    })
+    expect(c.documents).toEqual([{ id: "7", type: "image", sizeBytes: 2048 }])
+    expect(c.evidence).toEqual({
+      from: { en: "Gaibandha", bn: "Gaibandha" },
+      acknowledged: { at: "2026-09-25T10:00:00+00:00", by: "DLAO-RGP-0142" },
+    })
   })
 })

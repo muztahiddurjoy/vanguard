@@ -1,7 +1,7 @@
 import { apiFetch } from "@/api/client"
-import { toLegalCase } from "@/api/map-case"
-import type { ApiCase } from "@/api/types"
-import type { LegalCase } from "@/data/types"
+import { toDocument, toHearing, toLegalCase } from "@/api/map-case"
+import type { ApiCase, ApiDocument, ApiHearing } from "@/api/types"
+import type { CaseDocument, Hearing, LegalCase } from "@/data/types"
 import type { CaseAction } from "@/state/cases-reducer"
 
 export async function fetchCases(officerId?: string): Promise<LegalCase[]> {
@@ -14,6 +14,20 @@ export async function fetchCase(id: string, officerId?: string): Promise<LegalCa
   return toLegalCase(
     await apiFetch<ApiCase>(`/dlao/cases/${encodeURIComponent(id)}`, { officerId }),
   )
+}
+
+/** Court dates the lawyers reported and mediation meetings in the next two weeks. */
+export async function fetchHearings(officerId?: string): Promise<Hearing[]> {
+  return (await apiFetch<ApiHearing[]>("/dlao/hearings", { officerId })).map(toHearing)
+}
+
+/** A sensitive case's documents with their names. The server records who opened them. */
+export async function openEvidence(id: string, officerId?: string): Promise<CaseDocument[]> {
+  const { documents } = await apiFetch<{ documents: ApiDocument[] }>(
+    `/dlao/cases/${encodeURIComponent(id)}/evidence/view`,
+    { method: "POST", officerId },
+  )
+  return documents.filter((d) => d.kind !== "settlement_draft").map(toDocument)
 }
 
 /**
@@ -36,11 +50,18 @@ export function saveAction(action: CaseAction, officerId?: string): Promise<unkn
         justification: action.justification,
       })
     case "assignLawyer":
-      return post("/lawyer", { lawyer_id: action.lawyerId })
+      return post("/lawyer", { lawyer_id: action.lawyerId, reason: action.reason })
+    case "sendLawyerReminder":
+      return post("/lawyer-reminder")
+    case "escalateJurisdiction":
+      return post("/escalate", {})
+    case "acknowledgeEvidence":
+      return post("/evidence/receipt")
     case "reviewTrack":
       return post("/track", { track: action.to, justification: action.justification })
     case "releaseNotice":
       return post("/respondent-notice", { justification: action.justification })
+    // Opening evidence is recorded by openEvidence itself, which also fetches the names.
     default:
       return null
   }

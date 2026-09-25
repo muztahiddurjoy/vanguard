@@ -85,6 +85,8 @@ describe("casesReducer", () => {
     const nabila = byId(next, "APP-2026-012")
     expect(nabila.flags).toEqual(["sensitive", "escalated"])
     expect(nabila.queues).toEqual([])
+    // Sent back twice between Rangpur and Dhaka: this goes to the Chief Legal Aid Officer.
+    expect(nabila.activity.at(-1)).toEqual({ type: "escalated", at: AT, toChief: true })
   })
 
   it("resolving an overdue task clears the due date and alert", () => {
@@ -161,5 +163,79 @@ describe("respondent notice", () => {
     })
     expect(byId(next, "APP-2026-001").respondent?.notice).toEqual({ status: "sent" })
     expect(byId(next, "APP-2026-001").activity.at(-1)?.type).toBe("noticeReleased")
+  })
+})
+
+describe("panel lawyers", () => {
+  it("a reminder leaves the case waiting on the lawyer", () => {
+    const next = casesReducer(INITIAL_CASES, {
+      type: "sendLawyerReminder",
+      id: "DLAS-2026-041",
+      at: AT,
+    })
+    const c = byId(next, "DLAS-2026-041")
+    expect(c.lawyer?.reminded).toBe(true)
+    expect(c.actions).toEqual([])
+    expect(c.queues).not.toContain("alerts")
+  })
+
+  it("moving a late lawyer's case clears the alert and records who had it and why", () => {
+    const reason = "Inactivity threshold reached: missed 3 updates across 3 cases."
+    const next = casesReducer(INITIAL_CASES, {
+      type: "assignLawyer",
+      id: "DLAS-2026-045",
+      lawyerId: "LAW-21",
+      reason,
+      at: AT,
+    })
+    const c = byId(next, "DLAS-2026-045")
+    expect(c.lawyer).toMatchObject({ id: "LAW-21", missedUpdates: 0, lastUpdateAt: AT })
+    expect(c.flags).not.toContain("lawyerInactivity")
+    expect(c.queues).not.toContain("alerts")
+    expect(c.actions).toEqual([])
+    // The court dates stay with the case.
+    expect(c.nextHearing).toEqual(byId(INITIAL_CASES, "DLAS-2026-045").nextHearing)
+    expect(c.activity.at(-1)).toEqual({
+      type: "lawyerReassigned",
+      at: AT,
+      from: "LAW-07",
+      to: "LAW-21",
+      justification: reason,
+    })
+  })
+
+  it("assigning the lawyer who already has the case changes nothing", () => {
+    const next = casesReducer(INITIAL_CASES, {
+      type: "assignLawyer",
+      id: "DLAS-2026-045",
+      lawyerId: "LAW-07",
+      at: AT,
+    })
+    expect(next).toEqual(INITIAL_CASES)
+  })
+})
+
+describe("sensitive evidence", () => {
+  it("is acknowledged once, and opening it is recorded", () => {
+    let next = casesReducer(INITIAL_CASES, { type: "viewEvidence", id: "APP-2026-012", at: AT })
+    expect(byId(next, "APP-2026-012").activity.at(-1)).toEqual({ type: "evidenceViewed", at: AT })
+    next = casesReducer(next, {
+      type: "acknowledgeEvidence",
+      id: "APP-2026-012",
+      by: "DLAO-RGP-0142",
+      at: AT,
+    })
+    const nabila = byId(next, "APP-2026-012")
+    expect(nabila.evidence).toEqual({
+      from: { en: "Dhaka", bn: "ঢাকা" },
+      acknowledged: { at: AT, by: "DLAO-RGP-0142" },
+    })
+    const again = casesReducer(next, {
+      type: "acknowledgeEvidence",
+      id: "APP-2026-012",
+      by: "someone-else",
+      at: "2026-09-24T10:00:00.000Z",
+    })
+    expect(again).toEqual(next)
   })
 })

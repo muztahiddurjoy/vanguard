@@ -5,10 +5,9 @@ import { Link } from "react-router"
 import { PriorityBadge } from "@/components/case/priority-badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
-import { HEARINGS } from "@/data/hearings"
 import { nextActionOf, type Hearing, type LegalCase } from "@/data/types"
 import { useNow } from "@/hooks/use-now"
-import { caseReason } from "@/i18n/case-text"
+import { caseReason, hearingPlace } from "@/i18n/case-text"
 import { useI18n } from "@/i18n/use-i18n"
 import { byUrgency } from "@/lib/queue"
 import { cn } from "@/lib/utils"
@@ -26,7 +25,7 @@ type Item =
 export function NotificationsMenu() {
   const i18n = useI18n()
   const { t, f, pick } = i18n
-  const { cases, openCase } = useCases()
+  const { cases, openCase, hearings } = useCases()
   const now = useNow(60_000)
   const [open, setOpen] = useState(false)
   const [read, setRead] = useState<Set<string>>(() => new Set())
@@ -47,15 +46,17 @@ export function NotificationsMenu() {
               ? c.dueAt
               : (c.activity.at(-1)?.at ?? c.receivedAt),
         })),
-      ...HEARINGS.filter((h) => new Date(h.at).toDateString() === today).map((h) => ({
-        id: `hearing:${h.id}`,
-        kind: "hearing" as const,
-        h,
-        c: cases.find((c) => c.id === h.caseId),
-        at: h.at,
-      })),
+      ...hearings
+        .filter((h) => new Date(h.at).toDateString() === today)
+        .map((h) => ({
+          id: `hearing:${h.id}`,
+          kind: "hearing" as const,
+          h,
+          c: cases.find((c) => c.id === h.caseId),
+          at: h.at,
+        })),
     ]
-  }, [cases, now])
+  }, [cases, hearings, now])
 
   const unread = items.filter((item) => !read.has(item.id)).length
   const markRead = (...ids: string[]) => setRead((prev) => new Set([...prev, ...ids]))
@@ -139,7 +140,10 @@ export function NotificationsMenu() {
                           <CalendarDays aria-hidden className="mt-0.5 size-4 shrink-0" />
                         )}
                         {item.kind === "hearing"
-                          ? t.notifications.hearingToday(f.time(item.h.at), pick(item.h.place))
+                          ? t.notifications.hearingToday(
+                              f.time(item.h.at),
+                              hearingPlace(item.h, i18n),
+                            )
                           : item.c.flags.includes("sensitive")
                             ? t.queue.sensitive
                             : caseReason(item.c, i18n)}

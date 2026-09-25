@@ -211,7 +211,9 @@ export interface Hearing {
   caseId: string
   at: string
   kind: "court" | "mediation"
-  place: Localized
+  /** Where it is held; a mediation meeting from the server gives its mode instead. */
+  place?: Localized
+  mode?: "in_person" | "odr_video" | "odr_phone"
   /** What the hearing is for; hearings a lawyer reported give the stage instead. */
   purpose?: Localized
   stage?: CourtStage
