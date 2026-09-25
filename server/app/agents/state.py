@@ -82,6 +82,9 @@ class IntakeState(TypedDict, total=False):
     verify_attempts: int
     applicant_status: str
     respondent_status: str
+    # How the respondent was found: "match" (name, father's name and district) or
+    # "family" (on the applicant's NID record, when the caller did not know the rest).
+    respondent_via: str
     # Registry records (Citizen as JSON) once matched.
     caller_record: dict[str, Any]
     applicant_record: dict[str, Any]

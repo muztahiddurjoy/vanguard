@@ -568,6 +568,7 @@ def finish_conversation(
                 "callerVerifiedBy": state.get("identity_via"),
                 "applicant": state.get("applicant_status"),
                 "respondent": state.get("respondent_status"),
+                "respondentFoundBy": state.get("respondent_via"),
                 "callerSimRegistered": bool(state.get("caller_sim_registered")),
             },
         },

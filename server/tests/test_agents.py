@@ -234,6 +234,19 @@ def test_wife_calling_on_her_husbands_phone_is_found_through_his_nid_family():
     assert (s["identity"], s["identity_via"]) == ("verified", "sim_family")
     assert s["caller_record"]["nid"] == "4600000012"
     assert s["caller_sim_registered"] is False  # the phone is his, not hers
+    # She does not know his father's name: he is found on her NID record by first name.
+    s = talk(conv, "x2", "আমার স্বামী জালালের বিরুদ্ধে", "জানি না", "রংপুর")
+    assert (s["respondent_status"], s["respondent_via"]) == ("found", "family")
+    assert s["respondent_record"]["nid"] == "4600000011"
+
+
+def test_a_respondent_who_is_not_family_is_not_looked_for_on_the_nid_record():
+    registry = FakeRegistry()
+    conv = IntakeConversation(use_default_llm=False, registry=registry)
+    rafiq_verifies(conv, "x4", "myself", story=WAGES)
+    s = talk(conv, "x4", "Kamal Hossain, the factory owner", "I don't know", "Gaibandha")
+    assert s["respondent_status"] == "not_found"
+    assert registry.calls == ["match"]  # the caller's check; no family lookup for an employer
 
 
 def test_wrong_answers_twice_then_a_sim_that_is_not_theirs_leaves_them_unverified():

@@ -52,6 +52,7 @@ from app.agents.spoken import (
     has_word,
     is_dont_know,
     name_similarity,
+    normalize_name,
     parse_date,
     say_digits,
     words,
@@ -548,6 +549,19 @@ def _name_in(c: Citizen, lang: Lang) -> str:
     return c.name.bn if lang == "bn" else c.name.en
 
 
+def _named(said: str, c: Citizen) -> bool:
+    """Whether ``said`` names this relative: closely, or by part of their name ("Jalal").
+
+    Only for the handful of people on one NID record, never a registry-wide search.
+    """
+    if name_similarity(said, c.name.en, c.name.bn) >= FAMILY_MATCH:
+        return True
+    given = set(normalize_name(said).split())
+    return bool(given) and any(
+        given <= set(normalize_name(n).split()) for n in (c.name.en, c.name.bn)
+    )
+
+
 def build_intake_graph(
     llm: StructuredLLM | None = None,
     registry: NidRegistry | None = None,
@@ -748,24 +762,53 @@ def build_intake_graph(
             "ack": FAMILY_FOUND[lang].format(relation=relation, name=_name_in(best, lang)),
         }
 
+    def respondent_found(respondent: Citizen, via: str) -> IntakeState:
+        return {
+            "respondent_status": "found" if respondent.phones else "no_phone",
+            "respondent_via": via,
+            "respondent_record": respondent.model_dump(mode="json"),
+        }
+
     def find_respondent(state: IntakeState, slots: dict[str, Any]) -> IntakeState:
+        """Match the respondent by name, father's name and district.
+
+        When the caller does not know those, or they match no one, the respondent
+        is looked for among the applicant's relatives on their NID record.
+        """
         father, district = slots["respondent_father_name"], slots["respondent_district"]
         if registry is None:
             return {"respondent_status": "unavailable"}
-        if not (father and district):
-            return {"respondent_status": "not_found"}
-        matches = registry.match(
-            name=slots["respondent_name"], father_name=father, district=district
-        )
-        if matches is None:
-            return {"respondent_status": "unavailable"}
         caller = _citizen(state.get("caller_record"))
-        if len(matches) != 1 or (caller and matches[0].nid == caller.nid):
+        caller_nid = caller.nid if caller else None
+        if father and district:
+            matches = registry.match(
+                name=slots["respondent_name"], father_name=father, district=district
+            )
+            if matches is None:
+                return {"respondent_status": "unavailable"}
+            if len(matches) == 1 and matches[0].nid != caller_nid:
+                return respondent_found(matches[0], "match")
+        applicant = _citizen(state.get("applicant_record"))
+        relation = slots.get("respondent_relation")
+        # An employer, a neighbour or an uncle is not on the applicant's NID record.
+        if applicant is None or relation not in (None, "husband", "wife", "brother"):
             return {"respondent_status": "not_found"}
-        return {
-            "respondent_status": "found" if matches[0].phones else "no_phone",
-            "respondent_record": matches[0].model_dump(mode="json"),
-        }
+        family = registry.family(applicant.nid)
+        if family is None:
+            return {"respondent_status": "unavailable"}
+        candidates: list[Citizen | None]
+        if relation in ("husband", "wife"):
+            candidates = [family.spouse]
+        elif relation == "brother":
+            candidates = list(family.siblings)
+        else:
+            candidates = [family.spouse, family.father, family.mother, *family.siblings]
+            candidates += family.children
+        said = slots["respondent_name"]
+        named = [c for c in candidates if c and c.nid != caller_nid and _named(said, c)]
+        if len(named) != 1:
+            return {"respondent_status": "not_found"}
+        return respondent_found(named[0], "family")
 
     def resolve(state: IntakeState) -> IntakeState:
         slots = dict(state.get("slots") or {})
