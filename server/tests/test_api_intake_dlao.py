@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.agents import t5_intake
 from app.database import utcnow
 from app.models import Case, PartyRole
+from app.services import adnsms
 from tests.nid_fakes import FakeRegistry
 
 YEAR = utcnow().year
@@ -51,7 +52,17 @@ def test_web_intake_creates_triaged_application(client):
     assert case["applicant"]["safetyLevel"] == "restricted"
     assert case["applicant"]["phone"] == "01712-XXX-318"
     assert case["applicant"]["nidMasked"] == "•••• •••• 2741"
-    assert case["proxy"] == {"name": "Rahela Khatun", "relation": "neighbour"}
+    assert case["proxy"] == {
+        "name": "Rahela Khatun", "nameBn": None, "relation": "neighbour", "nidVerified": False,
+    }  # fmt: skip
+    assert case["track"]["key"] == "sensitive" and case["track"]["status"] == "suggested"
+    assert case["identity"] == {
+        "filingFor": "other", "applicantVerified": False, "callerVerified": False,
+        "callerSimRegistered": False,
+    }  # fmt: skip
+    assert len(case["trackingToken"]) == 9 and case["trackingToken"][4] == "-"
+    assert case["doNotCall"] is None
+    assert case["notices"]["respondent"]["status"] == "notFound"
 
 
 def test_invalid_phone_is_rejected(client):
@@ -196,8 +207,12 @@ def test_t5_conversation_creates_application(client):
     assert "phone" not in last["slots"]
     assert last["identity"]["caller"] == "unavailable"  # no NID registry configured
     case = last["case"]
-    assert case["proxy"] == {"name": "Ripon", "relation": "reported by phone"}
-    assert case["respondent"] == {"name": "Jalal Uddin"}
+    assert case["proxy"]["name"] == "Ripon"
+    assert case["proxy"]["relation"] == "reported by phone"
+    assert case["respondent"] == {
+        "name": "Jalal Uddin", "nameBn": None, "relation": "husband", "nidVerified": False,
+        "registeredSims": 0,
+    }  # fmt: skip
     assert case["category"] == "domesticViolence"
     assert case["applicant"]["safetyLevel"] == "restricted"
     assert case["applicant"]["safeContactWindows"] == [{"day": 2, "start_hour": 14, "end_hour": 16}]
@@ -331,3 +346,72 @@ def test_triage_marks_track_and_hostage_blocks_contact_without_lowering_it(clien
     client.post(f"/dlao/cases/{ref}/triage/rerun")
     db.expire_all()
     assert db.scalars(select(Case)).one().track == "mediation"
+
+
+def test_officer_confirms_or_changes_the_track_with_a_reason(client):
+    ref = create_moyuri(client)["id"]
+    confirmed = client.post(f"/dlao/cases/{ref}/track", json={"track": "sensitive"}).json()
+    assert confirmed["track"]["status"] == "confirmed"
+    short = client.post(
+        f"/dlao/cases/{ref}/track", json={"track": "mediation", "justification": "ok"}
+    )
+    assert short.status_code == 422
+    reason = "Both sides asked for a family meeting; the violence was a single past incident."
+    changed = client.post(
+        f"/dlao/cases/{ref}/track", json={"track": "mediation", "justification": reason}
+    ).json()
+    assert changed["track"] == {**changed["track"], "key": "mediation", "status": "changed",
+                                "aiKey": "sensitive"}  # fmt: skip
+    assert "sensitive" not in changed["flags"]
+    detail = client.get(f"/dlao/cases/{ref}", headers=OFFICER).json()
+    reviews = [a for a in detail["activity"] if a["action"] == "track.reviewed"]
+    assert reviews[-1]["justification"] == reason
+    assert reviews[-1]["details"] == {
+        "from": "sensitive",
+        "to": "mediation",
+        "aiSuggested": "sensitive",
+    }
+
+
+def test_officer_lifts_do_not_call_with_a_reason(client, db):
+    body = {
+        "applicant": {"name": "Shirin Akter", "phone": "01711000222", "district": "Rangpur"},
+        "narrative": "Her husband locked her in the house last week; she is now with us.",
+        "proxy": {"name": "Rafiqul Islam", "relation": "brother"},
+    }
+    ref = client.post("/intake/web", json=body).json()["id"]
+    detail = client.get(f"/dlao/cases/{ref}", headers=OFFICER).json()
+    assert detail["doNotCall"] == {"reason": "hostage"}
+    assert detail["callNotes"] == []
+    why = "Spoke to her in person at the office; she is safe at her brother's home now."
+    r = client.post(f"/dlao/cases/{ref}/safety", json={"level": "restricted", "justification": why})
+    lifted = r.json()
+    assert lifted["doNotCall"] is None and "doNotCall" not in lifted["flags"]
+    assert lifted["applicant"]["safetyLevel"] == "restricted"
+    assert client.get(f"/dlao/cases/{ref}/contact-window").json()["reason"] != "do_not_contact"
+
+
+def test_officer_releases_a_held_respondent_notice(client, db, monkeypatch):
+    sent: list[str] = []
+
+    def fake_send(self, mobile, message):
+        sent.append(mobile)
+        return adnsms.SmsResult(ok=True, dry_run=True)
+
+    monkeypatch.setattr(adnsms.AdnSmsClient, "send", fake_send)
+    ref = create_moyuri(client)["id"]
+    why = "Applicant asked us in person to notify him; she is staying with her parents."
+    none = client.post(f"/dlao/cases/{ref}/respondent-notice", json={"justification": why})
+    assert none.status_code == 409  # a web form gives no registered number for Jalal
+
+    case = db.scalars(select(Case)).one()
+    husband = case.party_with_role(PartyRole.RESPONDENT)
+    assert husband is not None
+    husband.registered_phones = ["01911457820"]
+    db.commit()
+    released = client.post(f"/dlao/cases/{ref}/respondent-notice", json={"justification": why})
+    assert released.status_code == 200, released.text
+    assert released.json()["notices"]["respondent"]["releasedByOfficer"] is True
+    assert sent == ["01911457820"]
+    again = client.post(f"/dlao/cases/{ref}/respondent-notice", json={"justification": why})
+    assert again.status_code == 409

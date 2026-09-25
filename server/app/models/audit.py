@@ -34,6 +34,7 @@ class AuditAction(StrEnum):
     IDENTITY_CHECKED = "identity.checked"
     SAFETY_CHANGED = "safety.changed"
     NOTICE_HELD = "notice.held"
+    NOTICE_RELEASED = "notice.released"
     DUPLICATE_RESOLVED = "duplicate.resolved"
     REFERRAL_CREATED = "referral.created"
     REFERRAL_RESPONDED = "referral.responded"
