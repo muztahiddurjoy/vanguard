@@ -133,6 +133,48 @@ def test_contact_party_blocks_without_neutral_text_and_audits(db):
     assert db.query(AuditEntry).one().action == "contact.blocked"
 
 
+def test_no_contact_party_is_never_contacted_even_with_neutral_text(db):
+    party = moyuri()
+    party.safety_level = SafetyLevel.NO_CONTACT
+    db.add(party)
+    db.flush()
+    assert (
+        safe_contact.evaluate(party, ContactChannel.CALL, at("2026-09-22T14:10:00")).reason
+        == BlockReason.DO_NOT_CONTACT
+    )
+    outcome = safe_contact.contact_party(
+        db,
+        party,
+        body="Case details",
+        neutral_body="Your appointment is confirmed.",
+        actor="dlao-1",
+        now=at("2026-09-22T14:10:00"),
+    )
+    assert outcome.sms is None
+    entry = db.query(AuditEntry).one()
+    assert entry.action == "contact.blocked"
+    assert entry.details["reason"] == "do_not_contact"
+
+
+def test_contact_party_can_send_to_another_registered_number(db):
+    party = Party(name="Jalal Uddin", phone="01911000001", accessibility_flags=[])
+    db.add(party)
+    db.flush()
+    sent: list[str] = []
+
+    class FakeSms(adnsms.AdnSmsClient):
+        def send(self, mobile: str, message: str) -> adnsms.SmsResult:
+            sent.append(mobile)
+            return adnsms.SmsResult(ok=True, dry_run=True)
+
+    outcome = safe_contact.contact_party(
+        db, party, body="Notice", actor="dlao-1", phone="01811000002", sms_client=FakeSms()
+    )
+    assert outcome.variant == "full"
+    assert sent == ["01811000002"]
+    assert db.query(AuditEntry).one().details["to"] == "01811******"
+
+
 @pytest.mark.parametrize(
     ("raw", "normalized"),
     [

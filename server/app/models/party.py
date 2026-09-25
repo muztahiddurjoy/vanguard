@@ -36,6 +36,10 @@ class SafetyLevel(StrEnum):
     CAUTION = "caution"
     # Contact only inside a safe window (e.g. the abuser monitors the phone).
     RESTRICTED = "restricted"
+    # No calls or SMS at all: the caller signalled they are held hostage, or the
+    # call was cut while they were in danger. A ringing phone could alert whoever
+    # is holding them. Only an officer can lift it.
+    NO_CONTACT = "no_contact"
 
 
 class Provenance(StrEnum):
