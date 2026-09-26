@@ -35,14 +35,19 @@
           "imageWidth": 76
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "./modules/sos-gesture/app.plugin.js",
+        {
+          "number": "+19788458907"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
-      "sosNumber": "+19788458907",
       "hotline": "16430",
       "emergency": "999"
     }
