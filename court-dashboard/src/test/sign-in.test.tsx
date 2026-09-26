@@ -50,3 +50,18 @@ describe("signing in", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument()
   })
 })
+
+describe("language", () => {
+  it("switches the whole dashboard, and the court's name, to Bangla", async () => {
+    const { user } = renderApp()
+    await screen.findByText("Cases listed today: 1")
+    await user.click(screen.getByRole("button", { name: "বাংলা" }))
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("আজ")
+    expect(document.documentElement.lang).toBe("bn")
+    expect(screen.getByRole("region", { name: "আপনার আদালত" })).toHaveTextContent(
+      "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+    )
+    expect(screen.getByText("আজ তালিকায় মামলা: ১টি")).toBeInTheDocument()
+    expect(screen.getByRole("navigation", { name: "প্রধান মেনু" })).toHaveTextContent("কার্যতালিকা")
+  })
+})
