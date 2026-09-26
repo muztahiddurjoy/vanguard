@@ -20,7 +20,6 @@ who is not at the standard safety level waits for an officer: where they live,
 in a stranger's SMS, could endanger them.
 """
 
-import secrets
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -175,18 +174,6 @@ def hold_reasons(case: Case) -> list[str]:
     return reasons
 
 
-def _no_number(db: Session) -> str:
-    # The column is required, but a held notice has no number to give out. It gets a
-    # placeholder that no spoken number can match (not eight digits), never shown.
-    while True:
-        code = f"h{secrets.token_hex(3)}"
-        if (
-            db.scalars(select(MediationNotice.id).where(MediationNotice.code == code)).first()
-            is None
-        ):
-            return code
-
-
 def _numbers(case: Case, party: Party, role: PartyRole) -> list[str]:
     if role == PartyRole.RESPONDENT:
         return notices.respondent_numbers(case)
@@ -249,8 +236,9 @@ def send_session_notices(
         party = case.party_with_role(role)
         if party is None:
             continue
+        code: str | None
         if reasons:
-            code, status, details = _no_number(db), "held", {"reasons": reasons}
+            code, status, details = None, "held", {"reasons": reasons}
         else:
             code = new_tracking_token(db)  # also never an existing notice's number
             status, details = _send_notice(db, case, session, party, role, code, actor)
@@ -282,8 +270,8 @@ def notice_view(notice: MediationNotice) -> dict[str, Any]:
     return {
         "role": notice.role,
         "status": notice.status,
-        # A held notice has no number (see _no_number).
-        "code": format_token(notice.code) if notice.code.isdigit() else None,
+        # A held notice has no number.
+        "code": format_token(notice.code) if notice.code else None,
         "reasons": details.get("reasons", []),
         "dryRun": details.get("dryRun"),
         "sentTo": details.get("sentTo", 0),

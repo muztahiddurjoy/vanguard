@@ -192,7 +192,7 @@ def test_notices_are_held_for_a_sensitive_or_do_not_call_case(client, db, sms, s
         assert notice["status"] == "held" and notice["reasons"] == reasons
         assert notice["code"] is None  # nothing to give out, and nothing the helpline finds
     held = db.scalars(select(MediationNotice)).all()
-    assert len(held) == 2 and not any(n.code.isdigit() for n in held)
+    assert len(held) == 2 and all(n.code is None for n in held)
     audits = db.scalars(select(AuditEntry).where(AuditEntry.action == "mediation.notice")).all()
     assert [a.details["status"] for a in audits] == ["held", "held"]
     assert all(a.details["reasons"] == reasons for a in audits)

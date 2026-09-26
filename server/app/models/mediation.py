@@ -60,7 +60,8 @@ class MediationNotice(Base):
     case_id: Mapped[int] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), index=True)
     party_id: Mapped[int] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(20))
-    code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
+    # Empty for a notice that was held: nothing went out, so there is no number to give.
+    code: Mapped[str | None] = mapped_column(String(8), unique=True, index=True)
     # "sent", "failed", "held" (waits for an officer), "blocked" (safe_contact) or
     # "notFound" (no number to send to).
     status: Mapped[str] = mapped_column(String(20))
