@@ -10,7 +10,7 @@ its prisoners needs: each case's number, court, next date and cause list slots.
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ from app.models import (
 )
 from app.models.party import hash_nid
 from app.routers import require_api_token
-from app.services import ekyc
+from app.services import ekyc, institution
 from app.services.courts import get_court
 from app.services.prisons import PrisonStaff, get_prison_staff
 from app.services.records import (
@@ -324,3 +324,62 @@ def check_identity(
     )
     db.commit()
     return ekyc.check_view(check)
+
+
+# --- applications ----------------------------------------------------------------------
+
+
+def office_of(staff: PrisonStaff = Depends(current_prison_staff)) -> institution.Office:
+    return institution.Office(kind="prison", id=staff.prison_id, staff_id=staff.id)
+
+
+@router.get("/applications")
+def list_applications(
+    db: Session = Depends(get_db), office: institution.Office = Depends(office_of)
+) -> list[dict[str, Any]]:
+    return institution.list_for(db, office)
+
+
+@router.post("/applications", status_code=status.HTTP_201_CREATED)
+def submit_application(
+    body: institution.ApplicationIn,
+    response: Response,
+    db: Session = Depends(get_db),
+    office: institution.Office = Depends(office_of),
+) -> dict[str, Any]:
+    case, created = institution.submit(db, office, body)
+    db.commit()
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return institution.status_of(db, office, case)
+
+
+@router.get("/applications/{ref}")
+def get_application(
+    ref: str, db: Session = Depends(get_db), office: institution.Office = Depends(office_of)
+) -> dict[str, Any]:
+    return institution.status_of(db, office, institution.own_application(db, office, ref))
+
+
+@router.post("/applications/{ref}/ekyc")
+def verify_applicant(
+    ref: str,
+    body: institution.CheckIdIn,
+    db: Session = Depends(get_db),
+    office: institution.Office = Depends(office_of),
+) -> dict[str, Any]:
+    case = institution.apply_later_check(db, office, ref, body.check_id)
+    db.commit()
+    return institution.status_of(db, office, case)
+
+
+@router.post("/applications/{ref}/signature")
+def add_signature(
+    ref: str,
+    body: institution.SignatureIn,
+    db: Session = Depends(get_db),
+    office: institution.Office = Depends(office_of),
+) -> dict[str, Any]:
+    case = institution.add_signature(db, office, ref, body)
+    db.commit()
+    return institution.status_of(db, office, case)

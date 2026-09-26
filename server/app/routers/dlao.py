@@ -52,6 +52,7 @@ from app.services.court_progress import (
     waiting_after_reminder,
 )
 from app.services.panel import get_lawyer
+from app.services.records import submitted_by_summary
 
 router = APIRouter(prefix="/dlao", tags=["dlao"], dependencies=[Depends(require_api_token)])
 
@@ -172,7 +173,7 @@ def track_view(case: Case) -> dict[str, Any] | None:
 
 
 # How a verified caller was confirmed (see t5_intake), as the dashboard names it.
-VERIFIED_BY = {"answers": "answers", "sim": "sim", "sim_family": "simFamily"}
+VERIFIED_BY = {"answers": "answers", "sim": "sim", "sim_family": "simFamily", "ekyc": "ekyc"}
 
 
 def identity_view(case: Case) -> dict[str, Any]:
@@ -217,6 +218,8 @@ def case_view(
         "queues": queues_for(case, flags, now),
         "flags": flags,
         "channel": case.channel,
+        # The court or jail whose staff submitted it (services.institution).
+        "submittedBy": submitted_by_summary(case),
         "summary": case.summary,
         "summaryBn": case.summary_bn,
         "receivedAt": as_utc(case.received_at).isoformat(),
