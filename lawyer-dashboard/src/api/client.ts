@@ -27,6 +27,8 @@ export async function apiFetch<T>(
   { lawyerId, method = "GET", body }: { lawyerId: string; method?: "GET" | "POST"; body?: unknown },
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" }
+  // Through a free ngrok tunnel a browser would get ngrok's warning page, not the answer.
+  headers["ngrok-skip-browser-warning"] = "1"
   const token = import.meta.env.VITE_API_TOKEN
   if (token) headers.Authorization = `Bearer ${token}`
   // Which panel lawyer is asking: the server shows them only their own cases.
