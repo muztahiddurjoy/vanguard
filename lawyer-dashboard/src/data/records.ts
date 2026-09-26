@@ -33,10 +33,12 @@ const JALAL: CourtParty = {
 function jalalUddin(): CaseRecords {
   const evidenceDay = dayFromToday(3)
   return {
+    // The court applied for him when he came before it with no lawyer (as on the DLAO
+    // dashboard's sample case), though he is held in Rangpur Central Jail.
     submittedBy: {
-      kind: "prison",
-      office: RANGPUR_JAIL,
-      staff: { en: "Nasima Khatun", bn: "নাসিমা খাতুন" },
+      kind: "court",
+      office: CJM,
+      staff: { en: "Md. Abdul Hakim", bn: "মো. আব্দুল হাকিম" },
       submittedAt: daysAgo(6),
       helpNeeded: "defence",
       inCustody: true,

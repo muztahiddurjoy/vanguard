@@ -167,7 +167,9 @@ describe("the court record", () => {
     const record = screen.getByRole("region", { name: "Court record" })
 
     const application = within(record).getByRole("region", { name: "The application" })
-    expect(application).toHaveTextContent("Rangpur Central Jail (Nasima Khatun)")
+    expect(application).toHaveTextContent(
+      "Chief Judicial Magistrate Court, Rangpur (Md. Abdul Hakim)",
+    )
     expect(application).toHaveTextContent("Defence in court")
     expect(application).toHaveTextContent(/Verified by e-KYC \(NID\) on/)
     expect(application).toHaveTextContent(/Signed the application on/)
