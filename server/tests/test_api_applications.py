@@ -97,6 +97,8 @@ def test_the_dlao_sees_who_submitted_it_and_how_they_were_verified(client, monke
     assert detail["applicant"]["nidVerified"] is True
     assert "inCustody" in detail["flags"] and detail["category"] == "criminalDefence"
     assert [d["kind"] for d in detail["documents"]] == ["applicant_signature"]
+    signature = detail["documents"][0]
+    assert len(signature["sha256"]) == 64 and signature["createdAt"]
     # Not from a court or a jail: no one submitted it on the applicant's behalf.
     client.post("/intake/web", json={
         "applicant": {"name": "Abdul Malek", "phone": "01819000560", "district": "Rangpur"},

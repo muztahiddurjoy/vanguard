@@ -486,6 +486,9 @@ def documents_view(db: Session, case: Case, *, withhold: bool) -> list[dict[str,
             "status": d.status,
             "summary": None if withhold else d.summary,
             "withheld": withhold,
+            # Neither says what a file shows: an e-signature's upload time and fingerprint.
+            "sha256": d.sha256,
+            "createdAt": as_utc(d.created_at).isoformat(),
         }
         for d in db.scalars(
             select(Document).where(Document.case_id == case.id).order_by(Document.id)
