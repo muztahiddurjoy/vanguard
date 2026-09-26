@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploy DLAS on this server (the VPS): the backend and the NID registry under pm2
 # on localhost ports, the four dashboards and the legal aid app as static builds,
-# and nginx serving each on its own subdomain. Run it as root from the repo, after
-# a git pull. Running it again redeploys; the database is kept.
+# and nginx serving each on its own subdomain, over HTTPS once the subdomain's DNS
+# points here. Run it as root from the repo, after a git pull. Running it again
+# redeploys (and gets the certificates still missing); the database is kept.
 
 set -euo pipefail
 
@@ -16,6 +17,10 @@ NID_PORT=${NID_PORT:-3131}
 DATA_DIR=${DATA_DIR:-/var/lib/vanguard}
 WEB_ROOT=${WEB_ROOT:-/var/www/vanguard}
 NGINX_SITE=/etc/nginx/sites-available/vanguard
+# Where certbot leaves the challenge files that nginx serves for each host.
+export ACME_ROOT=/var/www/html
+# The address every host's DNS record must give before it gets a certificate.
+PUBLIC_IP=${PUBLIC_IP:-$(hostname -I | awk '{print $1}')}
 
 # The web apps, each on its own host. The legal aid app keeps its own data; the
 # dashboards call the backend.
@@ -272,6 +277,46 @@ install_nginx_sites() {
 
 say "Installing the nginx sites"
 install_nginx_sites
+
+# --- Certificates ------------------------------------------------------------------
+
+# Whether every address HOST's DNS gives is this server's (a host can still point
+# elsewhere, e.g. at the domain's wildcard record).
+points_here() {
+	local addresses
+	addresses=$(getent ahostsv4 "$1" | awk '{print $1}' | sort -u)
+	[[ $addresses == "$PUBLIC_IP" ]]
+}
+
+# A certificate for each host that has none yet and whose DNS points here. They
+# renew with the server's other certificates, reloading nginx.
+issue_certs() {
+	local host issued=0 waiting=()
+	for host in "$API_HOST" "${HOST[@]}"; do
+		[[ ! -f /etc/letsencrypt/live/$host/fullchain.pem ]] || continue
+		if ! points_here "$host"; then
+			waiting+=("$host")
+			continue
+		fi
+		say "Getting a certificate for $host"
+		if certbot certonly --webroot -w "$ACME_ROOT" -d "$host" --cert-name "$host" \
+			--non-interactive --agree-tos --keep-until-expiring --quiet \
+			--deploy-hook "systemctl reload nginx"; then
+			issued=1
+		else
+			warn "No certificate for $host (see /var/log/letsencrypt/letsencrypt.log)."
+		fi
+	done
+	((!issued)) || install_nginx_sites
+	((${#waiting[@]} == 0)) ||
+		warn "Served over plain HTTP until their DNS points at $PUBLIC_IP (then run this again): ${waiting[*]}"
+}
+
+if command -v certbot >/dev/null; then
+	issue_certs
+else
+	warn "certbot is not installed: every site is served over plain HTTP."
+fi
 
 # --- Summary -----------------------------------------------------------------------
 
