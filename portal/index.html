@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="The Digital Legal Aid System (DLAS): its hotline number and a link to each of its apps."
+    />
+    <meta name="theme-color" content="#1e2f5c" />
+    <title>Digital Legal Aid System · DLAS</title>
+    <!-- The dashboards bundle these two typefaces; this page takes them from Google Fonts. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400..700&family=Inter:wght@400..700&display=swap"
+    />
+    <style>
+      /* The dashboards' palette (dlao-dashboard/src/index.css): institutional navy on white. */
+      :root {
+        color-scheme: light;
+        --background: oklch(0.984 0.004 255);
+        --foreground: oklch(0.21 0.035 262);
+        --card: oklch(1 0 0);
+        --primary: oklch(0.33 0.1 262);
+        --primary-foreground: oklch(0.985 0.005 255);
+        --muted-foreground: oklch(0.47 0.03 260);
+        --border: oklch(0.905 0.012 258);
+        --ring: oklch(0.5 0.16 262);
+        --radius: 0.5rem;
+
+        --sidebar: oklch(0.25 0.07 263);
+        --sidebar-foreground: oklch(0.93 0.015 258);
+        --sidebar-primary: oklch(0.985 0.005 255);
+        --sidebar-primary-foreground: oklch(0.25 0.07 263);
+        --sidebar-accent: oklch(0.33 0.08 263);
+        --sidebar-ring: oklch(0.8 0.1 255);
+
+        --font-sans: "Inter", "Anek Bangla", ui-sans-serif, system-ui, sans-serif;
+        --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+        /* As in the dashboards: Anek Bangla looks smaller, so Bangla scales the root up. */
+        --lang-scale: 1;
+        font-size: calc(100% * var(--lang-scale));
+      }
+
+      :root:lang(bn) {
+        --font-sans: "Anek Bangla", "Inter", ui-sans-serif, system-ui, sans-serif;
+        --lang-scale: 1.0625;
+      }
+
+      *,
+      ::before,
+      ::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100svh;
+        margin: 0;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Bengali glyphs have tall conjuncts and matras; give them more room. */
+      :lang(bn) body {
+        line-height: 1.6;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      /* SVG ignores the hidden attribute, so the sprite is sized away instead. */
+      .sprite {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+      }
+
+      /* Lucide's stroke style; the symbols inherit it through <use>. */
+      .icon {
+        flex-shrink: 0;
+        width: 1rem;
+        height: 1rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* Class rules that set display would otherwise show hidden elements. */
+      [hidden] {
+        display: none !important;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .skip-link {
+        position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        z-index: 10;
+        padding: 0.5rem 0.75rem;
+        border-radius: calc(var(--radius) * 0.8);
+        background: var(--card);
+        color: var(--foreground);
+        font-weight: 600;
+        transform: translateY(-200%);
+      }
+
+      .skip-link:focus {
+        transform: none;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 72rem;
+        margin-inline: auto;
+        padding-inline: 1rem;
+      }
+
+      @media (min-width: 640px) {
+        .container {
+          padding-inline: 1.5rem;
+        }
+      }
+
+      /* The top of the page is the sign-in pages' navy panel. */
+      .masthead {
+        background: var(--sidebar);
+        color: var(--sidebar-foreground);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-block: 1rem;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: var(--radius);
+        background: var(--sidebar-primary);
+        color: var(--sidebar-primary-foreground);
+      }
+
+      .brand-mark .icon {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+
+      .brand-title {
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.25;
+      }
+
+      .brand-sub {
+        font-size: 0.875rem;
+        line-height: 1.25;
+        color: color-mix(in oklch, var(--sidebar-foreground) 75%, transparent);
+      }
+
+      @media (min-width: 640px) {
+        .topbar {
+          padding-block: 1.5rem;
+        }
+
+        .brand-title {
+          font-size: 1.125rem;
+        }
+      }
+
+      .lang,
+      .lang-group,
+      .lang-group > div {
+        display: flex;
+        align-items: center;
+      }
+
+      .lang-group {
+        display: none;
+        gap: 0.5rem;
+      }
+
+      .lang-group > .icon {
+        color: color-mix(in oklch, var(--sidebar-foreground) 75%, transparent);
+      }
+
+      .lang-switch {
+        height: 2.25rem;
+        font-weight: 600;
+      }
+
+      .lang-item {
+        min-width: 3rem;
+        height: 2rem;
+        padding-inline: 0.75rem;
+        border: 1px solid color-mix(in oklch, var(--sidebar-foreground) 35%, transparent);
+        background: transparent;
+        color: var(--sidebar-foreground);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .lang-item:first-child {
+        border-radius: calc(var(--radius) * 0.8) 0 0 calc(var(--radius) * 0.8);
+      }
+
+      .lang-item:last-child {
+        border-left: 0;
+        border-radius: 0 calc(var(--radius) * 0.8) calc(var(--radius) * 0.8) 0;
+      }
+
+      .lang-item:hover {
+        background: var(--sidebar-accent);
+      }
+
+      .lang-item[aria-pressed="true"] {
+        border-color: var(--sidebar-primary);
+        background: var(--sidebar-primary);
+        color: var(--sidebar-primary-foreground);
+      }
+
+      .lang-item:focus-visible {
+        position: relative;
+        outline: 3px solid var(--sidebar-ring);
+        outline-offset: 2px;
+      }
+
+      @media (min-width: 640px) {
+        /* Beats .btn, which comes later */
+        .lang .lang-switch {
+          display: none;
+        }
+
+        .lang-group {
+          display: flex;
+        }
+      }
+
+      .hotline-block {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.875rem;
+        padding-block: 1rem 2.5rem;
+      }
+
+      .hotline-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+      }
+
+      .hotline-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        max-width: 100%;
+      }
+
+      /* The number itself is the call button. */
+      .hotline {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        max-width: 100%;
+        padding: 0.625rem 1.25rem 0.625rem 0.625rem;
+        border-radius: calc(var(--radius) * 1.4);
+        background: var(--sidebar-primary);
+        color: var(--sidebar-primary-foreground);
+        text-decoration: none;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+        transition:
+          background-color 0.15s,
+          transform 0.15s;
+      }
+
+      .hotline:hover {
+        background: color-mix(in oklch, var(--sidebar-primary) 88%, var(--sidebar-ring));
+      }
+
+      .hotline:active {
+        transform: translateY(1px);
+      }
+
+      .hotline:focus-visible,
+      .btn-on-dark:focus-visible {
+        outline: 3px solid var(--sidebar-ring);
+        outline-offset: 3px;
+      }
+
+      .hotline-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: var(--radius);
+        background: var(--sidebar);
+        color: var(--sidebar-primary);
+      }
+
+      .hotline-icon .icon {
+        width: 1.375rem;
+        height: 1.375rem;
+      }
+
+      .hotline-number {
+        font-size: clamp(1.375rem, 6.4vw, 2.75rem);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+        line-height: 1.15;
+        white-space: nowrap;
+      }
+
+      .hotline-hint {
+        max-width: 36rem;
+        color: color-mix(in oklch, var(--sidebar-foreground) 85%, transparent);
+      }
+
+      /* The dashboards' button (components/ui/button.tsx), in plain CSS. */
+      .btn {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        height: 2.25rem;
+        padding-inline: 0.75rem;
+        border: 1px solid transparent;
+        border-radius: calc(var(--radius) * 0.8);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        text-decoration: none;
+        cursor: pointer;
+        transition:
+          background-color 0.15s,
+          border-color 0.15s,
+          color 0.15s;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .btn-lg {
+        height: 2.5rem;
+        padding-inline: 1rem;
+      }
+
+      .btn-on-dark {
+        border-color: color-mix(in oklch, var(--sidebar-foreground) 35%, transparent);
+        background: transparent;
+        color: var(--sidebar-foreground);
+      }
+
+      .btn-on-dark:hover {
+        background: var(--sidebar-accent);
+      }
+
+      .icon-copied,
+      [data-copied] .icon-copy {
+        display: none;
+      }
+
+      [data-copied] .icon-copied {
+        display: block;
+      }
+
+      @media (min-width: 640px) {
+        .hotline-block {
+          padding-block: 1.5rem 3.5rem;
+        }
+
+        .hotline-icon {
+          width: 3.25rem;
+          height: 3.25rem;
+        }
+
+        .hotline-icon .icon {
+          width: 1.625rem;
+          height: 1.625rem;
+        }
+      }
+
+      main {
+        flex: 1;
+        padding-block: 2rem 3rem;
+      }
+
+      .section-head {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.25;
+      }
+
+      .section-sub {
+        color: var(--muted-foreground);
+      }
+
+      .apps {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      @media (min-width: 640px) {
+        .apps {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1.25rem;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .apps {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      /* The dashboards' card: white, a hairline ring and a faint shadow. */
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.5rem;
+        border-radius: calc(var(--radius) * 1.4);
+        background: var(--card);
+        box-shadow:
+          0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent),
+          0 1px 2px rgb(0 0 0 / 0.05);
+      }
+
+      .app-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: var(--radius);
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .app-icon .icon {
+        width: 1.375rem;
+        height: 1.375rem;
+      }
+
+      .card-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      /* Takes the spare height, so every button in a row lines up. */
+      .card-desc {
+        flex: 1;
+        color: var(--muted-foreground);
+        font-size: 0.9375rem;
+      }
+
+      .card-action {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+      }
+
+      .card-action .btn {
+        width: 100%;
+      }
+
+      .card-url {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--muted-foreground);
+        text-align: center;
+        overflow-wrap: anywhere;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .btn-primary:hover {
+        background: color-mix(in oklch, var(--primary) 80%, transparent);
+      }
+
+      .btn-primary:focus-visible {
+        outline: none;
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+      }
+
+      .site-footer {
+        padding-block: 1.5rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-size: 0.875rem;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        ::before,
+        ::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Lucide icons, as in the dashboards -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+      <symbol id="i-scale" viewBox="0 0 24 24">
+        <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
+        <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
+        <path d="M7 21h10" />
+        <path d="M12 3v18" />
+        <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
+      </symbol>
+      <symbol id="i-languages" viewBox="0 0 24 24">
+        <path d="m5 8 6 6" />
+        <path d="m4 14 6-6 2-3" />
+        <path d="M2 5h12" />
+        <path d="M7 2h1" />
+        <path d="m22 22-5-10-5 10" />
+        <path d="M14 18h6" />
+      </symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24">
+        <path
+          d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"
+        />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="M20 6 9 17l-5-5" />
+      </symbol>
+      <!-- The lawyer dashboard's mark (lawyer-dashboard/public/favicon.svg) -->
+      <symbol id="i-briefcase" viewBox="0 0 24 24">
+        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M2 13h20" />
+        <path d="M11 13h2" />
+      </symbol>
+      <symbol id="i-landmark" viewBox="0 0 24 24">
+        <path d="M10 18v-7" />
+        <path
+          d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"
+        />
+        <path d="M14 18v-7" />
+        <path d="M18 18v-7" />
+        <path d="M3 22h18" />
+        <path d="M6 18v-7" />
+      </symbol>
+      <!-- The jail dashboard's own mark (prison-dashboard/public/favicon.svg) -->
+      <symbol id="i-jail" viewBox="0 0 24 24">
+        <path d="M3 22h18" />
+        <path d="M6 18v-7" />
+        <path d="M10 18v-7" />
+        <path d="M14 18v-7" />
+        <path d="M18 18v-7" />
+        <path d="M12 2l8 5H4z" />
+      </symbol>
+      <symbol id="i-users" viewBox="0 0 24 24">
+        <path d="M18 21a8 8 0 0 0-16 0" />
+        <circle cx="10" cy="8" r="5" />
+        <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
+      </symbol>
+      <symbol id="i-server" viewBox="0 0 24 24">
+        <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+        <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+        <path d="M6 6h.01" />
+        <path d="M6 18h.01" />
+      </symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24">
+        <path d="M5 12h14" />
+        <path d="m12 5 7 7-7 7" />
+      </symbol>
+    </svg>
+
+    <a class="skip-link" href="#main" data-i18n="skip">Skip to main content</a>
+
+    <header class="masthead">
+      <div class="container">
+        <div class="topbar">
+          <div class="brand">
+            <span class="brand-mark">
+              <svg class="icon" aria-hidden="true"><use href="#i-scale" /></svg>
+            </span>
+            <div>
+              <h1 class="brand-title" data-i18n="brand.title">Digital Legal Aid System</h1>
+              <p class="brand-sub">DLAS</p>
+            </div>
+          </div>
+
+          <!-- The dashboards' language toggle; shown by the script -->
+          <div class="lang" id="lang" hidden>
+            <!-- Phones: one button that names the other language -->
+            <button class="btn btn-on-dark lang-switch" type="button" id="lang-switch"></button>
+            <div class="lang-group">
+              <svg class="icon" aria-hidden="true"><use href="#i-languages" /></svg>
+              <div role="group" aria-label="Language" data-i18n-label="language">
+                <button
+                  class="lang-item"
+                  type="button"
+                  data-lang="en"
+                  lang="en"
+                  aria-label="English"
+                >
+                  EN
+                </button>
+                <button class="lang-item" type="button" data-lang="bn" lang="bn" aria-label="বাংলা">
+                  বাংলা
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section class="hotline-block" aria-labelledby="hotline-title">
+          <h2 id="hotline-title" class="hotline-title" data-i18n="hotline.title">
+            Legal aid hotline
+          </h2>
+          <div class="hotline-row">
+            <a
+              class="hotline"
+              href="tel:+19788458907"
+              aria-label="Call +1 978 845 8907"
+              data-i18n-label="hotline.call"
+            >
+              <span class="hotline-icon">
+                <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
+              </span>
+              <span class="hotline-number" id="hotline-number">+1&nbsp;978&nbsp;845&nbsp;8907</span>
+            </a>
+            <!-- Shown by the script when the browser lets the page copy -->
+            <button class="btn btn-lg btn-on-dark" type="button" id="copy-number" hidden>
+              <svg class="icon icon-copy" aria-hidden="true"><use href="#i-copy" /></svg>
+              <svg class="icon icon-copied" aria-hidden="true"><use href="#i-check" /></svg>
+              <span id="copy-label" data-i18n="hotline.copy">Copy number</span>
+            </button>
+          </div>
+          <p class="hotline-hint" data-i18n="hotline.hint">
+            Call to ask for legal aid, or to hear how your case is going.
+          </p>
+          <p class="sr-only" role="status" id="copy-status"></p>
+        </section>
+      </div>
+    </header>
+
+    <main id="main" class="container" tabindex="-1">
+      <section aria-labelledby="apps-title">
+        <div class="section-head">
+          <h2 id="apps-title" class="section-title" data-i18n="apps.title">Apps</h2>
+          <p class="section-sub" data-i18n="apps.sub">Choose the one for your work.</p>
+        </div>
+        <ul class="apps">
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-scale" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="dlao.name">District Legal Aid Office</h3>
+            <p class="card-desc" data-i18n="dlao.desc">
+              One place for district legal aid officers to see every case that needs them and act on
+              it.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://dlao.appbaksho.com/"
+                aria-label="Open the District Legal Aid Office dashboard"
+                data-i18n-label="dlao.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">dlao.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-briefcase" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="lawyer.name">Panel lawyer</h3>
+            <p class="card-desc" data-i18n="lawyer.desc">
+              For panel lawyers: the legal aid cases the district office gave them, their hearings,
+              and one form to report what happened in court.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://lawyer.appbaksho.com/"
+                aria-label="Open the panel lawyers' dashboard"
+                data-i18n-label="lawyer.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">lawyer.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-landmark" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="court.name">Court portal</h3>
+            <p class="card-desc" data-i18n="court.desc">
+              For court staff: the court's register and daily cause list, and legal aid applications
+              for anyone before the court who needs a lawyer.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://court.appbaksho.com/"
+                aria-label="Open the court portal"
+                data-i18n-label="court.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">court.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-jail" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="prison.name">Jail dashboard</h3>
+            <p class="card-desc" data-i18n="prison.desc">
+              For jail staff: prisoners and the cases they are held on, the days to produce them in
+              court, and legal aid applications.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://prison.appbaksho.com/"
+                aria-label="Open the jail dashboard"
+                data-i18n-label="prison.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">prison.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-users" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="legalaid.name">Digital Legal Aid</h3>
+            <p class="card-desc" data-i18n="legalaid.desc">
+              For citizens, Union Digital Centres and mediators: apply for legal aid, follow a case,
+              and settle a dispute by mediation. Works offline.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://legalaid.appbaksho.com/"
+                aria-label="Open the Digital Legal Aid app"
+                data-i18n-label="legalaid.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">legalaid.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-server" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="api.name">Backend API</h3>
+            <p class="card-desc" data-i18n="api.desc">
+              For developers: the API behind the dashboards and the phone lines, with a reference
+              you can try out.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://dlas-api.appbaksho.com/docs"
+                aria-label="Open the backend API reference"
+                data-i18n-label="api.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">dlas-api.appbaksho.com/docs</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p data-i18n="footer">Digital Legal Aid System (DLAS)</p>
+      </div>
+    </footer>
+
+    <script>
+      const HOTLINE = "+19788458907"
+      // Non-breaking spaces: the number never wraps.
+      const HOTLINE_SHOWN = "+1\u00a0978\u00a0845\u00a08907"
+      // The dashboards keep the reader's language under this key too.
+      const STORAGE_KEY = "dlas.lang"
+
+      // English is also the page's own text, for anyone without the script.
+      const MESSAGES = {
+        en: {
+          "meta.title": "Digital Legal Aid System · DLAS",
+          "meta.description":
+            "The Digital Legal Aid System (DLAS): its hotline number and a link to each of its apps.",
+          skip: "Skip to main content",
+          language: "Language",
+          "brand.title": "Digital Legal Aid System",
+          "hotline.title": "Legal aid hotline",
+          "hotline.call": "Call +1 978 845 8907",
+          "hotline.copy": "Copy number",
+          "hotline.copied": "Copied",
+          "hotline.copyFailed": "Could not copy",
+          "hotline.hint": "Call to ask for legal aid, or to hear how your case is going.",
+          "apps.title": "Apps",
+          "apps.sub": "Choose the one for your work.",
+          open: "Open",
+          "dlao.name": "District Legal Aid Office",
+          "dlao.desc":
+            "One place for district legal aid officers to see every case that needs them and act on it.",
+          "dlao.open": "Open the District Legal Aid Office dashboard",
+          "lawyer.name": "Panel lawyer",
+          "lawyer.desc":
+            "For panel lawyers: the legal aid cases the district office gave them, their hearings, and one form to report what happened in court.",
+          "lawyer.open": "Open the panel lawyers' dashboard",
+          "court.name": "Court portal",
+          "court.desc":
+            "For court staff: the court's register and daily cause list, and legal aid applications for anyone before the court who needs a lawyer.",
+          "court.open": "Open the court portal",
+          "prison.name": "Jail dashboard",
+          "prison.desc":
+            "For jail staff: prisoners and the cases they are held on, the days to produce them in court, and legal aid applications.",
+          "prison.open": "Open the jail dashboard",
+          "legalaid.name": "Digital Legal Aid",
+          "legalaid.desc":
+            "For citizens, Union Digital Centres and mediators: apply for legal aid, follow a case, and settle a dispute by mediation. Works offline.",
+          "legalaid.open": "Open the Digital Legal Aid app",
+          "api.name": "Backend API",
+          "api.desc":
+            "For developers: the API behind the dashboards and the phone lines, with a reference you can try out.",
+          "api.open": "Open the backend API reference",
+          footer: "Digital Legal Aid System (DLAS)",
+        },
+        bn: {
+          "meta.title": "ডিজিটাল লিগ্যাল এইড সিস্টেম · DLAS",
+          "meta.description":
+            "ডিজিটাল লিগ্যাল এইড সিস্টেম (DLAS): এর হটলাইন নম্বর আর প্রতিটি অ্যাপের লিংক।",
+          skip: "মূল অংশে যান",
+          language: "ভাষা",
+          "brand.title": "ডিজিটাল লিগ্যাল এইড সিস্টেম",
+          "hotline.title": "লিগ্যাল এইড হটলাইন",
+          "hotline.call": "+১ ৯৭৮ ৮৪৫ ৮৯০৭ নম্বরে কল করুন",
+          "hotline.copy": "নম্বর কপি করুন",
+          "hotline.copied": "কপি হয়েছে",
+          "hotline.copyFailed": "কপি করা যায়নি",
+          "hotline.hint": "আইনি সহায়তা চাইতে, বা আপনার মামলার অগ্রগতি জানতে কল করুন।",
+          "apps.title": "অ্যাপ",
+          "apps.sub": "আপনার কাজের অ্যাপটি বেছে নিন।",
+          open: "খুলুন",
+          "dlao.name": "জেলা লিগ্যাল এইড অফিস",
+          "dlao.desc":
+            "জেলা লিগ্যাল এইড অফিসারদের জন্য এক জায়গা — যেখানে সব মামলা দেখা যায় এবং সহজে ব্যবস্থা নেওয়া যায়।",
+          "dlao.open": "জেলা লিগ্যাল এইড অফিসের ড্যাশবোর্ড খুলুন",
+          "lawyer.name": "প্যানেল আইনজীবী",
+          "lawyer.desc":
+            "প্যানেল আইনজীবীদের জন্য: জেলা অফিস তাঁদের যেসব আইনি সহায়তার মামলা দিয়েছে, তাঁদের শুনানি, আর আদালতে কী হলো তা জানানোর একটি ফর্ম।",
+          "lawyer.open": "প্যানেল আইনজীবীদের ড্যাশবোর্ড খুলুন",
+          "court.name": "আদালত পোর্টাল",
+          "court.desc":
+            "আদালতের কর্মচারীদের জন্য: মামলার রেজিস্টার ও প্রতিদিনের কার্যতালিকা, আর আদালতে আসা যাঁর আইনজীবী দরকার তাঁর আইনি সহায়তার আবেদন।",
+          "court.open": "আদালত পোর্টাল খুলুন",
+          "prison.name": "কারাগারের ড্যাশবোর্ড",
+          "prison.desc":
+            "কারা কর্মকর্তাদের জন্য: বন্দিরা আর যে মামলায় তাঁরা আটক, কবে কাকে আদালতে হাজির করতে হবে, আর আইনি সহায়তার আবেদন।",
+          "prison.open": "কারাগারের ড্যাশবোর্ড খুলুন",
+          "legalaid.name": "ডিজিটাল লিগ্যাল এইড",
+          "legalaid.desc":
+            "নাগরিক, ইউনিয়ন ডিজিটাল সেন্টার ও মধ্যস্থতাকারীদের জন্য: আইনি সহায়তার আবেদন, মামলার খোঁজ, আর মধ্যস্থতায় বিরোধ মেটানো। ইন্টারনেট ছাড়াও চলে।",
+          "legalaid.open": "ডিজিটাল লিগ্যাল এইড অ্যাপ খুলুন",
+          "api.name": "ব্যাকএন্ড API",
+          "api.desc":
+            "ডেভেলপারদের জন্য: ড্যাশবোর্ড ও ফোন লাইনের পেছনের API, আর চালিয়ে দেখার মতো এর রেফারেন্স।",
+          "api.open": "ব্যাকএন্ড API-র রেফারেন্স খুলুন",
+          footer: "ডিজিটাল লিগ্যাল এইড সিস্টেম (DLAS)",
+        },
+      }
+
+      const LANGUAGES = {
+        en: { label: "EN", name: "English" },
+        bn: { label: "বাংলা", name: "বাংলা" },
+      }
+
+      function readStoredLang() {
+        try {
+          return localStorage.getItem(STORAGE_KEY) === "bn" ? "bn" : "en"
+        } catch {
+          return "en"
+        }
+      }
+
+      let lang = readStoredLang()
+      const t = (key) => MESSAGES[lang][key]
+
+      // Bangla reads numbers in Bangla digits, as the dashboards and the Android app show them.
+      const BN_DIGITS = "০১২৩৪৫৬৭৮৯"
+      const digits = (text) => (lang === "bn" ? text.replace(/[0-9]/g, (d) => BN_DIGITS[d]) : text)
+
+      const langSwitch = document.getElementById("lang-switch")
+      const langItems = document.querySelectorAll(".lang-item")
+
+      function render() {
+        // Screen readers pick pronunciation from <html lang>.
+        document.documentElement.lang = lang
+        document.title = t("meta.title")
+        document.querySelector('meta[name="description"]').content = t("meta.description")
+        for (const el of document.querySelectorAll("[data-i18n]")) {
+          el.textContent = t(el.dataset.i18n)
+        }
+        for (const el of document.querySelectorAll("[data-i18n-label]")) {
+          el.setAttribute("aria-label", t(el.dataset.i18nLabel))
+        }
+        document.getElementById("hotline-number").textContent = digits(HOTLINE_SHOWN)
+
+        for (const item of langItems) {
+          item.setAttribute("aria-pressed", String(item.dataset.lang === lang))
+        }
+        const other = lang === "en" ? "bn" : "en"
+        langSwitch.dataset.lang = other
+        langSwitch.lang = other
+        langSwitch.textContent = LANGUAGES[other].label
+        langSwitch.setAttribute("aria-label", `${t("language")}: ${LANGUAGES[other].name}`)
+      }
+
+      function setLang(next) {
+        lang = next
+        try {
+          localStorage.setItem(STORAGE_KEY, next)
+        } catch {
+          // Private mode or blocked storage: the choice just won't persist.
+        }
+        render()
+      }
+
+      for (const button of [langSwitch, ...langItems]) {
+        button.addEventListener("click", () => setLang(button.dataset.lang))
+      }
+      document.getElementById("lang").hidden = false
+      render()
+
+      const copyButton = document.getElementById("copy-number")
+      const copyLabel = document.getElementById("copy-label")
+      const copyStatus = document.getElementById("copy-status")
+      let copyReset
+
+      // Copying needs a secure page (HTTPS or localhost); without it the button stays hidden.
+      if (navigator.clipboard) {
+        copyButton.hidden = false
+        copyButton.addEventListener("click", async () => {
+          const copied = await navigator.clipboard.writeText(HOTLINE).then(
+            () => true,
+            () => false,
+          )
+          copyButton.toggleAttribute("data-copied", copied)
+          copyLabel.dataset.i18n = copied ? "hotline.copied" : "hotline.copyFailed"
+          copyLabel.textContent = t(copyLabel.dataset.i18n)
+          copyStatus.textContent = copyLabel.textContent
+          clearTimeout(copyReset)
+          copyReset = setTimeout(() => {
+            copyButton.removeAttribute("data-copied")
+            copyLabel.dataset.i18n = "hotline.copy"
+            copyLabel.textContent = t("hotline.copy")
+            copyStatus.textContent = ""
+          }, 2000)
+        })
+      }
+    </script>
+  </body>
+</html>

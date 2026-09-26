@@ -38,6 +38,7 @@ created at startup; there are no migrations yet).
 | `docker build -t dlas-backend .` | Production image (serves on port 8000) |
 | `.venv/bin/python -m scripts.dashboard_fixture` | Refresh the dashboard's API contract fixture |
 | `.venv/bin/python -m scripts.seed_records` | Add the demo court cases, cause lists, prisoners and one jail application (safe to re-run; refuses in production without `--force`) |
+| `.venv/bin/python -m scripts.seed_cases` | Then add the DLAO dashboard's demo cases, dated as they happened (safe to re-run; refuses in production without `--force`) |
 | `.venv/bin/python -m scripts.simulate_call turn1.wav …` | Call a phone line from recorded turns, without Twilio (see *Test a call without a phone*) |
 
 If your shell exports a `PYTHONPATH` (ROS, for example), run the tools with
@@ -67,7 +68,7 @@ app/
               courts.py  prisons.py  udc.py  panel.py (rosters)
               ekyc.py  records.py (who may see which record)  institution.py (applications
               from courts and jails)  mediation.py (notices, no-shows, UDCs)
-scripts/      dashboard_fixture.py  simulate_call.py  seed_records.py
+scripts/      dashboard_fixture.py  simulate_call.py  seed_records.py  seed_cases.py
 tests/
 ```
 
@@ -229,6 +230,23 @@ is a 404, so its record IDs are not confirmed.
 `python -m scripts.seed_records` adds the demo records: five court cases in three courts
 with their hearings and cause lists, four prisoners in two jails, and one application from
 Rangpur Central Jail. `../start.sh` runs it.
+
+`python -m scripts.seed_cases` (after it) adds the DLAO dashboard's demo cases: the
+applications in the dashboard's sample data (`src/data/cases.ts` and `closed-cases.ts`),
+made through the API as the office would have made them. That covers:
+
+- Hotline, web, UDC and court intake.
+- The officer's triage, accepted or overridden with a reason.
+- Panel lawyers and their court reports, two of them late.
+- A referral sent back twice.
+- Mediation with two no-shows.
+- Five closed cases.
+
+Each step runs on the app's clock set back to when it happened (`clock_set_to` in
+`app/database.py`), so the timelines, alerts, court dates and audit ledger read as months of
+work. Nothing is sent and no model is asked. The court's application is checked with the NID
+registry, and is left out without one. The script is safe to re-run, and refuses in
+production without `--force`.
 
 ## Mediation notices and Union Digital Centres
 
