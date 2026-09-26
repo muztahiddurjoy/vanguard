@@ -3,6 +3,8 @@
  * they hold its tracking number, which reveals only the case's stage.
  */
 
+import { File } from 'expo-file-system';
+
 import type {
   DocumentKind,
   FiledCase,
@@ -110,8 +112,13 @@ export const api = {
     kind: DocumentKind
   ) => {
     const form = new FormData();
-    // React Native's FormData takes a file as {uri, name, type}.
-    form.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
+    // The global fetch is expo/fetch, which cannot send React Native's {uri} file
+    // parts: it takes any part that can hand over its bytes.
+    form.append('file', {
+      name: file.name,
+      type: file.mimeType,
+      bytes: async () => new Uint8Array(await new File(file.uri).arrayBuffer()),
+    } as unknown as Blob);
     form.append('kind', kind);
     return request<UploadResult>(c, `/intake/cases/${encodeURIComponent(reference)}/documents`, {
       form,
