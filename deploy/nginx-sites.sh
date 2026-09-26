@@ -121,10 +121,11 @@ cat <<EOF
     # Documents are up to 10 MB (server/app/services/uploads.py).
     client_max_body_size 12m;
 
+    # These keep nginx's own status (413, or 502, 503 or 504), whatever return says.
     error_page 413 @too_large;
     error_page 502 503 504 @unavailable;
 $(nginx_error @too_large 413 "Files must be 10 MB or smaller")
-$(nginx_error @unavailable 503 "The server is not answering just now. Try again in a minute.")
+$(nginx_error @unavailable 502 "The server is not answering just now. Try again in a minute.")
 
     location / {
         # An agent's model may take up to a minute to answer.
