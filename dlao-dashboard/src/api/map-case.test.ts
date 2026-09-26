@@ -111,7 +111,8 @@ describe("toLegalCase", () => {
       },
       Date.parse("2026-09-25T00:00:00Z"),
     )
-    expect(c.flags).toEqual(["lawyerInactivity"])
+    // The land case is in mediation, and its respondent keeps missing it.
+    expect(c.flags).toEqual(["mediationNoShow", "lawyerInactivity"])
     expect(c.lawyer).toEqual({
       id: "LAW-07",
       lastUpdateAt: "2026-08-01T00:00:00+00:00",
@@ -189,5 +190,79 @@ describe("toLegalCase", () => {
       from: { en: "Gaibandha", bn: "Gaibandha" },
       acknowledged: { at: "2026-09-25T10:00:00+00:00", by: "DLAO-RGP-0142" },
     })
+  })
+
+  it("maps an application a jail sent for a prisoner, and a court's e-KYC", () => {
+    const base = list.find((c) => c.applicant?.name === "Abdul Malek")!
+    const jail = toLegalCase({
+      ...base,
+      channel: "prison",
+      category: "criminalDefence",
+      flags: ["inCustody", "mediationNoShow"],
+      applicant: { ...base.applicant!, phone: null, safetyLevel: "caution" },
+      submittedBy: {
+        kind: "prison",
+        officeId: "RNG-CJ",
+        officeName: "Rangpur Central Jail",
+        officeNameBn: "রংপুর কেন্দ্রীয় কারাগার",
+        staffName: "Nasima Khatun",
+        staffNameBn: "নাসিমা খাতুন",
+      },
+    })
+    expect(jail.channel).toBe("prison")
+    expect(jail.category).toBe("criminalDefence")
+    expect(jail.flags).toEqual(["inCustody", "mediationNoShow"])
+    expect(jail.applicant.phone).toBe("—")
+    expect(jail.applicant.safetyLevel).toBe("caution")
+    expect(jail.submittedBy).toEqual({
+      kind: "prison",
+      officeId: "RNG-CJ",
+      office: { en: "Rangpur Central Jail", bn: "রংপুর কেন্দ্রীয় কারাগার" },
+      staff: { en: "Nasima Khatun", bn: "নাসিমা খাতুন" },
+    })
+
+    const court = toLegalCase({
+      ...base,
+      channel: "court",
+      identity: { ...base.identity, callerVerified: true, callerVerifiedBy: "ekyc" },
+      submittedBy: {
+        kind: "court",
+        officeId: "RNG-CJM",
+        officeName: "Chief Judicial Magistrate Court, Rangpur",
+        officeNameBn: null,
+        staffName: "Md. Abdul Hakim",
+        staffNameBn: null,
+      },
+      documents: [
+        {
+          id: 31,
+          kind: "applicant_signature",
+          filename: "signature.png",
+          contentType: "image/png",
+          sizeBytes: 5400,
+          status: "processed",
+          summary: null,
+          sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          createdAt: "2026-09-25T09:40:00+06:00",
+        },
+      ],
+    })
+    expect(court.identity?.callerVerifiedBy).toBe("ekyc")
+    // Without a Bangla spelling, both languages read the English.
+    expect(court.submittedBy?.office.bn).toBe("Chief Judicial Magistrate Court, Rangpur")
+    expect(court.documents).toEqual([
+      {
+        id: "31",
+        name: "signature.png",
+        type: "image",
+        sizeBytes: 5400,
+        signature: {
+          uploadedAt: "2026-09-25T09:40:00+06:00",
+          sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        },
+      },
+    ])
+    // A case from the older server has no submitter.
+    expect(toLegalCase(base).submittedBy).toBeUndefined()
   })
 })

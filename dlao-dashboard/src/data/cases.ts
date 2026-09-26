@@ -1,5 +1,6 @@
 import { inDays } from "@/data/clock"
 import type { LegalCase, Localized, PanelLawyer } from "@/data/types"
+import { UDCS } from "@/data/udc"
 
 // Dates are relative to page load so "overdue" and "2 days ago" stay true
 // whenever the dashboard is opened.
@@ -24,7 +25,16 @@ const COURT = {
     en: "Assistant Judge Court, Rangpur Sadar",
     bn: "সহকারী জজ আদালত, রংপুর সদর",
   },
+  chiefJudicialMagistrate: {
+    en: "Chief Judicial Magistrate Court, Rangpur",
+    bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+  },
 } satisfies Record<string, Localized>
+/** Where in-person mediation happens (the server's wording, lib/mediation's sessionPlace). */
+const OFFICE_ROOM: Localized = {
+  en: "District Legal Aid Office, Rangpur (District Judge Court building)",
+  bn: "জেলা লিগ্যাল এইড অফিস, রংপুর (জেলা জজ আদালত ভবন)",
+}
 const OFFICE = {
   rangpur: { en: "Rangpur", bn: "রংপুর" },
   dhaka: { en: "Dhaka", bn: "ঢাকা" },
@@ -232,6 +242,168 @@ export const INITIAL_CASES: LegalCase[] = [
         text: "Only on Tuesday between 2 and 4, when he goes to the market. He checks her phone.",
       },
     ],
+  },
+  {
+    // Sent by Rangpur Central Jail's legal aid desk for a prisoner with no lawyer.
+    id: "APP-2026-036",
+    applicant: {
+      name: { en: "Sohel Rana", bn: "সোহেল রানা" },
+      phone: "—",
+      village: { en: "Kamarpara", bn: "কামারপাড়া" },
+      upazila: { en: "Rangpur Sadar", bn: "রংপুর সদর" },
+      guardian: { en: "Abdul Hamid (father)", bn: "আব্দুল হামিদ (পিতা)" },
+      nidMasked: "—",
+      age: 26,
+    },
+    category: "criminalDefence",
+    priority: "high",
+    queues: ["actionToday", "pendingTriage"],
+    flags: ["inCustody"],
+    actions: ["reviewTriage"],
+    summary: {
+      en: "Undertrial prisoner since May 2026 with no lawyer. His family cannot afford one. He asks for legal aid for his bail petition, listed for hearing tomorrow.",
+      bn: "২০২৬ সালের মে থেকে বিচারাধীন বন্দি, কোনো আইনজীবী নেই। তাঁর পরিবারের আইনজীবী রাখার সামর্থ্য নেই। আগামীকাল শুনানির জন্য তালিকাভুক্ত জামিন আবেদনে তিনি আইনি সহায়তা চান।",
+    },
+    channel: "prison",
+    receivedAt: hoursAgo(3),
+    dueAt: hoursAgo(-20),
+    triage: {
+      priority: "high",
+      confidence: 0.9,
+      status: "pending",
+      generatedAt: hoursAgo(3),
+      factors: [
+        { key: "hearingImminent", detected: true, agent: "jurisdiction", weight: "high" },
+        { key: "priorLegalAction", detected: true, agent: "intake", weight: "low" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Recommended HIGH: the applicant is in custody and his bail petition is heard tomorrow.",
+        bn: "প্রস্তাবিত অগ্রাধিকার উচ্চ: আবেদনকারী হেফাজতে আছেন এবং আগামীকাল তাঁর জামিন আবেদনের শুনানি।",
+      },
+    },
+    activity: [
+      { type: "received", at: hoursAgo(3), channel: "prison" },
+      { type: "aiTriage", at: hoursAgo(3), priority: "high" },
+    ],
+    identity: {
+      filingFor: "self",
+      applicantVerified: false,
+      callerVerified: false,
+      callerSimRegistered: false,
+    },
+    trackingToken: "4410-2873",
+    filerReceipt: { status: "handedOver" },
+    submittedBy: {
+      kind: "prison",
+      officeId: "RNG-CJ",
+      office: { en: "Rangpur Central Jail", bn: "রংপুর কেন্দ্রীয় কারাগার" },
+      staff: { en: "Nasima Khatun", bn: "নাসিমা খাতুন" },
+    },
+    linkedRecords: { courtCaseIds: [103], prisonerId: 202 },
+  },
+  {
+    // The magistrate's bench assistant applied after checking his NID by e-KYC. The same case
+    // is on Adv. Rafiqul Hasan's list in the panel lawyers' dashboard.
+    id: "DLAS-2026-047",
+    applicant: {
+      name: { en: "Jalal Uddin", bn: "জালাল উদ্দিন" },
+      phone: "—",
+      village: { en: "Tambulpur", bn: "তাম্বুলপুর" },
+      upazila: { en: "Pirgachha", bn: "পীরগাছা" },
+      guardian: { en: "Abdus Sattar (father)", bn: "আব্দুস সাত্তার (পিতা)" },
+      nidMasked: "•••• •••• 6397",
+      age: 36,
+      nidVerified: true,
+    },
+    category: "criminalDefence",
+    priority: "high",
+    queues: [],
+    flags: ["inCustody"],
+    actions: [],
+    summary: {
+      en: "Undertrial prisoner in Rangpur Central Jail since June, accused of theft. His lawyer withdrew in August, and nobody defended him when the charge was framed. Witness evidence starts on the next date.",
+      bn: "জুন থেকে রংপুর কেন্দ্রীয় কারাগারে বিচারাধীন বন্দি, চুরির মামলার আসামি। আগস্টে তাঁর আইনজীবী মামলা ছেড়ে দেন, অভিযোগ গঠনের দিন তাঁর পক্ষে কেউ ছিলেন না। পরবর্তী তারিখে সাক্ষ্যগ্রহণ শুরু।",
+    },
+    channel: "court",
+    receivedAt: daysAgo(6),
+    lawyer: {
+      id: "LAW-24",
+      missedUpdates: 0,
+      lastUpdateAt: daysAgo(2),
+      updateDueAt: inDays(6, 10, 30),
+    },
+    lawyerUpdates: [
+      {
+        id: "LU-0471",
+        at: daysAgo(2),
+        lawyerId: "LAW-24",
+        stage: "other",
+        summary: {
+          en: "Met Jalal Uddin at Rangpur Central Jail and signed the vakalatnama. Applied for certified copies of the charge sheet and the witness statements.",
+          bn: "রংপুর কেন্দ্রীয় কারাগারে জালাল উদ্দিনের সঙ্গে দেখা করে ওকালতনামায় সই নিয়েছি। অভিযোগপত্র ও সাক্ষীদের জবানবন্দির সার্টিফায়েড কপির আবেদন করেছি।",
+        },
+        court: COURT.chiefJudicialMagistrate,
+        nextHearingAt: inDays(3, 10, 30),
+      },
+    ],
+    nextHearing: { at: inDays(3, 10, 30), court: COURT.chiefJudicialMagistrate },
+    courtStage: "other",
+    triage: {
+      priority: "high",
+      confidence: 0.88,
+      status: "accepted",
+      generatedAt: daysAgo(6),
+      factors: [
+        { key: "hearingImminent", detected: true, agent: "jurisdiction", weight: "high" },
+        { key: "priorLegalAction", detected: true, agent: "intake", weight: "low" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Recommended HIGH: the applicant is in custody with no defence lawyer and a hearing soon.",
+        bn: "প্রস্তাবিত অগ্রাধিকার উচ্চ: আবেদনকারী হেফাজতে, আসামিপক্ষের আইনজীবী নেই, শিগগির শুনানি।",
+      },
+    },
+    activity: [
+      { type: "received", at: daysAgo(6), channel: "court" },
+      { type: "identityChecked", at: daysAgo(6), verified: true },
+      { type: "aiTriage", at: daysAgo(6), priority: "high" },
+      { type: "triageAccepted", at: daysAgo(6), priority: "high" },
+      { type: "lawyerAssigned", at: daysAgo(5), lawyerId: "LAW-24" },
+      { type: "lawyerUpdate", at: daysAgo(2), lawyerId: "LAW-24", stage: "other" },
+    ],
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: true,
+      callerVerifiedBy: "ekyc",
+      callerSimRegistered: false,
+    },
+    trackingToken: "5162-0934",
+    filerReceipt: { status: "handedOver" },
+    documents: [
+      {
+        id: "DOC-4701",
+        name: "applicant-signature.png",
+        type: "image",
+        sizeBytes: 18_400,
+        signature: {
+          uploadedAt: daysAgo(6),
+          sha256: "3f8a91c2d07be45a6c19e0f27d4b8a5163ce92f0a1d7b6e4c85f3a2091de6b7c",
+        },
+      },
+    ],
+    submittedBy: {
+      kind: "court",
+      officeId: "RNG-CJM",
+      office: {
+        en: "Chief Judicial Magistrate Court, Rangpur",
+        bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+      },
+      staff: { en: "Md. Abdul Hakim", bn: "মো. আব্দুল হাকিম" },
+    },
+    // G.R. 455/2026 and the jail's record of him; his 2024 case shows as a previous record.
+    linkedRecords: { courtCaseIds: [101], prisonerId: 201 },
   },
   {
     id: "DLAS-2026-045",
@@ -803,6 +975,30 @@ export const INITIAL_CASES: LegalCase[] = [
       nidVerified: true,
       notice: { status: "sent" },
     },
+    mediation: {
+      sessions: [
+        {
+          id: 305,
+          scheduledFor: inDays(12, 11, 30),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "scheduled",
+          notes: {
+            en: "Mediation on unpaid denmohor and child maintenance",
+            bn: "বকেয়া দেনমোহর ও সন্তানের ভরণপোষণ নিয়ে মধ্যস্থতা",
+          },
+          place: OFFICE_ROOM,
+          attendance: {},
+          notices: [
+            { role: "applicant", status: "sent", code: "2748-6610", reasons: [], at: hoursAgo(8) },
+            { role: "respondent", status: "sent", code: "2748-6611", reasons: [], at: hoursAgo(8) },
+          ],
+        },
+      ],
+      udcNotices: [],
+      missedInARow: { applicant: 0, respondent: 0 },
+      noShowLimit: 2,
+    },
     callNotes: [
       {
         at: hoursAgo(9),
@@ -942,6 +1138,168 @@ export const INITIAL_CASES: LegalCase[] = [
         en: "Can be resolved through mediation: both families agreed to mediation first.",
         bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: দুই পরিবারই প্রথমে মধ্যস্থতায় সম্মত।",
       },
+    },
+    respondent: {
+      name: { en: "Mamun Hossain", bn: "মামুন হোসেন" },
+      relation: { en: "former husband", bn: "সাবেক স্বামী" },
+      nidVerified: true,
+      upazila: { en: "Badarganj", bn: "বদরগঞ্জ" },
+      notice: { status: "sent" },
+    },
+    mediation: {
+      sessions: [
+        {
+          id: 303,
+          scheduledFor: inDays(6, 14),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "scheduled",
+          notes: {
+            en: "Mediation between the two families on guardianship",
+            bn: "অভিভাবকত্ব নিয়ে দুই পরিবারের মধ্যে মধ্যস্থতা",
+          },
+          place: OFFICE_ROOM,
+          attendance: {},
+          notices: [
+            { role: "applicant", status: "sent", code: "3816-5072", reasons: [], at: daysAgo(2) },
+            { role: "respondent", status: "sent", code: "3816-5073", reasons: [], at: daysAgo(2) },
+          ],
+        },
+      ],
+      udcNotices: [],
+      missedInARow: { applicant: 0, respondent: 0 },
+      noShowLimit: 2,
+    },
+  },
+  {
+    // She missed two sessions in a row; her UDC notice waits for the officer (shared phone).
+    id: "DLAS-2026-042",
+    applicant: {
+      name: { en: "Shahana Begum", bn: "শাহানা বেগম" },
+      phone: "01744-XXX-563",
+      village: { en: "Alampur", bn: "আলমপুর" },
+      upazila: { en: "Taraganj", bn: "তারাগঞ্জ" },
+      guardian: { en: "Abdul Latif (husband)", bn: "আব্দুল লতিফ (স্বামী)" },
+      nidMasked: "•••• •••• 7305",
+      age: 32,
+      nidVerified: true,
+      // She shares a phone with her mother-in-law: neutral SMS only.
+      safetyLevel: "caution",
+    },
+    category: "familyMaintenance",
+    priority: "medium",
+    queues: [],
+    flags: ["mediationNoShow"],
+    actions: [],
+    summary: {
+      en: "Her husband left for Dhaka two years ago and stopped sending money for her and their son. Both families agreed to mediation, but she missed the last two sessions. She shares a phone with her mother-in-law.",
+      bn: "দুই বছর আগে স্বামী ঢাকায় চলে যান, তারপর থেকে তাঁর ও ছেলের খরচ পাঠান না। দুই পরিবারই মধ্যস্থতায় রাজি হয়েছিল, কিন্তু তিনি শেষ দুটি বৈঠকে আসেননি। তিনি শাশুড়ির সঙ্গে একটি ফোন ব্যবহার করেন।",
+    },
+    channel: "walkIn",
+    receivedAt: daysAgo(40),
+    triage: {
+      priority: "medium",
+      confidence: 0.84,
+      status: "accepted",
+      generatedAt: daysAgo(40),
+      factors: [
+        { key: "financialDependency", detected: true, agent: "intake", weight: "medium" },
+        { key: "childrenInHousehold", detected: true, agent: "risk", weight: "medium" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Maintenance for a mother and child; no violence reported.",
+        bn: "মা ও সন্তানের ভরণপোষণ; সহিংসতার কোনো তথ্য নেই।",
+      },
+    },
+    activity: [
+      { type: "received", at: daysAgo(40), channel: "walkIn" },
+      { type: "aiTriage", at: daysAgo(40), priority: "medium" },
+      { type: "triageAccepted", at: daysAgo(39), priority: "medium" },
+      { type: "trackReviewed", at: daysAgo(39), to: "mediation" },
+    ],
+    track: {
+      key: "mediation",
+      status: "confirmed",
+      reason: {
+        en: "Can be resolved through mediation: maintenance from her husband, and no sign of violence.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: স্বামীর কাছ থেকে ভরণপোষণ, সহিংসতার কোনো ইঙ্গিত নেই।",
+      },
+    },
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: true,
+      callerSimRegistered: false,
+    },
+    respondent: {
+      name: { en: "Abdul Latif", bn: "আব্দুল লতিফ" },
+      relation: { en: "husband", bn: "স্বামী" },
+      nidVerified: true,
+      upazila: { en: "Taraganj", bn: "তারাগঞ্জ" },
+      notice: { status: "sent" },
+    },
+    mediation: {
+      sessions: [
+        {
+          id: 281,
+          scheduledFor: inDays(-28, 11),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "missed",
+          place: OFFICE_ROOM,
+          attendance: { applicant: "absent", respondent: "present" },
+          notices: [
+            { role: "applicant", status: "sent", code: "5903-1148", reasons: [], at: daysAgo(35) },
+            { role: "respondent", status: "sent", code: "5903-1149", reasons: [], at: daysAgo(35) },
+          ],
+        },
+        {
+          id: 282,
+          scheduledFor: inDays(-14, 11),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "missed",
+          place: OFFICE_ROOM,
+          attendance: { applicant: "absent", respondent: "present" },
+          notices: [
+            { role: "applicant", status: "sent", code: "5903-2267", reasons: [], at: daysAgo(27) },
+            { role: "respondent", status: "sent", code: "5903-2268", reasons: [], at: daysAgo(27) },
+          ],
+        },
+        {
+          id: 283,
+          scheduledFor: inDays(5, 11),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "scheduled",
+          place: OFFICE_ROOM,
+          attendance: {},
+          notices: [
+            { role: "applicant", status: "sent", code: "5903-3385", reasons: [], at: daysAgo(13) },
+            { role: "respondent", status: "sent", code: "5903-3386", reasons: [], at: daysAgo(13) },
+          ],
+        },
+      ],
+      udcNotices: [
+        {
+          id: 1,
+          role: "applicant",
+          party: {
+            name: { en: "Shahana Begum", bn: "শাহানা বেগম" },
+            village: { en: "Alampur", bn: "আলমপুর" },
+            upazila: { en: "Taraganj", bn: "তারাগঞ্জ" },
+          },
+          udc: UDCS.find((u) => u.id === "UDC-TRG")!,
+          session: { id: 283, scheduledFor: inDays(5, 11), place: OFFICE_ROOM },
+          missedInARow: 2,
+          status: "held",
+          reasons: ["applicantSafety"],
+          createdAt: daysAgo(14),
+        },
+      ],
+      missedInARow: { applicant: 2, respondent: 0 },
+      noShowLimit: 2,
     },
   },
 ]

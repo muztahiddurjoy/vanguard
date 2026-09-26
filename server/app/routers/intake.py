@@ -303,11 +303,17 @@ def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -
     existing = db.scalars(
         select(Document).where(Document.case_id == case.id, Document.id != new_doc.id)
     ).all()
+    # Not intake evidence: drafts are generated here, court orders come from the lawyer,
+    # and a signature is what court or jail staff took from the applicant.
+    not_evidence = (
+        DocumentKind.SETTLEMENT_DRAFT,
+        DocumentKind.COURT_ORDER,
+        DocumentKind.APPLICANT_SIGNATURE,
+    )
     docs: list[dict[str, Any]] = [
         {"id": d.id, "kind": d.kind, "content_type": d.content_type, "text": d.extracted_text}
         for d in existing
-        # Not intake evidence: drafts are generated here, court orders come from the lawyer.
-        if d.kind not in (DocumentKind.SETTLEMENT_DRAFT, DocumentKind.COURT_ORDER)
+        if d.kind not in not_evidence
     ]
     docs.append(
         {

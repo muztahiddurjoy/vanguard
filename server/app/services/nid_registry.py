@@ -15,7 +15,7 @@ intake unverified instead of being asked the security questions again.
 
 import logging
 from datetime import date
-from typing import Protocol
+from typing import Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -94,6 +94,11 @@ class NidRegistry(Protocol):
         """The record for an NID the registry gave us (from ``sim_owner``, say)."""
         ...
 
+    def lookup(self, nid: str) -> Citizen | Literal["notHeld"] | None:
+        """The record for an NID someone typed (e-KYC): ``"notHeld"`` when the registry
+        has no such NID, ``None`` when it cannot be reached."""
+        ...
+
     def family(self, nid: str) -> Family | None: ...
 
     def sim_owner(self, msisdn: str) -> str | None:
@@ -161,12 +166,18 @@ class HttpNidRegistry:
             return None
 
     def citizen(self, nid: str) -> Citizen | None:
+        found = self.lookup(nid)
+        if found == "notHeld":
+            log.error("The NID registry does not hold an NID it gave for a SIM")
+            return None
+        return found
+
+    def lookup(self, nid: str) -> Citizen | Literal["notHeld"] | None:
         resp = self._get(f"/v1/citizens/{nid}")
         if resp is None:
             return None
         if resp.status_code == 404:
-            log.error("The NID registry does not hold an NID it gave for a SIM")
-            return None
+            return "notHeld"
         try:
             return Citizen.model_validate(resp.json())
         except (ValueError, ValidationError) as exc:

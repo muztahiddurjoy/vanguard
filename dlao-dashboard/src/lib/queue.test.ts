@@ -6,9 +6,9 @@ import { backlogCounts, countByQueue, filterCases } from "@/lib/queue"
 describe("countByQueue", () => {
   it("counts every queue in the seed data", () => {
     expect(countByQueue(INITIAL_CASES)).toEqual({
-      all: 11,
-      actionToday: 5,
-      pendingTriage: 3,
+      all: 14,
+      actionToday: 6,
+      pendingTriage: 4,
       duplicates: 1,
       alerts: 4,
     })
@@ -65,6 +65,6 @@ describe("wider search and the 'show only' filter", () => {
 
 describe("backlogCounts", () => {
   it("counts new, urgent and late cases", () => {
-    expect(backlogCounts(INITIAL_CASES, Date.now())).toEqual({ new: 3, urgent: 3, overdue: 3 })
+    expect(backlogCounts(INITIAL_CASES, Date.now())).toEqual({ new: 4, urgent: 5, overdue: 3 })
   })
 })

@@ -52,6 +52,7 @@ from app.services.court_progress import (
     waiting_after_reminder,
 )
 from app.services.panel import get_lawyer
+from app.services.records import submitted_by_summary
 
 router = APIRouter(prefix="/dlao", tags=["dlao"], dependencies=[Depends(require_api_token)])
 
@@ -172,7 +173,7 @@ def track_view(case: Case) -> dict[str, Any] | None:
 
 
 # How a verified caller was confirmed (see t5_intake), as the dashboard names it.
-VERIFIED_BY = {"answers": "answers", "sim": "sim", "sim_family": "simFamily"}
+VERIFIED_BY = {"answers": "answers", "sim": "sim", "sim_family": "simFamily", "ekyc": "ekyc"}
 
 
 def identity_view(case: Case) -> dict[str, Any]:
@@ -217,6 +218,8 @@ def case_view(
         "queues": queues_for(case, flags, now),
         "flags": flags,
         "channel": case.channel,
+        # The court or jail whose staff submitted it (services.institution).
+        "submittedBy": submitted_by_summary(case),
         "summary": case.summary,
         "summaryBn": case.summary_bn,
         "receivedAt": as_utc(case.received_at).isoformat(),
@@ -306,6 +309,24 @@ def mark_do_not_call(db: Session, case: Case, reason: DoNotCallReason, actor: st
     )
 
 
+# Prosecuted by the State: such a case is neither settled by advice nor mediated, the
+# person needs a lawyer in court. Courts and jails send them (services.institution).
+COURT_ONLY_CATEGORIES = {"criminalDefence"}
+
+
+def drop_track_for_court_cases(case: Case) -> None:
+    """Take the AI's advice or mediation mark off a criminal defence case.
+
+    A sensitive mark stays: it protects the applicant. An officer's decision stays too.
+    """
+    if (
+        case.category in COURT_ONLY_CATEGORIES
+        and case.track_status == TrackStatus.SUGGESTED
+        and case.track != Track.SENSITIVE
+    ):
+        case.track = None
+
+
 def apply_triage(db: Session, case: Case, actor: str) -> None:
     """Run T8 on the case narrative and store the recommendation."""
     applicant = case.applicant
@@ -343,6 +364,7 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
     # An officer's confirmed or changed track stands; a fresh AI mark replaces only a mark.
     if case.track_status == TrackStatus.SUGGESTED:
         case.track = Track(rec["track"]["key"])
+        drop_track_for_court_cases(case)
     if case.track == Track.SENSITIVE:
         case.add_flag("sensitive")
     record_audit(
@@ -483,6 +505,9 @@ def documents_view(db: Session, case: Case, *, withhold: bool) -> list[dict[str,
             "status": d.status,
             "summary": None if withhold else d.summary,
             "withheld": withhold,
+            # Neither says what a file shows: an e-signature's upload time and fingerprint.
+            "sha256": d.sha256,
+            "createdAt": as_utc(d.created_at).isoformat(),
         }
         for d in db.scalars(
             select(Document).where(Document.case_id == case.id).order_by(Document.id)

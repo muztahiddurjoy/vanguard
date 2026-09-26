@@ -45,6 +45,7 @@ from app.services.court_progress import (
     update_view,
 )
 from app.services.panel import PanelLawyer, get_lawyer
+from app.services.records import audit_records_viewed, case_records
 from app.services.uploads import MAX_UPLOAD_BYTES, save_upload
 
 router = APIRouter(prefix="/lawyer", tags=["lawyer"], dependencies=[Depends(require_api_token)])
@@ -158,6 +159,19 @@ def my_case(
     )
     db.commit()
     return lawyer_case_view(case, utcnow())
+
+
+@router.get("/cases/{ref}/records")
+def my_case_records(
+    ref: str, db: Session = Depends(get_db), lawyer: PanelLawyer = Depends(current_lawyer)
+) -> dict[str, Any]:
+    """The court and jail records linked to the case: its court dates, earlier lawyers and
+    the client's previous cases. Not even the last digits of an NID."""
+    case = own_case(db, ref, lawyer)
+    view = case_records(db, case, for_lawyer=True)
+    audit_records_viewed(db, case, view, lawyer.id)
+    db.commit()
+    return view
 
 
 class AttachmentIn(BaseModel):

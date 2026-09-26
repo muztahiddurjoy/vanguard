@@ -1,7 +1,9 @@
-"""The AI query helpline over HTTP (web chat, UDC kiosks), and tracking by token.
+"""The AI query helpline over HTTP (web chat, UDC kiosks), tracking by token, and
+mediation notices by their number.
 
 The same agent answers the phone line (see ``services.stream_manager``). A
-tracking number reveals only a case's stage (``services.case_status``).
+tracking number reveals only a case's stage (``services.case_status``); a notice
+number only what its SMS said (``services.mediation``).
 """
 
 import re
@@ -15,7 +17,8 @@ from sqlalchemy.orm import Session
 from app.agents.helpline import helpline
 from app.database import get_db
 from app.routers import require_api_token
-from app.services.case_status import lookup_token
+from app.services.case_status import lookup_number, lookup_token
+from app.services.mediation import lookup_notice
 
 router = APIRouter(prefix="/helpline", tags=["helpline"], dependencies=[Depends(require_api_token)])
 
@@ -45,7 +48,7 @@ def conversation_turn(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown conversation")
     if current.get("complete"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Conversation already finished")
-    state = conv.turn(session_id, body.utterance, lookup=lambda token: lookup_token(db, token))
+    state = conv.turn(session_id, body.utterance, lookup=lambda number: lookup_number(db, number))
     return {
         "reply": state["reply"],
         "intent": state.get("intent"),
@@ -58,4 +61,12 @@ def track(token: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     found = lookup_token(db, re.sub(r"\D", "", token))
     if found is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No case with that tracking number")
+    return found
+
+
+@router.get("/notice/{code}")
+def notice(code: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    found = lookup_notice(db, re.sub(r"\D", "", code))
+    if found is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No notice with that number")
     return found

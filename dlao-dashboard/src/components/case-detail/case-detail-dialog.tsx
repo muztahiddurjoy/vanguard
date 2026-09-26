@@ -3,6 +3,7 @@ import { EyeOff } from "lucide-react"
 
 import { useOfficer } from "@/auth/use-auth"
 import { CaseFlags } from "@/components/case/case-flags"
+import { ChannelIcon } from "@/components/case/channel-icon"
 import { DoNotCallAlert, PoliceLink } from "@/components/case/do-not-call"
 import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
@@ -10,7 +11,9 @@ import { SafeContactAlert } from "@/components/case/safe-contact"
 import { ActivityLog } from "@/components/case-detail/activity-log"
 import { CaseDetails } from "@/components/case-detail/case-details"
 import { CourtProgress } from "@/components/case-detail/court-progress"
+import { MediationPanel } from "@/components/case-detail/mediation-panel"
 import { NextStepPanel } from "@/components/case-detail/next-step-panel"
+import { RecordsPanel } from "@/components/case-detail/records-panel"
 import { TrackReview } from "@/components/triage/track-review"
 import { TriagePanel } from "@/components/triage/triage-panel"
 import {
@@ -25,7 +28,7 @@ import type { LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import type { CaseAction } from "@/state/cases-reducer"
 
-export type CaseTab = "triage" | "details" | "court" | "activity"
+export type CaseTab = "triage" | "details" | "court" | "records" | "mediation" | "activity"
 
 export function CaseDetailDialog({
   legalCase: c,
@@ -69,9 +72,20 @@ export function CaseDetailDialog({
             withMeaning
             overridden={c.triage?.status === "overridden"}
           />
-          <DialogDescription className="text-sm">
-            {pick(c.applicant.village)}, {pick(c.applicant.upazila)} · {t.channel[c.channel]}
+          <DialogDescription className="flex flex-wrap items-center gap-x-1.5 text-sm">
+            <span>
+              {pick(c.applicant.village)}, {pick(c.applicant.upazila)} ·
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <ChannelIcon channel={c.channel} className="size-3.5" />
+              {t.channel[c.channel]}
+            </span>
           </DialogDescription>
+          {c.submittedBy && (
+            <p className="text-sm font-medium">
+              {t.submitted.by(pick(c.submittedBy.office), pick(c.submittedBy.staff))}
+            </p>
+          )}
           {c.track && <TrackBadge track={c.track} />}
           <CaseFlags legalCase={c} hide={c.doNotCall ? ["doNotCall"] : []} />
           {sensitive && (
@@ -113,6 +127,8 @@ export function CaseDetailDialog({
                   ["triage", t.detail.tabTriage],
                   ["details", t.detail.tabDetails],
                   ...(inCourt ? [["court", t.detail.tabCourt] as const] : []),
+                  ["records", t.detail.tabRecords],
+                  ["mediation", t.detail.tabMediation],
                   ["activity", t.detail.tabActivity],
                 ] as const
               ).map(([value, label]) => (
@@ -155,6 +171,13 @@ export function CaseDetailDialog({
               <CourtProgress legalCase={c} />
             </TabsContent>
           )}
+          {/* Mounted only while open: reading the records is audited. */}
+          <TabsContent value="records" className="pt-5">
+            <RecordsPanel legalCase={c} />
+          </TabsContent>
+          <TabsContent value="mediation" className="pt-5">
+            <MediationPanel legalCase={c} />
+          </TabsContent>
           <TabsContent value="activity" className="pt-5">
             <ActivityLog legalCase={c} />
           </TabsContent>

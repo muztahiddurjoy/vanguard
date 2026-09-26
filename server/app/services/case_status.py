@@ -2,7 +2,9 @@
 
 The helpline reads this to anyone who says the number, so it carries no names,
 narrative, parties or contact details: only the reference, the stage, the
-officer's decision on how the case will be resolved, and the next date.
+officer's decision on how the case will be resolved, and the next date. A
+number that is not a tracking number may be a mediation notice's, which reveals
+only what its SMS said (``services.mediation.public_notice``).
 """
 
 from datetime import datetime
@@ -21,6 +23,7 @@ from app.models import (
     TriageStatus,
 )
 from app.services.court_progress import next_hearing
+from app.services.mediation import lookup_notice
 
 
 def stage_of(case: Case) -> str:
@@ -30,8 +33,11 @@ def stage_of(case: Case) -> str:
         return "mediation"
     if case.status == CaseStatus.REFERRED:
         return "referred"
+    # An officer may give an application a lawyer before accepting it as a case.
+    if case.lawyer_id:
+        return "lawyerAssigned"
     if case.status == CaseStatus.ACTIVE:
-        return "lawyerAssigned" if case.lawyer_id else "accepted"
+        return "accepted"
     return "received" if case.triage_status == TriageStatus.PENDING else "reviewed"
 
 
@@ -74,3 +80,17 @@ def public_status(db: Session, case: Case) -> dict[str, Any]:
 def lookup_token(db: Session, token: str) -> dict[str, Any] | None:
     case = db.scalars(select(Case).where(Case.tracking_token == token)).first()
     return public_status(db, case) if case else None
+
+
+def lookup_number(db: Session, number: str) -> dict[str, Any] | None:
+    """A number a caller said: a tracking number first, else a mediation notice's.
+
+    ``kind`` says which ("case" or "notice"). New numbers of either kind never repeat
+    one of the other (``models.new_tracking_token``), so the order only matters for
+    numbers given out before notices had numbers.
+    """
+    if (status := lookup_token(db, number)) is not None:
+        return {"kind": "case", **status}
+    if (notice := lookup_notice(db, number)) is not None:
+        return {"kind": "notice", "code": number, **notice}
+    return None

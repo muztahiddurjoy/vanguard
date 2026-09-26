@@ -23,6 +23,8 @@ class DocumentKind(StrEnum):
     SETTLEMENT_DRAFT = "settlement_draft"
     # An order sheet or certified copy a panel lawyer sent with a court update.
     COURT_ORDER = "court_order"
+    # The applicant's signature, captured by court or jail staff after e-KYC.
+    APPLICANT_SIGNATURE = "applicant_signature"
     OTHER = "other"
 
 

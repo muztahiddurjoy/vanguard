@@ -1,12 +1,31 @@
 /** Server views -> the dashboard's types. Free text from the server reads the same in both languages. */
 
-import type { ApiLawyer, ApiLawyerCase, ApiUpdate } from "@/api/types"
+import type {
+  ApiCaseRecords,
+  ApiCourtCaseDetail,
+  ApiCourtCaseSummary,
+  ApiCustody,
+  ApiLawyer,
+  ApiLawyerCase,
+  ApiPrisonerDetail,
+  ApiUpdate,
+} from "@/api/types"
 import {
   CATEGORIES,
+  COURT_CASE_TYPES,
+  COURT_PARTY_ROLES,
   COURT_STAGES,
-  type CaseCategory,
+  HELP_NEEDED,
+  LAWYER_SIDES,
+  PRISONER_STATUSES,
+  PROCEEDING_KINDS,
+  type CaseRecords,
+  type ClientCustody,
+  type CourtCase,
+  type CourtCaseRecord,
   type CourtStage,
   type CourtUpdate,
+  type CustodyEntry,
   type Lawyer,
   type LawyerCase,
   type Localized,
@@ -17,8 +36,13 @@ function loc(en: string | null | undefined, bn?: string | null): Localized {
   return { en: text, bn: bn || text }
 }
 
+/** The value if the dashboard knows it (the server may add values before the dashboard does). */
+function known<T extends string>(values: readonly T[], value: unknown): T | undefined {
+  return (values as readonly unknown[]).includes(value) ? (value as T) : undefined
+}
+
 function stageOf(value: unknown): CourtStage {
-  return (COURT_STAGES as readonly unknown[]).includes(value) ? (value as CourtStage) : "other"
+  return known(COURT_STAGES, value) ?? "other"
 }
 
 export function toLawyer(api: ApiLawyer): Lawyer {
@@ -49,9 +73,7 @@ export function toLawyerCase(api: ApiLawyerCase): LawyerCase {
   const client = api.client
   const place = [client?.village, client?.upazila ?? client?.district].filter(Boolean).join(", ")
   const safeWindow = client?.safeContactWindows[0]
-  const category = (CATEGORIES as readonly unknown[]).includes(api.category)
-    ? (api.category as CaseCategory)
-    : "other"
+  const category = known(CATEGORIES, api.category) ?? "other"
   return {
     id: api.id,
     category,
@@ -97,5 +119,120 @@ export function toLawyerCase(api: ApiLawyerCase): LawyerCase {
       : {}),
     ...(api.courtStage ? { courtStage: stageOf(api.courtStage) } : {}),
     updates: api.updates.map(toUpdate),
+  }
+}
+
+function toCourtCase(api: ApiCourtCaseSummary): CourtCase {
+  return {
+    id: String(api.id),
+    court: loc(api.court.name, api.court.nameBn),
+    caseNumber: api.caseNumber,
+    caseType: known(COURT_CASE_TYPES, api.caseType) ?? "other",
+    title: loc(api.title),
+    ...(api.sections ? { sections: api.sections } : {}),
+    ...(api.filedOn ? { filedOn: api.filedOn } : {}),
+    status: api.status,
+    ...(api.nextDate ? { nextDate: api.nextDate } : {}),
+    ...(api.nextPurpose ? { nextPurpose: loc(api.nextPurpose) } : {}),
+    parties: api.parties.map((p) => {
+      const role = known(COURT_PARTY_ROLES, p.role)
+      return {
+        ...(role ? { role } : {}),
+        name: loc(p.name, p.nameBn),
+        ...(p.fatherName ? { fatherName: loc(p.fatherName) } : {}),
+        ...(p.age != null ? { age: p.age } : {}),
+      }
+    }),
+  }
+}
+
+function toCustody(api: ApiCustody): CustodyEntry {
+  const status = known(PRISONER_STATUSES, api.status)
+  return {
+    prison: loc(api.prison.name, api.prison.nameBn),
+    prisonerNo: api.prisonerNo,
+    ...(status ? { status } : {}),
+  }
+}
+
+function toCourtCaseRecord(
+  api: ApiCourtCaseDetail,
+  isClient: (c: ApiCustody) => boolean,
+): CourtCaseRecord {
+  return {
+    ...toCourtCase(api),
+    proceedings: api.proceedings.map((p) => ({
+      id: String(p.id),
+      heldOn: p.heldOn,
+      kind: known(PROCEEDING_KINDS, p.kind) ?? "other",
+      summary: loc(p.summary),
+      ...(p.nextDate ? { nextDate: p.nextDate } : {}),
+      ...(p.nextPurpose ? { nextPurpose: loc(p.nextPurpose) } : {}),
+    })),
+    lawyers: api.lawyers.map((l) => {
+      const side = known(LAWYER_SIDES, l.side)
+      return {
+        id: String(l.id),
+        name: loc(l.name, l.nameBn),
+        ...(side ? { side } : {}),
+        ...(l.enrolment ? { enrolment: l.enrolment } : {}),
+        ...(l.panelLawyerId ? { panelLawyerId: l.panelLawyerId } : {}),
+        ...(l.from ? { from: l.from } : {}),
+        ...(l.until ? { until: l.until } : {}),
+        current: l.current,
+      }
+    }),
+    causeList: api.causeList.map((s) => ({
+      date: s.date,
+      serial: s.serial,
+      ...(s.time ? { time: s.time } : {}),
+      purpose: loc(s.purpose),
+      ...(s.judge ? { judge: s.judge } : {}),
+    })),
+    // The client's own custody is shown once, from the jail's record.
+    custody: api.custody.filter((c) => !isClient(c)).map(toCustody),
+  }
+}
+
+function toClientCustody(api: ApiPrisonerDetail): ClientCustody {
+  return {
+    ...toCustody(api),
+    ...(api.ward ? { ward: api.ward } : {}),
+    admittedOn: api.admittedOn,
+    ...(api.releasedOn ? { releasedOn: api.releasedOn } : {}),
+    ...(api.nextCourtDate ? { nextCourtDate: api.nextCourtDate } : {}),
+    heldOn: api.cases.map((c) => ({
+      court: loc(c.court.name, c.court.nameBn),
+      caseNumber: c.caseNumber,
+      registered: c.found,
+    })),
+  }
+}
+
+export function toCaseRecords(api: ApiCaseRecords): CaseRecords {
+  const { submittedBy: by, prisoner } = api
+  const { ekyc, signature } = api.identity
+  const isClient = (c: ApiCustody) =>
+    !!prisoner && c.prison.id === prisoner.prison.id && c.prisonerNo === prisoner.prisonerNo
+  return {
+    ...(by
+      ? {
+          submittedBy: {
+            kind: by.kind,
+            office: loc(by.office.name, by.office.nameBn),
+            staff: loc(by.staff.name, by.staff.nameBn),
+            submittedAt: by.submittedAt,
+            helpNeeded: known(HELP_NEEDED, by.helpNeeded) ?? "other",
+            inCustody: by.inCustody,
+          },
+        }
+      : {}),
+    identity: {
+      ...(ekyc ? { ekyc: { status: ekyc.status, at: ekyc.at } } : {}),
+      ...(signature ? { signedAt: signature.uploadedAt } : {}),
+    },
+    courtCases: api.courtCases.map((c) => toCourtCaseRecord(c, isClient)),
+    ...(prisoner ? { custody: toClientCustody(prisoner) } : {}),
+    previousRecords: api.previousRecords.map(toCourtCase),
   }
 }

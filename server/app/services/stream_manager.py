@@ -7,8 +7,9 @@ or to hear the progress of one they already filed.
 
 - New case: T5 intake takes the call, from "tell me what happened".
 - Progress: the helpline agent asks for the tracking number and reads the
-  case's stage (``services.case_status``); a number said with the answer is
-  read at once. A caller who then says they want to apply is taken to intake.
+  case's stage (``services.case_status``), or a mediation notice's number and
+  what the notice means; a number said with the answer is read at once. A
+  caller who then says they want to apply is taken to intake.
 - Safety: a caller who starts saying what happened at the menu, or who says
   they are in danger there or while asking about a case, goes straight to
   intake, with what they said as its first turn: the 999 line and the escalated
@@ -60,7 +61,7 @@ from app.agents.hotline_menu import MAX_MENU_ASKS, MENU, MENU_AGAIN, TELL_ME, Ho
 from app.agents.t5_intake import IntakeConversation, conversations, substance, with_token
 from app.config import get_settings
 from app.database import SessionLocal
-from app.services.case_status import lookup_token
+from app.services.case_status import lookup_number
 from app.services.elevenlabs import TextToSpeech, TTSError
 from app.services.speech_to_text import OpenAITranscriber, Transcriber
 
@@ -235,9 +236,10 @@ class StreamManager:
             settings.stt_story_end_of_turn_ms if story else settings.stt_end_of_turn_ms
         )
 
-    def _lookup(self, token: str) -> dict[str, Any] | None:
+    def _lookup(self, number: str) -> dict[str, Any] | None:
+        """A spoken number: a case's tracking number, or a mediation notice's."""
         with self.session_factory() as db:
-            return lookup_token(db, token)
+            return lookup_number(db, number)
 
     # --- speaking ---------------------------------------------------------------
 

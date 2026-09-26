@@ -33,6 +33,8 @@ export type CaseCategory =
   | "dowryHarassment"
   | "labourDispute"
   | "childCustody"
+  /** Defence, bail or an appeal for someone accused (applications from courts and jails). */
+  | "criminalDefence"
   /** Not sorted yet (the AI could not tell). */
   | "other"
 
@@ -49,6 +51,10 @@ export type CaseFlag =
   | "doNotCall"
   /** The phone call was cut before the AI finished its questions. */
   | "callDropped"
+  /** The applicant is in jail or police custody. */
+  | "inCustody"
+  /** A party missed mediation too many times in a row. */
+  | "mediationNoShow"
 
 export type NextAction =
   | "reviewTriage"
@@ -60,7 +66,23 @@ export type NextAction =
   | "scheduleSafeCall"
   | "viewCase"
 
-export type IntakeChannel = "hotline" | "walkIn" | "online" | "proxy" | "udc"
+export type IntakeChannel =
+  | "hotline"
+  | "walkIn"
+  | "online"
+  | "proxy"
+  | "udc"
+  /** Sent by a court's staff, or a jail's, for someone in front of them. */
+  | "court"
+  | "prison"
+
+/** The court or jail that sent an application for the applicant. */
+export interface SubmittedBy {
+  kind: "court" | "prison"
+  officeId: string
+  office: Localized
+  staff: Localized
+}
 
 /** A weekly window in which the applicant can be contacted safely (local time). */
 export interface SafeContactWindow {
@@ -105,6 +127,9 @@ export interface TriageRecommendation {
   generatedAt: string
 }
 
+/** How carefully the applicant must be contacted (the server's safety level). */
+export type SafetyLevel = "standard" | "caution" | "restricted" | "no_contact"
+
 export interface Applicant {
   name: Localized
   phone: string
@@ -115,6 +140,8 @@ export interface Applicant {
   age?: number
   /** Details matched to the National ID register. */
   nidVerified?: boolean
+  /** Not given: worked out from the safe window or do-not-call. */
+  safetyLevel?: SafetyLevel
 }
 
 /** How the case could be resolved. The AI marks it; the officer decides. */
@@ -140,9 +167,10 @@ export type FilingFor = "self" | "father" | "mother" | "sibling" | "other"
 /**
  * How a caller was confirmed: by the NID security questions, or, when they could
  * not answer them, by the SIM they called from being registered to them ("sim")
- * or to a relative on their NID record ("simFamily").
+ * or to a relative on their NID record ("simFamily"). At a court or a jail, staff
+ * check the applicant's NID and date of birth against the register ("ekyc").
  */
-export type CallerVerifiedBy = "answers" | "sim" | "simFamily"
+export type CallerVerifiedBy = "answers" | "sim" | "simFamily" | "ekyc"
 
 export interface Identity {
   filingFor: FilingFor
@@ -157,12 +185,18 @@ export interface Identity {
 
 export type NoticeStatus = "sent" | "held" | "notFound" | "blocked" | "failed"
 
+/** The tracking number's SMS; a court or jail hands it to the applicant instead. */
+export type FilerReceiptStatus = NoticeStatus | "handedOver"
+
 export type NoticeHoldReason =
   "callerDidNotAgree" | "doNotCall" | "sensitive" | "emergency" | "identityNotVerified"
 
 export interface Respondent {
   name: Localized
   relation?: Localized
+  /** Where they live, when known: a Union Digital Centre there can reach them. */
+  village?: Localized
+  upazila?: Localized
   /** Found in the National ID register, so their registered SIMs are known. */
   nidVerified: boolean
   /** The SMS asking them to visit the office. */
@@ -288,6 +322,8 @@ export interface CaseDocument {
   name?: string
   type: DocumentType
   sizeBytes?: number
+  /** The applicant's e-signature, taken by the court or jail after their e-KYC check. */
+  signature?: { uploadedAt?: string; sha256?: string }
 }
 
 export interface DuplicateMatch {
@@ -336,6 +372,241 @@ export type ActivityEvent =
   | { type: "lawyerReassigned"; at: string; from: string; to: string; justification?: string }
   | { type: "evidenceViewed"; at: string }
   | { type: "evidenceAcknowledged"; at: string }
+
+// --- Court and jail records (the server's records database) -----------------
+
+export interface CourtRef {
+  id: string
+  name: Localized
+  /** "sessions", "magistrate", "tribunal", "family" or "labour". */
+  kind: string
+}
+
+export interface PrisonRef {
+  id: string
+  name: Localized
+}
+
+export type CourtCaseType = "criminal" | "civil" | "family" | "womenChildren" | "labour" | "other"
+
+export type CourtPartyRole =
+  "accused" | "complainant" | "petitioner" | "respondent" | "plaintiff" | "defendant" | "witness"
+
+export interface CourtParty {
+  name: Localized
+  role: CourtPartyRole
+  fatherName?: Localized
+  age?: number
+}
+
+export interface CourtCaseSummary {
+  id: number
+  court: CourtRef
+  caseNumber: string
+  caseType: CourtCaseType
+  title: Localized
+  sections?: Localized
+  filedOn?: string
+  status: "pending" | "disposed"
+  /** Restricted by the court (e.g. to protect a child); never among previous records. */
+  restricted: boolean
+  /** The soonest upcoming cause-list date, else the last date the court fixed. */
+  nextDate?: string
+  nextPurpose?: Localized
+  parties: CourtParty[]
+}
+
+export type ProceedingKind =
+  "hearing" | "chargeFraming" | "evidence" | "bail" | "argument" | "order" | "judgment" | "other"
+
+/** One day in court, as the bench assistant recorded it. */
+export interface Proceeding {
+  id: number
+  heldOn: string
+  kind: ProceedingKind
+  summary: Localized
+  nextDate?: string
+  nextPurpose?: Localized
+}
+
+export type CourtLawyerSide =
+  "defence" | "prosecution" | "plaintiff" | "defendant" | "petitioner" | "respondent"
+
+export interface CourtLawyer {
+  id: number
+  name: Localized
+  side: CourtLawyerSide
+  enrolment?: string
+  panelLawyerId?: string
+  from?: string
+  until?: string
+  current: boolean
+}
+
+/** The case's place on a day's cause list (the court's list of cases for that day). */
+export interface CauseListSlot {
+  date: string
+  serial: number
+  time?: string
+  purpose: Localized
+  judge?: string
+}
+
+export type PrisonerStatus = "undertrial" | "convicted" | "released" | "transferred"
+
+export interface Custody {
+  prison: PrisonRef
+  prisonerNo: string
+  status: PrisonerStatus
+}
+
+export interface CourtCaseDetail extends CourtCaseSummary {
+  /** Oldest first. */
+  proceedings: Proceeding[]
+  /** Oldest first; a lawyer with no end date is still on the case. */
+  lawyers: CourtLawyer[]
+  /** Upcoming only, soonest first. */
+  causeList: CauseListSlot[]
+  custody: Custody[]
+}
+
+export interface PrisonerSummary {
+  id: number
+  prison: PrisonRef
+  prisonerNo: string
+  name: Localized
+  fatherName?: Localized
+  age?: number
+  /** Never more than the last four digits. */
+  nidLast4?: string
+  nidVerified: boolean
+  village?: Localized
+  upazila?: Localized
+  admittedOn: string
+  status: PrisonerStatus
+  ward?: string
+  releasedOn?: string
+  nextCourtDate?: string
+}
+
+/** A case a prisoner is held on, as the jail recorded it. */
+export interface PrisonCase {
+  court: CourtRef
+  caseNumber: string
+  /** The court has registered it; if not, only the jail's note of it exists. */
+  found: boolean
+  status?: "pending" | "disposed"
+  nextDate?: string
+  nextPurpose?: Localized
+}
+
+export interface PrisonerDetail extends PrisonerSummary {
+  cases: PrisonCase[]
+}
+
+export type HelpNeeded = "defence" | "bail" | "appeal" | "family" | "civil" | "other"
+
+export type EkycStatus = "verified" | "notMatched" | "unavailable"
+
+/** Everything the courts and jails hold on a legal aid case's applicant. */
+export interface CaseRecords {
+  submittedBy?: {
+    kind: "court" | "prison"
+    office: Localized
+    staff: Localized
+    submittedAt: string
+    helpNeeded: HelpNeeded
+    inCustody: boolean
+  }
+  identity: {
+    ekyc?: { status: EkycStatus; at: string; by: string; nidLast4?: string }
+    signature?: { uploadedAt: string; by: string; sha256: string }
+  }
+  courtCases: CourtCaseDetail[]
+  prisoner?: PrisonerDetail
+  /** The same person's other court cases; restricted ones are never included. */
+  previousRecords: CourtCaseSummary[]
+}
+
+export interface RecordSearchResult {
+  courtCases: CourtCaseSummary[]
+  prisoners: PrisonerSummary[]
+}
+
+// --- Mediation: notices, attendance and Union Digital Centres ------------------
+
+export type MediationMode = "in_person" | "odr_phone" | "odr_video"
+
+export const MEDIATION_MODES: readonly MediationMode[] = ["in_person", "odr_phone", "odr_video"]
+
+export type SessionStatus = "scheduled" | "held" | "missed" | "cancelled"
+
+export type Attendance = "present" | "absent"
+
+/** The two sides of a mediation: the applicant and the other side. */
+export type MediationRole = "applicant" | "respondent"
+
+export const MEDIATION_ROLES: readonly MediationRole[] = ["applicant", "respondent"]
+
+/** The SMS notice one party got for one session. */
+export interface MediationNotice {
+  role: MediationRole
+  status: "sent" | "failed" | "held" | "blocked" | "notFound"
+  /** The notice number in the SMS ("1234-5678"): the helpline explains the notice to whoever says it. */
+  code?: string
+  /** Why it was held or blocked, e.g. "sensitive". */
+  reasons: string[]
+  /** The server's SMS gateway was in test mode, so nothing actually went out. */
+  dryRun?: boolean
+  at: string
+}
+
+export interface MediationSession {
+  id: number
+  scheduledFor: string
+  durationMinutes: number
+  mode: MediationMode
+  status: SessionStatus
+  meetingUrl?: string
+  notes?: Localized
+  place: Localized
+  attendance: Partial<Record<MediationRole, Attendance>>
+  notices: MediationNotice[]
+}
+
+export type UdcNoticeStatus = "sent" | "held" | "noUdc" | "failed" | "informed"
+
+/** A Union Digital Centre: the union's service centre, run by a local entrepreneur. */
+export interface Udc {
+  id: string
+  name: Localized
+  upazila: Localized
+  entrepreneur: Localized
+}
+
+/** A UDC asked to tell someone who keeps missing mediation about the next session. */
+export interface UdcNotice {
+  id: number
+  role: MediationRole
+  party: { name: Localized; fatherName?: Localized; village?: Localized; upazila?: Localized }
+  udc?: Udc
+  session: { id: number; scheduledFor: string; place: Localized }
+  missedInARow: number
+  status: UdcNoticeStatus
+  reasons: string[]
+  createdAt: string
+  informedAt?: string
+  informedNote?: string
+}
+
+export interface CaseMediation {
+  /** Soonest first. */
+  sessions: MediationSession[]
+  udcNotices: UdcNotice[]
+  missedInARow: Record<MediationRole, number>
+  /** Missed sessions in a row after which the party's UDC is asked to reach them. */
+  noShowLimit: number
+}
 
 export interface LegalCase {
   id: string
@@ -390,8 +661,14 @@ export interface LegalCase {
   trackingToken?: string
   respondent?: Respondent
   /** The SMS with the tracking number to whoever filed the case. */
-  filerReceipt?: { status: NoticeStatus }
+  filerReceipt?: { status: FilerReceiptStatus }
   callNotes?: CallNote[]
+  /** A court or jail sent the application for the applicant. */
+  submittedBy?: SubmittedBy
+  /** Built-in cases only: the linked court and jail records (the server keeps its own). */
+  linkedRecords?: { courtCaseIds: number[]; prisonerId?: number }
+  /** Built-in cases only: mediation sessions and UDC notices (the server keeps its own). */
+  mediation?: CaseMediation
 }
 
 export function nextActionOf(c: LegalCase): NextAction {

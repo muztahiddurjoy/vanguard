@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.routers import (
+    court,
     dlao,
     duplicates,
     helpline,
@@ -17,9 +18,12 @@ from app.routers import (
     intake,
     lawyer,
     mediation,
+    prison,
+    records,
     referrals,
     sync,
     telephony,
+    udc,
 )
 from app.services.elevenlabs import ElevenLabsTTS
 
@@ -81,11 +85,15 @@ def create_app() -> FastAPI:
     for module in (
         intake,
         dlao,
+        records,
         lawyer,
+        court,
+        prison,
         duplicates,
         referrals,
         incidents,
         mediation,
+        udc,
         sync,
         helpline,
         telephony,

@@ -1,11 +1,23 @@
 /** The server's case view (server/app/routers/dlao.py: case_view and get_case). */
 
 import type {
+  Attendance,
   CallerVerifiedBy,
   CaseFlag,
   CaseCategory,
+  CourtCaseType,
+  CourtLawyerSide,
+  CourtPartyRole,
   CourtStage,
+  EkycStatus,
+  HelpNeeded,
+  MediationMode,
+  MediationNotice,
+  MediationRole,
+  PrisonerStatus,
+  ProceedingKind,
   DoNotCallReason,
+  FilerReceiptStatus,
   FilingFor,
   IntakeChannel,
   NoticeHoldReason,
@@ -13,8 +25,10 @@ import type {
   Priority,
   QueueKey,
   ResolutionTrack,
+  SessionStatus,
   TriageFactor,
   TriageStatus,
+  UdcNoticeStatus,
 } from "@/data/types"
 
 export interface ApiLocalized {
@@ -112,7 +126,16 @@ export interface ApiCase {
     callerVerifiedBy: CallerVerifiedBy | null
     callerSimRegistered: boolean
   }
-  notices: { filer?: ApiNotice; respondent?: ApiNotice }
+  notices: { filer?: { status: FilerReceiptStatus }; respondent?: ApiNotice }
+  /** The court or jail that sent the application (older servers leave it out). */
+  submittedBy?: {
+    kind: "court" | "prison"
+    officeId: string
+    officeName: string
+    officeNameBn: string | null
+    staffName: string
+    staffNameBn: string | null
+  } | null
   // Case detail only:
   activity?: ApiActivity[]
   callNotes?: { at: string; topic: string; text: string }[]
@@ -155,6 +178,9 @@ export interface ApiDocument {
   status: string
   summary: string | null
   withheld?: boolean
+  /** An applicant's e-signature carries its fingerprint, when the server gives it. */
+  sha256?: string | null
+  createdAt?: string | null
 }
 
 /** GET /dlao/hearings */
@@ -180,4 +206,201 @@ export const KNOWN_FLAGS: readonly CaseFlag[] = [
   "escalated",
   "doNotCall",
   "callDropped",
+  "inCustody",
+  "mediationNoShow",
 ]
+
+// --- Court and jail records (GET /dlao/cases/{ref}/records, /dlao/records/search) ---
+
+export interface ApiCourtRef {
+  id: string
+  name: string
+  nameBn: string
+  kind: string
+}
+
+export interface ApiPrisonRef {
+  id: string
+  name: string
+  nameBn: string
+}
+
+export interface ApiStaffRef {
+  id: string
+  name: string
+  nameBn: string
+}
+
+export interface ApiCourtCaseSummary {
+  id: number
+  court: ApiCourtRef
+  caseNumber: string
+  caseType: CourtCaseType
+  title: string
+  sections: string | null
+  filedOn: string | null
+  status: "pending" | "disposed"
+  restricted: boolean
+  nextDate: string | null
+  nextPurpose: string | null
+  parties: {
+    name: string
+    nameBn: string | null
+    role: CourtPartyRole
+    fatherName: string | null
+    age: number | null
+  }[]
+}
+
+export interface ApiCourtCaseDetail extends ApiCourtCaseSummary {
+  proceedings: {
+    id: number
+    heldOn: string
+    kind: ProceedingKind
+    summary: string
+    nextDate: string | null
+    nextPurpose: string | null
+    recordedBy: string
+    recordedAt: string
+  }[]
+  lawyers: {
+    id: number
+    name: string
+    nameBn: string | null
+    side: CourtLawyerSide
+    enrolment: string | null
+    panelLawyerId: string | null
+    from: string | null
+    until: string | null
+    current: boolean
+  }[]
+  causeList: {
+    date: string
+    serial: number
+    time: string | null
+    purpose: string
+    judge: string | null
+  }[]
+  custody: { prison: ApiPrisonRef; prisonerNo: string; status: PrisonerStatus }[]
+}
+
+export interface ApiPrisonerSummary {
+  id: number
+  prison: ApiPrisonRef
+  prisonerNo: string
+  name: string
+  nameBn: string | null
+  fatherName: string | null
+  age: number | null
+  gender: "male" | "female" | "other" | null
+  nidLast4: string | null
+  nidVerified: boolean
+  village: string | null
+  upazila: string | null
+  district: string | null
+  admittedOn: string
+  status: PrisonerStatus
+  ward: string | null
+  releasedOn: string | null
+  nextCourtDate: string | null
+}
+
+export interface ApiPrisonerDetail extends ApiPrisonerSummary {
+  cases: {
+    court: ApiCourtRef
+    caseNumber: string
+    found: boolean
+    caseType: string | null
+    sections: string | null
+    status: "pending" | "disposed" | null
+    nextDate: string | null
+    nextPurpose: string | null
+  }[]
+}
+
+export interface ApiCaseRecords {
+  submittedBy: {
+    kind: "court" | "prison"
+    office: ApiCourtRef | ApiPrisonRef
+    staff: ApiStaffRef
+    submittedAt: string
+    helpNeeded: HelpNeeded
+    inCustody: boolean
+  } | null
+  identity: {
+    ekyc: { status: EkycStatus; at: string; by: string; nidLast4: string | null } | null
+    signature: { uploadedAt: string; by: string; documentId: number; sha256: string } | null
+  }
+  courtCases: ApiCourtCaseDetail[]
+  prisoner: ApiPrisonerDetail | null
+  previousRecords: ApiCourtCaseSummary[]
+}
+
+export interface ApiRecordSearch {
+  courtCases: ApiCourtCaseSummary[]
+  prisoners: ApiPrisonerSummary[]
+}
+
+// --- Mediation (GET /mediation/cases/{ref}, POST /mediation/sessions…) ------------
+
+export interface ApiMediationNotice {
+  role: MediationRole
+  status: MediationNotice["status"]
+  code: string | null
+  reasons: string[]
+  dryRun: boolean | null
+  sentTo: number
+  at: string
+}
+
+export interface ApiSession {
+  id: number
+  caseId: number
+  scheduledFor: string
+  durationMinutes: number
+  mode: MediationMode
+  status: SessionStatus
+  meetingUrl: string | null
+  notes: string | null
+  settlementDocumentId: number | null
+  place: string
+  placeBn: string
+  attendance: Record<MediationRole, Attendance | null>
+  notices: ApiMediationNotice[]
+}
+
+export interface ApiUdcNotice {
+  id: number
+  caseRef: string
+  role: MediationRole
+  party: {
+    name: string
+    nameBn: string | null
+    fatherName: string | null
+    village: string | null
+    upazila: string | null
+  }
+  udc: {
+    id: string
+    name: string
+    nameBn: string
+    upazila: string
+    upazilaBn: string
+    entrepreneur: string
+    entrepreneurBn: string
+  } | null
+  session: { id: number; scheduledFor: string; place: string; placeBn: string }
+  missedInARow: number
+  status: UdcNoticeStatus
+  reasons: string[]
+  createdAt: string
+  informedAt: string | null
+  informedNote: string | null
+}
+
+export interface ApiCaseMediation {
+  sessions: ApiSession[]
+  udcNotices: ApiUdcNotice[]
+  missedInARow: Record<MediationRole, number>
+  noShowLimit: number
+}

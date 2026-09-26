@@ -4,6 +4,12 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
+/** A calendar day from the court ("yyyy-mm-dd"), read as that day wherever the browser is. */
+function calendarDay(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
+
 export function localeOf(lang: Lang) {
   // en-GB matches Bangladeshi English conventions (day-month order, 24h clock).
   return lang === "bn" ? "bn-BD" : "en-GB"
@@ -59,6 +65,16 @@ export function createFormatters(lang: Lang) {
     maximumFractionDigits: 1,
   })
   const monthYear = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" })
+  const weekdayDate = new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+  const onDay = (format: Intl.DateTimeFormat) => (ymd: string) => {
+    const day = calendarDay(ymd)
+    return Number.isNaN(day.getTime()) ? ymd : format.format(day)
+  }
 
   return {
     num: (n: number) => number.format(n),
@@ -71,6 +87,17 @@ export function createFormatters(lang: Lang) {
     longDate: (d: Date | string) => longDate.format(new Date(d)),
     month: (d: Date | string) => month.format(new Date(d)),
     monthYear: (d: Date | string) => monthYear.format(new Date(d)),
+    /** A court date ("yyyy-mm-dd"): "15 Jun 2026". */
+    day: onDay(date),
+    /** A court date with its weekday: "Tue, 29 Sept 2026". */
+    weekDay: onDay(weekdayDate),
+    /** A time of day on a cause list ("HH:MM"), in the UI's digits. */
+    clock(hhmm: string) {
+      const [h, m] = hhmm.split(":").map(Number)
+      return Number.isInteger(h) && Number.isInteger(m)
+        ? time.format(new Date(2026, 0, 1, h, m))
+        : hhmm
+    },
     /** A file size, "820 kB" or "2.4 MB", in the UI's digits. */
     size: (bytes: number) =>
       bytes < 1_000_000

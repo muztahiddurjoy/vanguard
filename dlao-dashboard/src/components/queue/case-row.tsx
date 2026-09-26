@@ -1,6 +1,7 @@
 import { EyeOff } from "lucide-react"
 
 import { CaseFlags } from "@/components/case/case-flags"
+import { ChannelIcon } from "@/components/case/channel-icon"
 import { DoNotCallLine } from "@/components/case/do-not-call"
 import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
@@ -87,6 +88,13 @@ export function CaseRow({
             </>
           )}
         </p>
+
+        {c.submittedBy && !sensitive && (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <ChannelIcon channel={c.submittedBy.kind} className="size-4 shrink-0" />
+            {t.submitted.by(pick(c.submittedBy.office), pick(c.submittedBy.staff))}
+          </p>
+        )}
 
         <p className="text-sm text-foreground">
           <span className="sr-only">{t.queue.reasonLabel}: </span>

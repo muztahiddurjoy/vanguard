@@ -2,3 +2,5 @@ dist
 node_modules
 src/components/ui
 package-lock.json
+# Written by server/scripts/dashboard_fixture.py
+src/api/fixtures

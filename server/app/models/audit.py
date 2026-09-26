@@ -54,6 +54,21 @@ class AuditAction(StrEnum):
     EVIDENCE_VIEWED = "evidence.viewed"
     EVIDENCE_ACKNOWLEDGED = "evidence.acknowledged"
     SYNC_APPLIED = "sync.applied"
+    # Court and jail records (court-dashboard, prison-dashboard).
+    RECORD_CREATED = "record.created"
+    RECORD_UPDATED = "record.updated"
+    CAUSE_LIST_PUBLISHED = "causeList.published"
+    RECORDS_VIEWED = "records.viewed"
+    RECORDS_SEARCHED = "records.searched"
+    RECORD_LINKED = "record.linked"
+    EKYC_CHECKED = "ekyc.checked"
+    APPLICANT_SIGNATURE_UPLOADED = "signature.uploaded"
+    # Mediation notices, attendance, and asking a UDC to reach a party who keeps missing it.
+    MEDIATION_NOTICE = "mediation.notice"
+    MEDIATION_ATTENDANCE = "mediation.attendance"
+    UDC_NOTIFIED = "udc.notified"
+    UDC_NOTICE_RELEASED = "udc.released"
+    UDC_INFORMED = "udc.informed"
 
 
 class ImmutableRecordError(RuntimeError):

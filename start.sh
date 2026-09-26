@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Start DLAS locally: the NID registry, the backend with its database, an ngrok
 # tunnel so Twilio can reach the phone lines, the DLAO dashboard showing the
-# backend's cases and the panel lawyers' dashboard. Ctrl-C stops everything.
+# backend's cases, and the panel lawyers', court and jail dashboards on the same
+# backend. Ctrl-C stops everything.
 #
 # Dependencies are installed on the first run (and again when the requirements
 # change). Each service's output is shown here and kept in .logs/.
@@ -15,11 +16,14 @@ NID_PORT=8100
 SERVER_PORT=8000
 DASHBOARD_PORT=5173
 LAWYER_PORT=5174
+COURT_PORT=5175
+PRISON_PORT=5176
 
 INSTALL=0
 NGROK=1
 DASHBOARD=1
 RESET_DB=0
+SEED=1
 
 usage() {
 	cat <<EOF
@@ -27,14 +31,17 @@ Usage: ./start.sh [options]
 
 Starts the NID registry (port $NID_PORT), the backend with its SQLite database
 (port $SERVER_PORT), an ngrok tunnel to the backend, the DLAO dashboard (port
-$DASHBOARD_PORT) and the panel lawyers' dashboard (port $LAWYER_PORT).
+$DASHBOARD_PORT), the panel lawyers' dashboard (port $LAWYER_PORT), the court
+dashboard (port $COURT_PORT) and the jail dashboard (port $PRISON_PORT).
+The database gets the demo court and jail records (server/scripts/seed_records.py).
 The tunnel uses PUBLIC_BASE_URL in server/.env as its domain when one is set.
 Ctrl-C stops everything. Logs are kept in .logs/.
 
 Options:
   --no-ngrok     No tunnel: everything but real phone calls works
-  --no-dashboard Backend only (neither dashboard)
+  --no-dashboard Backend only (no dashboards)
   --reset-db     Start with an empty database (the old one is kept as a backup)
+  --no-seed      Leave out the demo court and jail records
   --install      Reinstall every dependency first
   -h, --help     Show this help
 EOF
@@ -46,6 +53,7 @@ while (($#)); do
 	--no-ngrok) NGROK=0 ;;
 	--no-dashboard) DASHBOARD=0 ;;
 	--reset-db) RESET_DB=1 ;;
+	--no-seed) SEED=0 ;;
 	-h | --help) usage && exit 0 ;;
 	*)
 		printf 'Unknown option: %s\n\n' "$1" >&2
@@ -61,7 +69,8 @@ if [[ -t 1 ]]; then
 else
 	BOLD='' DIM='' RED='' GREEN='' YELLOW='' RESET=''
 fi
-declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m' [dashboard]=$'\e[34m' [lawyer]=$'\e[33m')
+declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m' [dashboard]=$'\e[34m' [lawyer]=$'\e[33m'
+	[court]=$'\e[94m' [prison]=$'\e[91m')
 [[ -t 1 ]] || COLOR=()
 
 say() { printf '%s==>%s %s\n' "$BOLD" "$RESET" "$*"; }
@@ -138,7 +147,7 @@ dashboard_setting() {
 }
 
 if ((DASHBOARD)); then
-	for app in dlao-dashboard lawyer-dashboard; do
+	for app in dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard; do
 		lock=$ROOT/$app/node_modules/.package-lock.json
 		if ((INSTALL)) || [[ ! -f $lock || $ROOT/$app/package-lock.json -nt $lock ]]; then
 			say "Installing $app dependencies"
@@ -158,7 +167,7 @@ port_owner() {
 }
 
 ports=("$NID_PORT" "$SERVER_PORT")
-((!DASHBOARD)) || ports+=("$DASHBOARD_PORT" "$LAWYER_PORT")
+((!DASHBOARD)) || ports+=("$DASHBOARD_PORT" "$LAWYER_PORT" "$COURT_PORT" "$PRISON_PORT")
 for port in "${ports[@]}"; do
 	owner=$(port_owner "$port")
 	[[ -z $owner ]] || die "Port $port is already in use: $owner"
@@ -284,11 +293,22 @@ if ((NGROK)); then
 	inspector=$(sed -n 's/.*msg="starting web service".* addr=\([^ ]*\).*/\1/p' "$LOG_DIR/ngrok.log" | tail -n 1)
 fi
 
+# Demo court cases, cause lists and prisoners. Idempotent: records already there
+# are left alone. Nothing is sent and no model is asked, whatever server/.env says.
+if ((SEED)); then
+	say "Adding the demo court and jail records"
+	(cd "$ROOT/server" && env -u PYTHONPATH SMS_DRY_RUN=true ADNSMS_API_KEY= ADNSMS_API_SECRET= \
+		ANTHROPIC_API_KEY= OPENAI_API_KEY= NID_SERVER_URL= \
+		.venv/bin/python -m scripts.seed_records) >"$LOG_DIR/seed.log" 2>&1 ||
+		warn "The demo records could not be added (see .logs/seed.log)."
+fi
+
 say "Starting the backend"
 server_env=(NID_SERVER_URL="http://localhost:$NID_PORT")
-# Both dashboards must reach the backend, whatever CORS_ORIGINS in server/.env says.
+# Every dashboard must reach the backend, whatever CORS_ORIGINS in server/.env says.
 cors=$(server_setting CORS_ORIGINS)
-for origin in "http://localhost:$DASHBOARD_PORT" "http://localhost:$LAWYER_PORT"; do
+for origin in "http://localhost:$DASHBOARD_PORT" "http://localhost:$LAWYER_PORT" \
+	"http://localhost:$COURT_PORT" "http://localhost:$PRISON_PORT"; do
 	[[ ,$cors, == *",$origin,"* ]] || cors=${cors:+$cors,}$origin
 done
 server_env+=(CORS_ORIGINS="$cors")
@@ -312,8 +332,15 @@ if ((DASHBOARD)); then
 	# Panel lawyers post their court updates from here, to the same backend.
 	start lawyer "$ROOT/lawyer-dashboard" env "${dashboard_env[@]}" \
 		npm run dev -- --port "$LAWYER_PORT" --strictPort
+	# Courts and jails submit applications and keep their records here.
+	start court "$ROOT/court-dashboard" env "${dashboard_env[@]}" \
+		npm run dev -- --port "$COURT_PORT" --strictPort
+	start prison "$ROOT/prison-dashboard" env "${dashboard_env[@]}" \
+		npm run dev -- --port "$PRISON_PORT" --strictPort
 	wait_for dashboard "http://localhost:$DASHBOARD_PORT" 60
 	wait_for lawyer "http://localhost:$LAWYER_PORT" 60
+	wait_for court "http://localhost:$COURT_PORT" 60
+	wait_for prison "http://localhost:$PRISON_PORT" 60
 fi
 
 # --- Summary -------------------------------------------------------------------
@@ -339,6 +366,8 @@ if ((DASHBOARD)); then
 	[[ $api_url == "http://localhost:$SERVER_PORT" ]] || dashboard_row+="  (cases from $api_url)"
 	row "Dashboard" "$dashboard_row"
 	row "Lawyers" "$BOLD$GREEN""http://localhost:$LAWYER_PORT$RESET  (panel lawyers' dashboard)"
+	row "Courts" "$BOLD$GREEN""http://localhost:$COURT_PORT$RESET  (court staff: CS-11, CS-14)"
+	row "Jails" "$BOLD$GREEN""http://localhost:$PRISON_PORT$RESET  (jail staff: JS-08, JS-03)"
 fi
 row "Backend API" "http://localhost:$SERVER_PORT/docs"
 row "NID registry" "http://localhost:$NID_PORT/docs"

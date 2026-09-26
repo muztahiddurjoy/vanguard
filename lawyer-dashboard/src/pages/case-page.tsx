@@ -4,6 +4,7 @@ import { useParams } from "react-router"
 
 import { CaseBadges } from "@/components/cases/case-badges"
 import { ContactPanel } from "@/components/cases/contact-panel"
+import { CourtRecord } from "@/components/cases/court-record"
 import { CourtReports } from "@/components/cases/court-reports"
 import { hearingStatus, reportStatus } from "@/components/cases/hearing-status"
 import { UpdateButton } from "@/components/cases/update-dialog"
@@ -85,6 +86,7 @@ function CaseView({ legalCase: c }: { legalCase: LawyerCase }) {
             </dl>
             <UpdateButton legalCase={c} size="lg" className="h-11 w-full sm:w-fit" />
           </section>
+          <CourtRecord legalCase={c} />
           <CourtReports legalCase={c} />
         </div>
 

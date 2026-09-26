@@ -239,3 +239,103 @@ describe("sensitive evidence", () => {
     expect(again).toEqual(next)
   })
 })
+
+describe("mediation on the built-in cases", () => {
+  const now = new Date().toISOString()
+  const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+
+  it("numbers each new session after every case's sessions", () => {
+    const next = casesReducer(INITIAL_CASES, {
+      type: "scheduleMediation",
+      id: "APP-2026-018",
+      session: { scheduledFor: soon, durationMinutes: 45, mode: "odr_phone", notifyParties: true },
+      at: now,
+    })
+    const [session] = byId(next, "APP-2026-018").mediation!.sessions
+    expect(session).toMatchObject({
+      id: 306,
+      durationMinutes: 45,
+      mode: "odr_phone",
+      place: { en: "By phone (the office will call)", bn: "ফোনে (অফিস থেকে ফোন করা হবে)" },
+      status: "scheduled",
+    })
+    // No other side on record: only the applicant is sent a notice.
+    expect(session.notices.map((n) => n.role)).toEqual(["applicant"])
+  })
+
+  it("tags the case when someone reaches the limit, and untags it when they come", () => {
+    const shirin = "APP-2026-031"
+    // Make her upcoming session a past one that the respondent missed twice.
+    let cases = INITIAL_CASES.map((c) =>
+      c.id !== shirin
+        ? c
+        : {
+            ...c,
+            mediation: {
+              ...c.mediation!,
+              sessions: [
+                {
+                  ...c.mediation!.sessions[0],
+                  id: 1,
+                  scheduledFor: "2026-08-01T05:00:00.000Z",
+                  status: "missed" as const,
+                  attendance: { applicant: "present" as const, respondent: "absent" as const },
+                },
+                { ...c.mediation!.sessions[0], id: 2, scheduledFor: "2026-08-15T05:00:00.000Z" },
+                { ...c.mediation!.sessions[0], id: 3, scheduledFor: soon },
+              ],
+            },
+          },
+    )
+    cases = casesReducer(cases, {
+      type: "recordAttendance",
+      id: shirin,
+      sessionId: 2,
+      applicant: "present",
+      respondent: "absent",
+      at: now,
+    })
+    let c = byId(cases, shirin)
+    expect(c.flags).toContain("mediationNoShow")
+    expect(c.mediation!.missedInARow).toEqual({ applicant: 0, respondent: 2 })
+    // The next session is already fixed, so his UDC is asked now.
+    expect(c.mediation!.udcNotices).toEqual([
+      expect.objectContaining({
+        role: "respondent",
+        status: "sent",
+        session: expect.objectContaining({ id: 3 }),
+      }),
+    ])
+
+    cases = casesReducer(cases, {
+      type: "recordAttendance",
+      id: shirin,
+      sessionId: 2,
+      applicant: "present",
+      respondent: "present",
+      at: now,
+    })
+    c = byId(cases, shirin)
+    expect(c.flags).not.toContain("mediationNoShow")
+    expect(c.mediation!.sessions.find((s) => s.id === 2)?.status).toBe("held")
+  })
+
+  it("releases a held UDC notice only with a real justification", () => {
+    const release = (justification: string) =>
+      byId(
+        casesReducer(INITIAL_CASES, {
+          type: "releaseUdcNotice",
+          id: "DLAS-2026-042",
+          noticeId: 1,
+          justification,
+          at: now,
+        }),
+        "DLAS-2026-042",
+      ).mediation!.udcNotices[0]
+    expect(release("ok, send").status).toBe("held")
+    expect(release("Spoke to her in the safe time; she asked for it.")).toMatchObject({
+      status: "sent",
+      reasons: [],
+    })
+  })
+})

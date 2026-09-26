@@ -3,8 +3,11 @@
 API for the Digital Legal Aid System: intake from the hotline, Union Digital Centres
 (UDC) and the web, with callers' identities checked against the National ID (NID)
 registry; AI-assisted triage, document review and settlement drafting; SMS notices to
-both parties; an AI helpline that answers questions about a case; and the District
-Legal Aid Officer (DLAO) dashboard's queues, alerts and decisions.
+both parties; an AI helpline that answers questions about a case; the District
+Legal Aid Officer (DLAO) dashboard's queues, alerts and decisions; applications that
+courts and jails submit directly, with e-KYC and e-signature; the courts' and jails'
+records of cases and prisoners; and mediation notices, attendance and Union Digital
+Centres asked to reach someone who keeps missing it.
 
 FastAPI · SQLAlchemy 2 · LangGraph · Claude or OpenAI (optional) · Twilio media streams · OpenAI `gpt-live-transcribe` · ElevenLabs TTS · ADN SMS · NID registry (`../nid-server`)
 
@@ -34,6 +37,7 @@ created at startup; there are no migrations yet).
 | `.venv/bin/mypy` | Type check |
 | `docker build -t dlas-backend .` | Production image (serves on port 8000) |
 | `.venv/bin/python -m scripts.dashboard_fixture` | Refresh the dashboard's API contract fixture |
+| `.venv/bin/python -m scripts.seed_records` | Add the demo court cases, cause lists, prisoners and one jail application (safe to re-run; refuses in production without `--force`) |
 | `.venv/bin/python -m scripts.simulate_call turn1.wav …` | Call a phone line from recorded turns, without Twilio (see *Test a call without a phone*) |
 
 If your shell exports a `PYTHONPATH` (ROS, for example), run the tools with
@@ -48,15 +52,22 @@ app/
               party.py (safety level, provenance, accessibility, safe windows, duplicate reviews)
               document.py (files, T6 checklist items, T11 signatures)
               audit.py (hash-chained ledger, T9 sync receipts)
+              records.py (court cases, hearings, lawyers, cause lists, prisoners, e-KYC checks,
+                          applications from courts and jails, links to legal aid cases)
+              mediation.py (attendance, notices, UDC notices)
   agents/     state.py  llm.py (optional Claude or OpenAI access)  spoken.py (reading callers' answers)
               t5_intake.py  t6_document.py  t7_settlement.py  t8_triage.py
               helpline.py (the AI query helpline)  hotline_menu.py (new case or status?)
   routers/    intake.py  dlao.py  duplicates.py  referrals.py  incidents.py
-              mediation.py  sync.py  helpline.py  telephony.py
+              mediation.py  sync.py  helpline.py  telephony.py  lawyer.py
+              court.py  prison.py  records.py (the DLAO's view of them)  udc.py
   services/   safe_contact.py  adnsms.py  crypto.py  elevenlabs.py  stream_manager.py
               speech_to_text.py (gpt-live-transcribe)  audio.py (μ-law, resampling, voice detection)
               nid_registry.py  notices.py (SMS to both parties)  case_status.py
-scripts/      dashboard_fixture.py  simulate_call.py
+              courts.py  prisons.py  udc.py  panel.py (rosters)
+              ekyc.py  records.py (who may see which record)  institution.py (applications
+              from courts and jails)  mediation.py (notices, no-shows, UDCs)
+scripts/      dashboard_fixture.py  simulate_call.py  seed_records.py
 tests/
 ```
 
@@ -77,6 +88,10 @@ tests/
 | | SMS notices: tracking number to the filer, "visit the DLAO office" to the respondent | on every intake; `POST /dlao/cases/{ref}/respondent-notice` |
 | | AI query helpline: case progress by tracking number, notices, office, documents, mediation; also on the hotline, which first asks "new case or status?" | `/helpline/*`, telephony `?line=helpline` and the hotline |
 | | Do-not-call: hostage signs or a call cut during violence block all calls and SMS | `POST /dlao/cases/{ref}/safety` lifts it |
+| | Courts: the register (parties, hearings, lawyers), cause lists, and applications with e-KYC and e-signature | `/court/*` (court-dashboard) |
+| | Jails: prisoners and the cases they are held on, the production list, and applications | `/prison/*` (prison-dashboard) |
+| | The records linked to a case, for the officer and the case's panel lawyer; search and link | `GET /dlao/cases/{ref}/records`, `/dlao/records/search`, `GET /lawyer/cases/{ref}/records` |
+| | Mediation notices to both parties, attendance, and UDCs asked to reach a party who keeps missing it | `/mediation/*`, `/udc/*` |
 
 Dashboard endpoints (`/dlao/...`) return the dashboard's own `LegalCase` shape
 (camelCase, same priority, queue, flag and triage-factor keys), so
@@ -167,6 +182,83 @@ restricted one only a neutral text inside their safe window. The respondent noti
 the case is marked sensitive or do-not-call, if it was an emergency, or if the
 caller's identity was not verified. An officer can release it with a written reason.
 
+## Courts and jails
+
+Court staff and jail staff each have a dashboard (`../court-dashboard`,
+`../prison-dashboard`) and an API: `/court/*` with `X-Court-Staff-Id`, and `/prison/*` with
+`X-Prison-Staff-Id`. The ID must be on the roster (`services/courts.py`,
+`services/prisons.py`). Each office sees only its own records; asking for another office's
+is a 404, so its record IDs are not confirmed.
+
+- **The court's register.** `GET/POST /court/cases`, `GET/PATCH /court/cases/{id}`, what
+  happened at each hearing (`POST .../proceedings`; a judgment disposes the case), the
+  lawyers who appeared (`POST .../lawyers`, `POST .../lawyers/{id}/end`), and the daily
+  cause list (`GET/PUT /court/cause-lists/{date}`; saving an empty list withdraws it). Case
+  numbers match however they were typed (`G.R. 455/2026`, `gr 455/2026`), so a cause list
+  entry or a prisoner's case links to the court's record as soon as it is registered.
+  A court marks a case **restricted** (a juvenile's, a sealed record): it is never shown as
+  anyone's previous record, and an officer cannot link it.
+- **The jail's prisoners.** `GET/POST /prison/prisoners`, `GET/PATCH /prison/prisoners/{id}`,
+  each with the court cases they are held on, and `GET /prison/court-dates`: listings in any
+  court for its prisoners' cases, which is the jail's production list.
+- **e-KYC.** `POST /court/ekyc` and `/prison/ekyc` check an NID and date of birth (and the
+  name, if given) against the NID registry. A failed check never says which detail was
+  wrong. A verified check keeps the registry's record, so what it is used for takes the
+  person's details from the registry, never from the form; it can be used once, by the
+  office that made it, within `EKYC_CHECK_VALID_MINUTES`. It matches data, not a face or a
+  fingerprint: staff check the person in front of them against their NID card.
+- **Applications.** `POST /court/applications` and `/prison/applications` (with a
+  `client_ref`, so a retry cannot file twice) become an ordinary application: triaged,
+  checked for duplicates and audited, with channel `court` or `prison`. Someone in custody
+  is flagged `inCustody` and is at least high priority. No SMS goes out (someone in custody
+  has no phone); staff hand over the tracking number. The court case, or the prisoner and
+  every case they are held on, is linked to it. The applicant's **e-signature** (a PNG or
+  JPEG, drawn on screen or scanned, up to 2 MB) is accepted only after a verified e-KYC
+  check, at submission or later (`POST .../applications/{ref}/signature`). Staff follow each
+  application's stage, lawyer and next hearing, and nothing else of the case.
+- **Who sees the records.** The officer reads the records linked to a case
+  (`GET /dlao/cases/{ref}/records`): who submitted it and how the applicant was identified,
+  each court case with its hearings, lawyers (the previous ones included) and cause list,
+  the prisoner, and the person's **previous records**: their other court cases, found by NID
+  or by name and father's name. The officer can search the records and link one to a case
+  that came in another way (a mother calling about her son in jail). The case's panel lawyer
+  reads the same for their own cases (`GET /lawyer/cases/{ref}/records`), without any NID
+  digits. Every read, search and write is audited, and only an NID's last four digits ever
+  leave the server.
+
+`python -m scripts.seed_records` adds the demo records: five court cases in three courts
+with their hearings and cause lists, four prisoners in two jails, and one application from
+Rangpur Central Jail. `../start.sh` runs it.
+
+## Mediation notices and Union Digital Centres
+
+When the officer schedules a mediation session (`POST /mediation/sessions`), each party gets
+an SMS notice, through `safe_contact` like every other message:
+
+> Notice of a mediation meeting on case APP-2026-004. When: Tuesday 29 September 2026,
+> 2:30 pm. Where: District Legal Aid Office, Rangpur (District Judge Court building). Notice
+> number: 1234-5678. Please bring your NID. For questions call 16430 and say the notice
+> number. - District Legal Aid Office, Rangpur
+
+The Bangla notice gives the date in Bangla. A restricted or watched phone gets only "Your
+appointment: {date}. Your number: {code}. Call {helpline} and say the number for details."
+Notices are **held**, and nothing is sent, for a do-not-call or sensitive case. A notice
+number is eight digits and is never also a tracking number.
+
+The officer records who came (`POST /mediation/sessions/{id}/attendance`): a session with
+anyone absent is `missed`. A party who misses `MEDIATION_NO_SHOW_LIMIT` (2) sessions in a
+row flags the case `mediationNoShow`, and the Union Digital Centre of their upazila
+(`services/udc.py`) is sent the next session's date and place by SMS, naming the person,
+their father and village, and asking the UDC to tell them in person. It never carries the
+narrative. That happens when the next session is scheduled, or at once if one already is.
+For an applicant who is not at the standard safety level, or a sensitive or do-not-call
+case, the UDC notice is **held**: telling a UDC where an at-risk applicant lives could
+endanger them. An officer can release it with a reason
+(`POST /mediation/udc-notices/{id}/release`). A UDC, with `X-Udc-Id`, lists its notices
+(`GET /udc/notices`) and reports that it told the person
+(`POST /udc/notices/{id}/informed`). `GET /mediation/cases/{ref}` returns the sessions,
+notices, attendance and UDC notices for the dashboard.
+
 ## The AI helpline
 
 The number in every SMS reaches `agents/helpline.py`, over the phone
@@ -179,6 +271,15 @@ could say a number, so it gives no names, narrative or contact details. It expla
 what the respondent's SMS means, and answers questions about the office, documents,
 mediation, fees and applying from fixed facts. The model, when configured, answers other
 questions using the same facts, and rules take over on any failure.
+
+A caller who says a mediation notice's number (tried after tracking numbers) hears what
+the notice means: which case the meeting is about, that they are invited as the applicant
+or as the other party, the date, time and place, that mediation is free and voluntary, to
+bring their NID and the notice number, to call the office if they cannot come, and that
+after repeated absences their Union Digital Centre may contact them. The notice is
+remembered for the rest of the call, so "when?", "where?", "what should I bring?" and "what
+if I can't come?" are answered from it. A caller who asks about a mediation notice without
+the number is asked for it. `GET /helpline/notice/{code}` gives the same facts.
 
 ## Safety by design
 
@@ -376,13 +477,23 @@ See `.env.example` for every setting. For production, set at least:
 - `SMS_DRY_RUN=false` with the ADN credentials
 - `NID_SERVER_URL` and `NID_SERVER_API_KEY` (the registry's `NID_API_KEY`)
 - `HELPLINE_NUMBER` (the number routed to the query helpline)
+- The UDC entrepreneurs' real numbers in `services/udc.py` (the ones there are placeholders)
 - `OPENAI_API_KEY` (speech-to-text for both phone lines), and `LLM_PROVIDER` with its key
   if the agents should use a model
 
 ## Known limitations
 
-- **Auth:** a shared bearer token plus an `X-Officer-Id` header for the audit trail.
-  Per-officer sign-in and roles are still to do.
+- **Auth:** a shared bearer token plus a header naming who is acting (`X-Officer-Id`,
+  `X-Lawyer-Id`, `X-Court-Staff-Id`, `X-Prison-Staff-Id`, `X-Udc-Id`). The server scopes
+  every court, jail, lawyer and UDC request to that ID's own records, but it cannot yet tell
+  that the ID belongs to the person using it: per-user sign-in (passwords or single sign-on,
+  and server-issued sessions) is still to do, and is needed before real court and jail
+  records are entered.
+- **Rosters:** courts, jails, their staff, panel lawyers and UDCs are lists in `services/`;
+  adding one needs a deploy. There is one UDC per upazila for now; real deployments have one
+  per union.
+- **e-KYC** matches the NID, date of birth and name against the registry; it is not a
+  biometric check. The person's photo and fingerprint are not compared.
 - **Schema:** tables are created at startup; add Alembic before the first production
   migration.
 - **T5 state:** conversation state lives in process memory. Run a single worker, or
@@ -408,4 +519,5 @@ See `.env.example` for every setting. For production, set at least:
 - **NID registry:** `nid-server` holds fictional records. A real Election Commission
   integration needs its own agreement, client and data-protection review.
 - **Helpline tracking** is by the eight-digit number alone, with no rate limit yet;
-  it reveals only the stage. Add rate limiting before a public web tracker.
+  it reveals only the stage. A mediation notice number reveals only what its SMS said.
+  Add rate limiting before a public web tracker.
