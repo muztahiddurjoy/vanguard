@@ -2,7 +2,8 @@
 
 The **District Legal Aid Officer (DLAO)** dashboard for the Digital Legal Aid System (DLAS).
 Connected to the backend (`../server`), it shows the office's live cases, including those filed
-by phone through the AI hotline, and saves officer decisions there. Without a backend it runs
+by phone through the AI hotline and those courts and jails submit for someone in front of them,
+and saves officer decisions there. Without a backend it runs
 on built-in cases held in React state, so you can work through the whole officer workflow and
 reset it by reloading the page.
 
@@ -33,44 +34,53 @@ npm run dev
 Start `../server` first (and `../nid-server` for NID checks). The signed-in officer ID is sent
 with every request for the server's audit trail. Opening a case fetches its history, call
 notes, the panel lawyer's court reports and its transfers between offices; Hearings shows the
-dates lawyers reported. These decisions are saved on the server: accepting or overriding
-triage, confirming or changing the advice / mediation / sensitive mark, sending a held SMS to
-the other side, assigning a lawyer or moving a case to another one, reminding a lawyer,
-escalating to the Chief Legal Aid Officer, and acknowledging sensitive evidence (opening it is
-recorded too). The remaining steps (safe-call booking, duplicate decisions, marking a late
-task done, hearing reminders) are kept on screen only for now.
+dates lawyers reported and the mediation meetings. The **Court and jail records** tab is
+fetched only when it is opened, because the server records every look (so are searching and
+linking a record); the **Mediation** tab is fetched when it is opened too. These decisions are
+saved on the server: accepting or overriding triage, confirming or changing the advice /
+mediation / sensitive mark, sending a held SMS to the other side, assigning a lawyer or moving
+a case to another one, reminding a lawyer, escalating to the Chief Legal Aid Officer,
+acknowledging sensitive evidence (opening it is recorded too), linking a court case or prisoner
+record, scheduling mediation, recording attendance, and sending a held UDC notice. The remaining
+steps (safe-call booking, duplicate decisions, marking a late task done, hearing reminders) are
+kept on screen only for now.
 
 Panel lawyers post their court updates from their own dashboard, [`../lawyer-dashboard`](../lawyer-dashboard/README.md).
+Without a backend, the built-in cases include applications from Rangpur Central Jail and the
+Chief Judicial Magistrate Court with the shared demo dataset's court and jail records, and
+mediation follows the server's rules in memory.
 
-| Script              | What it does                                   |
-| ------------------- | ---------------------------------------------- |
-| `npm run dev`       | Vite dev server with HMR                       |
-| `npm run build`     | Type-check (`tsc -b`) and production build     |
-| `npm run preview`   | Serve the production build                     |
-| `npm test`          | Unit + integration tests (Vitest, jsdom)       |
-| `npm run lint`      | ESLint (incl. React Compiler rules)            |
-| `npm run typecheck` | TypeScript only                                |
+| Script              | What it does                               |
+| ------------------- | ------------------------------------------ |
+| `npm run dev`       | Vite dev server with HMR                   |
+| `npm run build`     | Type-check (`tsc -b`) and production build |
+| `npm run preview`   | Serve the production build                 |
+| `npm test`          | Unit + integration tests (Vitest, jsdom)   |
+| `npm run lint`      | ESLint (incl. React Compiler rules)        |
+| `npm run typecheck` | TypeScript only                            |
 
 The app uses hash URLs (`/#/queue`), so the `dist/` folder works on any static host without
 rewrite rules.
 
 ## Screens
 
-| Screen | What it is for |
-| --- | --- |
-| **Sign in** | Officer ID + password, show/hide password, keep me signed in, forgot-password help, one-click demo account |
-| **Home** | Greeting, four summary numbers, pattern alerts for lawyers who stopped reporting, the three most urgent cases ("Start here"), your lists, upcoming hearings |
-| **Work queue** | The backlog at a glance (_New · Urgent · Overdue_), then every open case that needs you, filtered by _Needs Action Today_, _Pending AI Triage_, _Duplicates for Review_, _Overdue / Alerts_ and _Show only_ (children at risk, reported by someone else, sensitive); search by name, case or tracking number, or place; one button per case |
-| **Case** (dialog; full screen on a phone) | Safety warning (safe window, or **Do not call this number**, with the 999 police line), "What to do now", AI triage recommendation, the AI's advice / mediation / sensitive mark to confirm or change, case information (who reported it kept apart from who it is about, with their consent; National ID checks, tracking number, documents and evidence, transfers between offices, the other side and their SMS, the caller's words), court progress from the lawyer, and history |
-| **Duplicate check** (dialog) | "Is this the same person?" — side-by-side records, 85% fuzzy match, merge blocked, confirm as distinct |
-| **All cases** | Register of open and closed cases, with how each closed case ended |
-| **Lawyers** | Panel lawyers, their open cases and next hearing, who has stopped reporting (pattern alert with **Review & Reassign**), send a reminder or move their cases |
-| **Hearings** | Court hearings (the dates lawyers reported) and mediation meetings for the next two weeks, grouped by day |
-| **Reports** | Key numbers and three charts, each with a table view |
-| **My profile** | Officer details (including Role B6, the authorized receiving DLAO for sensitive evidence), editable contact details, this session's decisions |
-| **Settings** | Language, text size (whole UI scales), notification choices |
-| **Help** | Getting started, common questions, what priorities mean, glossary, contacts |
-| **Notifications** (bell) | Live list of what needs attention; opens the case |
+| Screen                                    | What it is for                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sign in**                               | Officer ID + password, show/hide password, keep me signed in, forgot-password help, one-click demo account                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Home**                                  | Greeting, four summary numbers, pattern alerts for lawyers who stopped reporting, the three most urgent cases ("Start here"), your lists, upcoming hearings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Work queue**                            | The backlog at a glance (_New · Urgent · Overdue_), then every open case that needs you, filtered by _Needs Action Today_, _Pending AI Triage_, _Duplicates for Review_, _Overdue / Alerts_ and _Show only_ (children at risk, reported by someone else, sensitive); search by name, case or tracking number, or place; "Submitted by _court or jail · staff_" on applications from a court or a jail; one button per case                                                                                                                                                                                                                      |
+| **Case** (dialog; full screen on a phone) | Safety warning (safe window, or **Do not call this number**, with the 999 police line), "What to do now", AI triage recommendation, the AI's advice / mediation / sensitive mark to confirm or change, case information (who reported it kept apart from who it is about, with their consent; the court or jail that submitted it and "Identity verified by e-KYC at _office_"; National ID checks, tracking number, documents and evidence including the applicant's e-signature, transfers between offices, the other side and their SMS, the caller's words), court progress from the lawyer, court and jail records, mediation, and history |
+| **Court and jail records** (case tab)     | Who submitted it and how the applicant was identified (e-KYC, NID •••• last four, e-signature with its fingerprint); each linked court case with its parties, what happened in court, lawyers now and before, cause-list slots and custody; the linked prisoner record; previous records of the same person (never restricted ones). **Link a record** searches court cases and prisoners after three characters                                                                                                                                                                                                                                |
+| **Mediation** (case tab)                  | Sessions with when, how, where, who came, and each party's SMS notice (notice number, held and why, or test mode); missed sessions in a row against the limit; Union Digital Centres asked to reach someone, with **Send to the centre** for one held for the applicant's safety. **Schedule mediation** (date, time, length, in person / by phone / video, notes, SMS to both sides) and **Record attendance**                                                                                                                                                                                                                                 |
+| **Duplicate check** (dialog)              | "Is this the same person?" — side-by-side records, 85% fuzzy match, merge blocked, confirm as distinct                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **All cases**                             | Register of open and closed cases, with how each closed case ended                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Lawyers**                               | Panel lawyers, their open cases and next hearing, who has stopped reporting (pattern alert with **Review & Reassign**), send a reminder or move their cases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Hearings**                              | Court hearings (the dates lawyers reported) and mediation meetings for the next two weeks, grouped by day; a mediation meeting opens on the case's Mediation tab                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **Reports**                               | Key numbers and three charts, each with a table view                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **My profile**                            | Officer details (including Role B6, the authorized receiving DLAO for sensitive evidence), editable contact details, this session's decisions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Settings**                              | Language, text size (whole UI scales), notification choices                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Help**                                  | Getting started, common questions, what priorities mean, glossary, contacts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Notifications** (bell)                  | Live list of what needs attention; opens the case                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ## Demo walkthrough
 
@@ -85,7 +95,7 @@ rewrite rules.
      outside the window (it uses the real clock).
    - **AI Triage Recommendation** shows the recommended **HIGH** priority and the warning signs
      (`[✓] Active Violence Detected`, `[✓] Proxy Reported (Access Barrier)`, `[✓] Safe Contact
-     Restricted`, …), each with the check that found it.
+Restricted`, …), each with the check that found it.
    - **Override Priority** requires a new priority and a **Justification for Override**
      (20+ characters). Saving updates the queue badge ("Changed by officer") and the history.
 4. **Jahanara Parvin (APP-2026-027):** her son called for her. _AI suggestion_ ends with
@@ -109,8 +119,25 @@ rewrite rules.
    files**, then **Acknowledge Receipt** for the Dhaka office that sent it.
 8. **Moyuri Akter:** _Case information_ keeps Ripon (the neighbour who reported it) apart from
    Moyuri, and warns that her own agreement is not recorded yet.
-9. **Profile** now counts the decisions you just made; **Settings → Text size → Extra large**
-   enlarges the whole interface.
+9. **Sohel Rana (APP-2026-036):** the row reads **Submitted by Rangpur Central Jail · Nasima
+   Khatun**, tagged _In custody_. _Case information_ says his identity is not verified yet (the
+   jail can check it by e-KYC); **Court and jail records** shows his bail petition in the Nari o
+   Shishu Tribunal, listed for tomorrow, and his prisoner record.
+10. **Jalal Uddin (DLAS-2026-047):** submitted by the Chief Judicial Magistrate Court, **Identity
+    verified by e-KYC**, with his e-signature among the documents. **Court and jail records**
+    shows G.R. 455/2026 (the charge framed with no defence lawyer, the lawyer who withdrew, serial 7
+    on the cause list), his prisoner record and, under **Previous records**, his 2024 case.
+11. **Kamal Hossain (DLAS-2026-039):** **Court and jail records** has nothing linked, but a court
+    case with his name and father's name is a previous record. **Link a record**, type
+    `C.R. 88`, and **Link** it.
+12. **Shahana Begum (DLAS-2026-042):** _Missed mediation_. **Mediation** shows two sessions she
+    missed and her Union Digital Centre's notice held for her safety; **Send to the centre** with
+    a reason. **Change attendance** on the last session records who came.
+13. **Shirin Sultana (APP-2026-031):** **Schedule mediation**, by phone: both sides get an SMS
+    notice with its own number, and the meeting appears on **Hearings**. On Moyuri Akter's case the
+    dialog says the notices will be held.
+14. **Profile** now counts the decisions you just made; **Settings → Text size → Extra large**
+    enlarges the whole interface.
 
 ## Project structure
 
@@ -119,13 +146,15 @@ src/
   main.tsx                    providers + hash router
   routes.tsx                  every screen and its URL
   pages/                      one file per screen
-  api/                        backend client, server case view -> LegalCase, contract fixture
+  api/                        backend client, server views -> LegalCase / records / mediation, contract fixture
   auth/                       sign-in (session storage) + route guard
   state/                      case reducer (pure, tested) + provider that owns the case dialogs
   preferences/                text size and notification choices
-  data/                       types and bilingual sample data (cases, lawyers, hearings, reports)
+  data/                       types and bilingual sample data (cases, lawyers, hearings, court and
+                              jail records, UDCs, reports)
   i18n/                       en/bn dictionaries, provider, locale formatters, case/activity wording
-  lib/                        queue filtering/sorting, safe-contact window maths
+  lib/                        queue filtering/sorting, safe-contact window maths, record search,
+                              mediation rules for the built-in cases
   components/
     ui/                       shadcn/ui components (generated, owned by you)
     layout/                   app layout, sidebar, header, page header, menus
