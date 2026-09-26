@@ -50,7 +50,7 @@ app/
               audit.py (hash-chained ledger, T9 sync receipts)
   agents/     state.py  llm.py (optional Claude or OpenAI access)  spoken.py (reading callers' answers)
               t5_intake.py  t6_document.py  t7_settlement.py  t8_triage.py
-              helpline.py (the AI query helpline)
+              helpline.py (the AI query helpline)  hotline_menu.py (new case or status?)
   routers/    intake.py  dlao.py  duplicates.py  referrals.py  incidents.py
               mediation.py  sync.py  helpline.py  telephony.py
   services/   safe_contact.py  adnsms.py  crypto.py  elevenlabs.py  stream_manager.py
@@ -75,7 +75,7 @@ tests/
 | T9 | Idempotent offline batch sync for the PWA | `POST /sync/batch` |
 | T11 | Ed25519 e-signatures on approved settlements | `POST /mediation/signatures` |
 | | SMS notices: tracking number to the filer, "visit the DLAO office" to the respondent | on every intake; `POST /dlao/cases/{ref}/respondent-notice` |
-| | AI query helpline: case progress by tracking number, notices, office, documents, mediation | `/helpline/*`, telephony `?line=helpline` |
+| | AI query helpline: case progress by tracking number, notices, office, documents, mediation; also on the hotline, which first asks "new case or status?" | `/helpline/*`, telephony `?line=helpline` and the hotline |
 | | Do-not-call: hostage signs or a call cut during violence block all calls and SMS | `POST /dlao/cases/{ref}/safety` lifts it |
 
 Dashboard endpoints (`/dlao/...`) return the dashboard's own `LegalCase` shape
@@ -85,12 +85,25 @@ either reference: `APP-2026-001` or, once promoted, `DLAS-2026-045`.
 
 ## A call to the hotline, step by step
 
-1. **Greet, then listen.** The line answers "লিগ্যাল এইড। আমি শুনছি, বলুন কী হয়েছে।"
-   ("Legal aid. I'm listening, tell me what happened.") and asks nothing until the
-   caller has said what happened. While they talk, a pause has to be longer
-   (`STT_STORY_END_OF_TURN_MS`) before the line answers, and the caller can always
-   talk over the line. "Hello?" and fragments only get encouragement to go on.
-2. **Does it sound like a case?** A known problem (land, wages, dowry, ...), a warning
+1. **New case, or a case already filed?** The line answers "লিগ্যাল এইড। আপনি কি নতুন
+   মামলা করতে চান, নাকি আগে করা মামলার অগ্রগতি জানতে চান?" ("Legal aid. Do you want to
+   file a new case, or hear the progress of a case you already filed?")
+   (`agents/hotline_menu.py`). A caller asking about their case is asked for their
+   tracking number and hears its progress from the helpline agent (see *The AI
+   helpline*). Nothing is filed for them. Three numbers that cannot be found, or "I
+   don't have it", end the search with the SMS and the office to turn to. A caller who
+   starts saying what happened, or says anything about danger, goes straight on to
+   intake with what they said kept, so the emergency path is never behind the
+   question. An answer the line cannot place is asked once more, then the line listens.
+   A status caller who wants to file after all, or who says they are in danger, is
+   handed to intake the same way.
+2. **Then listen.** For a new case the line says "ঠিক আছে। আমি শুনছি, বলুন কী হয়েছে।"
+   ("All right. I'm listening, tell me what happened.") and asks nothing until the
+   caller has said what happened. While they talk, including at the first question, a
+   pause has to be longer (`STT_STORY_END_OF_TURN_MS`) before the line answers, and the
+   caller can always talk over the line. "Hello?" and fragments only get encouragement
+   to go on.
+3. **Does it sound like a case?** A known problem (land, wages, dowry, ...), a warning
    sign, or an account of some length is enough by rules. With a model configured, it
    also reads the account: a case, clearly not a legal matter (told what the line is
    for and given `HELPLINE_NUMBER`), or not said yet. The model can only add: a problem
@@ -98,33 +111,33 @@ either reference: `APP-2026-001` or, once promoted, `DLAS-2026-045`.
    it is; a caller who never says anything is asked to call again. The account, in
    the caller's own words, is the application's narrative, and anything already said
    (who it is for, who it is against, where they live) is not asked again.
-3. **Who is it for?** The caller applies for themselves, or for their father, mother,
+4. **Who is it for?** The caller applies for themselves, or for their father, mother,
    brother or sister (or someone else, such as a neighbour).
-4. **Who is calling?** The caller gives their name, then answers three security
+5. **Who is calling?** The caller gives their name, then answers three security
    questions from their NID: father's name, permanent district and date of birth.
    Callers cannot read a 10- or 17-digit NID aloud, so these stand in for it. Exactly
    one matching registry record verifies them. A mismatch gets one retry.
-5. **When they cannot answer, the registry is searched.** A caller who does not know
+6. **When they cannot answer, the registry is searched.** A caller who does not know
    an answer, or whose answers match no one twice, is looked up through the SIM they
    are calling from: if the name they gave is its owner's, or a relative's on the
    owner's NID record (a wife calling on her husband's phone), they are confirmed.
    The case records which way (`identity.callerVerifiedBy`: answers, SIM or a
    relative's SIM) and the dashboard shows it. Otherwise, or if the registry is down,
    intake carries on and the application is marked unverified. Nobody is turned away.
-6. **The relative.** A parent is found through the caller's NID parent links and a
+7. **The relative.** A parent is found through the caller's NID parent links and a
    sibling through shared parents; the name the caller gives must match. The
    applicant's details (address, NID, parents, date of birth) then come from the
    record.
-7. **Who it is against.** The respondent is looked up by name, father's name and
+8. **Who it is against.** The respondent is looked up by name, father's name and
    district to find the SIMs registered under their NID. If the caller does not know
    those, the respondent is looked for among the applicant's relatives on their NID
    record (a husband by his first name). The caller is asked whether it is safe to
    send them an SMS now.
-8. **Contact.** The caller ID is used for someone applying for themselves, unless the
+9. **Contact.** The caller ID is used for someone applying for themselves, unless the
    registry shows the phone belongs to someone else (it may be the abuser's); then,
    as for anyone applying for someone else, the caller is asked for a safe number,
    and when it is safe to call.
-9. **The application** is created with everything said as call notes, triaged by T8
+10. **The application** is created with everything said as call notes, triaged by T8
    (priority and the advice / mediation / sensitive mark), and the notices go out
    (below). The caller hears their tracking number, digit by digit.
 
@@ -157,7 +170,9 @@ caller's identity was not verified. An officer can release it with a written rea
 ## The AI helpline
 
 The number in every SMS reaches `agents/helpline.py`, over the phone
-(`/telephony/voice?line=helpline`) or `/helpline/conversations`. Given a tracking
+(`/telephony/voice?line=helpline`) or `/helpline/conversations`. A hotline caller who
+asks about a case they filed is handed to it too, and is asked for the tracking number
+first (`HelplineConversation.start(..., tracking=True)`). Given a tracking
 number, it reads out only the stage the case has reached, the next mediation date and
 the officer's decision on how it will be resolved (`services/case_status.py`). Anyone
 could say a number, so it gives no names, narrative or contact details. It explains
