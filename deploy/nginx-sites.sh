@@ -116,8 +116,7 @@ for site in "$@"; do
 
     # Vite names these after their content, so a new build never reuses a name.
     location /assets/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, max-age=31536000, immutable";
         try_files \$uri =404;
     }
 

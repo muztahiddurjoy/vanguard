@@ -291,8 +291,9 @@ points_here() {
 # A certificate for each host that has none yet and whose DNS points here. They
 # renew with the server's other certificates, reloading nginx.
 issue_certs() {
-	local host issued=0 waiting=()
-	for host in "$API_HOST" "${HOST[@]}"; do
+	local host app issued=0 waiting=() hosts=("$API_HOST")
+	for app in "${APPS[@]}"; do hosts+=("${HOST[$app]}"); done
+	for host in "${hosts[@]}"; do
 		[[ ! -f /etc/letsencrypt/live/$host/fullchain.pem ]] || continue
 		if ! points_here "$host"; then
 			waiting+=("$host")
