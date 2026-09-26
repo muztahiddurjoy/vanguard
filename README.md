@@ -31,6 +31,7 @@ lawyer takes the case to court and reports back, and every step is audited.
 | [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, updates from court, and each case's court record (English and বাংলা) | same as above | 5174 |
 | [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, and legal aid applications for people before the court, with e-KYC and e-signature (English and বাংলা) | same as above | 5175 |
 | [`prison-dashboard/`](prison-dashboard/README.md) | The jails' dashboard: prisoners and the court cases they are held on, the production list, and legal aid applications for prisoners, with e-KYC and e-signature (English and বাংলা) | same as above | 5176 |
+| [`portal/`](portal/README.md) | The front page: the hotline number, and a button for each app with the address it opens (English and বাংলা) | one static HTML file | any static server |
 | [`user-mobile-app/`](user-mobile-app/README.md) | The citizen's Android app: SOS (both volume buttons call for help, from any screen), filing a case, their cases and each one's progress, documents, the helpline and mediation notices (English and বাংলা) | Expo SDK 57, React Native 0.86, a Kotlin module for SOS | Metro 8081 |
 
 External services the backend can use (all optional in development; without them the system
@@ -1081,6 +1082,7 @@ vanguard/
   lawyer-dashboard/        panel lawyers' dashboard
   court-dashboard/         courts' dashboard
   prison-dashboard/        jails' dashboard
+  portal/                  the front page: hotline number and a link to each app (index.html)
   user-mobile-app/         the citizen's Android app (src/app screens, modules/sos-gesture)
   vanguard-digital-leagal-aid/   a local reference PWA, kept out of git (see .gitignore)
 ```
