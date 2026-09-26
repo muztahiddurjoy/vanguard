@@ -467,15 +467,16 @@ export function RecordsPanel({ legalCase: c }: { legalCase: LegalCase }) {
       {(identified || linked || r.previousRecords.length > 0) && (
         <PreviousRecords records={r.previousRecords} />
       )}
-      <LinkRecordDialog
-        key={String(linking)}
-        open={linking}
-        onOpenChange={setLinking}
-        legalCase={c}
-        records={r}
-        search={search}
-        link={link}
-      />
+      {linking && (
+        <LinkRecordDialog
+          open
+          onOpenChange={setLinking}
+          legalCase={c}
+          records={r}
+          search={search}
+          link={link}
+        />
+      )}
     </div>
   )
 }

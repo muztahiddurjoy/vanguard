@@ -85,7 +85,14 @@ export function HearingsPage() {
                               size="sm"
                               aria-label={t.queue.actionFor(t.hearings.openCase, name)}
                               onClick={() =>
-                                openCase(legalCase, legalCase.lawyer ? "court" : "details")
+                                openCase(
+                                  legalCase,
+                                  h.kind === "mediation"
+                                    ? "mediation"
+                                    : legalCase.lawyer
+                                      ? "court"
+                                      : "details",
+                                )
                               }
                             >
                               <FolderOpen aria-hidden data-icon="inline-start" />

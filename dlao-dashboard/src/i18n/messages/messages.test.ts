@@ -19,7 +19,7 @@ function leaves(tree: Tree, prefix = ""): Record<string, string> {
 }
 
 // Pure formatting templates with no words to translate.
-const SAME_IN_BOTH = ["queue.actionFor"]
+const SAME_IN_BOTH = ["queue.actionFor", "mediation.udc.party"]
 
 describe("Bengali dictionary", () => {
   const enLeaves = leaves(en)
