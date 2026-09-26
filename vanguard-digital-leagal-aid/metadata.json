@@ -1,0 +1,6 @@
+{
+  "name": "ডিজিটাল লিগ্যাল এইড - Digital Legal Aid PWA",
+  "description": "Progressive Web App for Digital Legal Aid (DLAO Admin, UDC Assisted Intake, and Citizen Proxy) with offline-first synchronization and provenance separation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
