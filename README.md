@@ -55,6 +55,115 @@ Who uses which dashboard, and how each one signs in to the backend:
 | Union Digital Centre entrepreneur | none (API only) | `/udc/*` | `X-Udc-Id` |
 | Caller | the phone (or `/intake/*` and `/helpline/*` on the web) | `/telephony/*` | none (Twilio signature) |
 
+## System architecture
+
+Everything meets at the backend. The dashboards never talk to each other: what a court saves
+reaches a jail, the officer and the lawyer because they all read the same records from the
+server.
+
+```mermaid
+flowchart LR
+  subgraph People["People"]
+    Caller(["Caller<br/>hotline or helpline"])
+    Officer(["DLAO officer"])
+    Lawyer(["Panel lawyer"])
+    CourtStaff(["Court staff"])
+    JailStaff(["Jail staff"])
+    UDCStaff(["Union Digital Centre"])
+  end
+
+  subgraph Front["Front ends (React, EN + বাংলা)"]
+    DLAO["dlao-dashboard<br/>:5173"]
+    LAW["lawyer-dashboard<br/>:5174"]
+    COURT["court-dashboard<br/>:5175"]
+    PRISON["prison-dashboard<br/>:5176"]
+  end
+
+  subgraph Back["server/ (FastAPI, :8000)"]
+    direction TB
+    Routers["Routers<br/>intake, dlao, records, lawyer, court, prison,<br/>duplicates, referrals, incidents, mediation,<br/>udc, sync, helpline, telephony"]
+    Agents["AI agents (LangGraph)<br/>T5 intake, T6 documents, T7 settlement,<br/>T8 triage, helpline, hotline menu"]
+    Services["Services<br/>safe_contact, notices, ekyc, records,<br/>institution, mediation, case_status,<br/>court_progress, rosters"]
+    Voice["Voice pipeline<br/>stream_manager, audio,<br/>speech_to_text, elevenlabs"]
+    Audit[("Audit ledger<br/>SHA-256 hash chain")]
+    DB[("SQLite / Postgres<br/>cases, parties, records,<br/>mediation, documents")]
+    Routers --> Agents
+    Routers --> Services
+    Routers --> Voice
+    Agents --> Services
+    Services --> DB
+    Services --> Audit
+  end
+
+  NID["nid-server<br/>National ID registry :8100<br/>(fictional citizens)"]
+
+  subgraph Ext["External services"]
+    Twilio["Twilio<br/>voice + media stream"]
+    STT["OpenAI<br/>gpt-live-transcribe"]
+    TTS["ElevenLabs<br/>text-to-speech"]
+    LLM["Claude or OpenAI<br/>optional model"]
+    ADN["ADN SMS"]
+  end
+
+  Caller <-->|phone call| Twilio
+  Twilio <-->|webhooks + audio, via ngrok| Voice
+  Voice -->|caller audio| STT
+  Voice -->|reply text| TTS
+  Agents -.->|where rules are weak| LLM
+  Services -->|SMS| ADN
+  ADN -->|SMS| Caller
+  ADN -->|SMS| UDCStaff
+  Services -->|verify, family, SIM lookup| NID
+
+  Officer --> DLAO
+  Lawyer --> LAW
+  CourtStaff --> COURT
+  JailStaff --> PRISON
+  DLAO -->|/dlao, /mediation| Routers
+  LAW -->|/lawyer| Routers
+  COURT -->|/court| Routers
+  PRISON -->|/prison| Routers
+  UDCStaff -->|/udc| Routers
+```
+
+How to read it:
+
+- **Solid arrows** are calls the system always makes. **Dotted** ones are optional: with no
+  model key the agents run on their rules alone.
+- **Applications enter three ways**: the hotline (Twilio, the voice pipeline and the T5 intake
+  agent), the courts' and jails' dashboards (e-KYC, then an application), and UDC tablets
+  (the offline batch sync, `POST /sync/batch`).
+- **Every outbound SMS goes through `safe_contact`** before it reaches ADN, so a blocked or
+  restricted person is never texted by mistake.
+- **The NID registry is called by the backend only.** No dashboard talks to it.
+
+### Data flow between modules
+
+Who writes what, and who reads it. This is what "reaches the others at once" means.
+
+```mermaid
+flowchart LR
+  Hotline["Hotline call<br/>(T5 intake)"] -->|files application,<br/>triage marks, notices| Cases[("Cases and parties")]
+  CourtDash["court-dashboard"] -->|register, hearings,<br/>cause lists| CourtRecs[("Court records")]
+  CourtDash -->|application + e-KYC<br/>+ e-signature| Cases
+  JailDash["prison-dashboard"] -->|prisoners and the<br/>cases they are held on| PrisonRecs[("Prisoner records")]
+  JailDash -->|application + e-KYC<br/>+ e-signature| Cases
+  OfficerDash["dlao-dashboard"] -->|confirm triage, assign lawyer,<br/>schedule mediation, link records| Cases
+  LawyerDash["lawyer-dashboard"] -->|updates from court,<br/>order sheets| Progress[("Court progress<br/>reports")]
+
+  CourtRecs <-->|linked by case number| PrisonRecs
+  CourtRecs -->|linked to a case| Cases
+  PrisonRecs -->|linked to a case| Cases
+  Progress --> Cases
+
+  Cases -->|queue, alerts, records,<br/>court progress, mediation| OfficerDash
+  Cases -->|own cases + court record| LawyerDash
+  Cases -->|stage, lawyer, next hearing| CourtDash
+  Cases -->|stage, lawyer, next hearing| JailDash
+  PrisonRecs -->|production list<br/>from cause lists| JailDash
+  Cases -->|progress by tracking number| Helpline["AI helpline"]
+```
+
 ## How a case moves
 
 1. **Someone calls the hotline.** The AI asks whether they want to file a new case or hear the
