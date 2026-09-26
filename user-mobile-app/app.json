@@ -1,16 +1,18 @@
 {
   "expo": {
-    "name": "@latest",
-    "slug": "@latest",
+    "name": "Legal Aid",
+    "slug": "user-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "latest",
+    "scheme": "legalaid",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.vanguard.legalaid"
     },
     "android": {
+      "package": "com.vanguard.legalaid",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,6 +39,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "sosNumber": "+19788458907",
+      "hotline": "16430",
+      "emergency": "999"
     }
   }
 }
