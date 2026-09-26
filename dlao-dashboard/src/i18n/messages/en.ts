@@ -615,6 +615,14 @@ export const en = {
     noActions: "Nothing to do on this case right now.",
     close: "Close",
   },
+  lawyerCard: {
+    title: "Panel lawyer",
+    none: "No lawyer on this case yet.",
+    choose: "Choose a panel lawyer",
+    assign: "Assign lawyer",
+    change: "Change lawyer",
+    changedToast: (name: string, id: string) => `${id} moved to ${name}`,
+  },
   triage: {
     title: "AI Triage Recommendation",
     explain:

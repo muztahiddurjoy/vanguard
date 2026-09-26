@@ -11,6 +11,7 @@ import { SafeContactAlert } from "@/components/case/safe-contact"
 import { ActivityLog } from "@/components/case-detail/activity-log"
 import { CaseDetails } from "@/components/case-detail/case-details"
 import { CourtProgress } from "@/components/case-detail/court-progress"
+import { LawyerAssignment } from "@/components/case-detail/lawyer-assignment"
 import { MediationPanel } from "@/components/case-detail/mediation-panel"
 import { NextStepPanel } from "@/components/case-detail/next-step-panel"
 import { RecordsPanel } from "@/components/case-detail/records-panel"
@@ -24,7 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { LegalCase } from "@/data/types"
+import { nextActionOf, type LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import type { CaseAction } from "@/state/cases-reducer"
 
@@ -113,6 +114,10 @@ export function CaseDetailDialog({
           onOpenTriage={() => setTab("triage")}
           onOpenDuplicate={() => onOpenDuplicate(c)}
         />
+        {/* Any case, any status; the next step already offers the same choice when it is due. */}
+        {nextActionOf(c) !== "assignLawyer" && (
+          <LawyerAssignment legalCase={c} dispatch={dispatch} />
+        )}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as CaseTab)}>
           {/* Phones: the tabs scroll on their own, so the case never slides sideways. */}

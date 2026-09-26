@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="sos_gesture_accessibility_label">Legal Aid SOS</string>
+  <string name="sos_gesture_accessibility_summary">Press volume up and volume down together to call for help.</string>
+  <string name="sos_gesture_accessibility_description">Press volume up and volume down together, from any screen, to call for help. Legal Aid reads only these two buttons. It does not see what is on your screen or what you type, and the volume keeps working as usual.</string>
+  <string name="sos_gesture_channel_name">SOS</string>
+  <string name="sos_gesture_channel_description">Shows while SOS is on.</string>
+  <string name="sos_gesture_notification_title">SOS is on</string>
+  <string name="sos_gesture_notification_text">Press volume up and volume down together to call %1$s.</string>
+  <string name="sos_gesture_action_call">Call now</string>
+  <string name="sos_gesture_action_stop">Turn off</string>
+</resources>
