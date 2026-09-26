@@ -190,6 +190,8 @@ export function Button({
       onPress={onPress}
       disabled={off}
       accessibilityRole="button"
+      // Named explicitly: after a loading state, Android otherwise reads it as "busy".
+      accessibilityLabel={title}
       accessibilityState={{ disabled: off, busy: loading }}
       style={({ pressed }) => [
         styles.button,
