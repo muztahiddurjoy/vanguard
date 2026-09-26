@@ -73,8 +73,8 @@ decision.
 ```
 
 This starts the NID registry, the backend with its SQLite database (`server/dlas.db`, created
-at startup, with the demo court and jail records added), an ngrok tunnel for the phone lines
-and the four dashboards, then prints their
+at startup, with the demo court and jail records added), the four dashboards and an ngrok
+tunnel that puts the phone lines and the dashboards on the internet, then prints their
 addresses, the Twilio webhooks and whether the AI, speech-to-text and the voice are working
 (the voice is checked with ElevenLabs at startup). The first run installs the dependencies and creates
 `server/.env`. Each service's output is shown with its name and kept in `.logs/`. Ctrl-C
@@ -82,7 +82,7 @@ stops everything, and so does any one service stopping.
 
 | Option | What it does |
 | --- | --- |
-| `--no-ngrok` | No tunnel: everything but real phone calls works |
+| `--no-ngrok` | No tunnel: only this computer can use the dashboards, and everything but real phone calls works |
 | `--no-dashboard` | Backend only (no dashboards) |
 | `--reset-db` | Starts with an empty database (after a schema change); the old file is kept as a backup |
 | `--no-seed` | Leaves out the demo court cases, cause lists and prisoners |
@@ -92,6 +92,34 @@ The tunnel uses `PUBLIC_BASE_URL` from `server/.env` as its domain, so the Twili
 keep working between runs. Without one, ngrok picks a new URL each time; the backend is
 given that URL, and the script warns you to repoint the numbers. The script needs `uv` (or
 Python 3.12), Node.js and a signed-in `ngrok`.
+
+### The dashboards from anywhere
+
+Through the tunnel, anyone with the address can open the dashboards, on the backend's own
+public URL:
+
+| Dashboard | From anywhere | On this computer |
+| --- | --- | --- |
+| DLAO | `<public URL>/dlao-dashboard/` | <http://localhost:5173> |
+| Panel lawyers | `<public URL>/lawyer-dashboard/` | <http://localhost:5174> |
+| Courts | `<public URL>/court-dashboard/` | <http://localhost:5175> |
+| Jails | `<public URL>/prison-dashboard/` | <http://localhost:5176> |
+
+The public URL (for example `https://reach-parched-pastor.ngrok-free.dev`) is the one
+`start.sh` prints. ngrok sends each dashboard's path to that dashboard and everything else to
+the backend. The dashboards there are production builds (served from ports 4173–4176) that
+call the backend at the public URL. They are rebuilt whenever their code changes: reload the
+page to see a change. On this computer the dev servers keep hot reload and call the backend at
+<http://localhost:8000>. A dev server's page is around 185 requests, more than ngrok's free
+plan lets through at once.
+
+- A visitor's first page is ngrok's free-plan warning ("You are about to visit…"). **Visit
+  Site** opens the dashboard; the dashboards' own calls to the backend skip it.
+- The free plan allows 20,000 requests and 1 GB a month. Opening a dashboard takes about 7
+  requests and 0.5 MB, and each screen a few more requests to the backend.
+- Anyone with the address can sign in with the demo accounts and see the cases. If the
+  backend has an `API_TOKEN`, the dashboards carry it to every visitor, and `start.sh` warns
+  you.
 
 Or start each part by hand:
 
