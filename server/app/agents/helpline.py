@@ -2,8 +2,10 @@
 
 This is the number printed in every SMS. Callers are applicants following
 their case, people who were told by SMS that a case has been filed against
-them, and anyone asking how legal aid works. One turn = one utterance in, one
-reply out, spoken back over the phone.
+them, and anyone asking how legal aid works. A caller on the application
+hotline who asks about a case they filed is handed here and asked for its
+tracking number straight away. One turn = one utterance in, one reply out,
+spoken back over the phone.
 
 Answers come from a fixed set of facts about the office (``FACTS``) and, when
 the caller says their tracking number, from the case's current stage (see
@@ -26,7 +28,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from app.agents.llm import StructuredLLM, default_llm
-from app.agents.spoken import BN_DIGITS, DISTRICTS, EN_TO_BN_DIGITS, has_any
+from app.agents.spoken import BN_DIGITS, DISTRICTS, EN_TO_BN_DIGITS, has_any, is_dont_know
 from app.agents.state import HelplineState
 from app.agents.t5_intake import DANGER_TERMS
 from app.agents.t8_triage import find_hostage_sign
@@ -40,6 +42,8 @@ Intent = Literal[
 Lookup = Callable[[str], dict[str, Any] | None]
 
 MAX_TURNS = 12
+# Tracking numbers not heard or not found before we stop asking for one.
+MAX_TOKEN_TRIES = 3
 
 INTENT_TERMS: dict[str, tuple[str, ...]] = {
     # Order matters: the first intent with a matching term wins. Goodbye is last,
@@ -62,6 +66,8 @@ INTENT_TERMS: dict[str, tuple[str, ...]] = {
     "goodbye": ("thank you", "thanks", "bye", "that's all", "nothing else", "no more",
                 "ধন্যবাদ", "আর কিছু না", "আর কিছু নেই", "রাখছি"),
 }  # fmt: skip
+# Said instead of the tracking number by a caller who has none to give.
+NO_TOKEN_TERMS = ("don't have", "do not have", "dont have", "lost", "নেই", "হারিয়ে")
 
 
 def _t(en: str, bn: str) -> dict[str, str]:
@@ -85,6 +91,18 @@ TOKEN_UNKNOWN = _t(
     "I could not find a case with that tracking number. Please check the number in your SMS "
     "and say it again, digit by digit.",
     "এই ট্র্যাকিং নম্বরে কোনো মামলা পাওয়া যায়নি। এসএমএসের নম্বরটি দেখে এক এক অঙ্ক করে আবার বলুন।",
+)
+TOKEN_GIVE_UP = _t(
+    "I still cannot find that case. Please check the tracking number in the SMS you received, "
+    "or visit the District Legal Aid Office with your NID.",
+    "আমি এখনও মামলাটি খুঁজে পাচ্ছি না। অনুগ্রহ করে আপনার পাওয়া এসএমএসে ট্র্যাকিং নম্বরটি মিলিয়ে "
+    "দেখুন, অথবা আপনার এনআইডি নিয়ে জেলা লিগ্যাল এইড অফিসে আসুন।",
+)
+NO_TOKEN = _t(
+    "Without the tracking number I cannot find the case. It is in the SMS we sent when you "
+    "applied. You can also visit the District Legal Aid Office with your NID.",
+    "ট্র্যাকিং নম্বর ছাড়া আমি মামলাটি খুঁজে পাব না। আবেদন করার সময় আমরা যে এসএমএস পাঠিয়েছিলাম, "
+    "তাতে নম্বরটি আছে। আপনার এনআইডি নিয়ে জেলা লিগ্যাল এইড অফিসেও আসতে পারেন।",
 )
 EMERGENCY = _t(
     "If you are in danger right now, call 999 now.",
@@ -189,6 +207,11 @@ def find_token(text: str) -> str | None:
     return re.sub(r"\D", "", m.group()) if m else None
 
 
+def has_no_token(text: str) -> bool:
+    """ "I don't have it", "নম্বর হারিয়ে গেছে", "I don't know": no tracking number to give."""
+    return is_dont_know(text) or has_any(text, NO_TOKEN_TERMS)
+
+
 def intent_of(text: str) -> Intent:
     if find_hostage_sign(text) or has_any(text, DANGER_TERMS):
         return "emergency"
@@ -263,16 +286,19 @@ def build_helpline_graph(
         lang: Lang = state.get("language", "bn")
         utterance = state.get("utterance", "")
         turns = state.get("turns", 0) + 1
+        asked = state.get("awaiting") == "token"
         if not utterance.strip():
-            return {"reply": GREETING[lang], "turns": turns, "complete": False, "intent": None}
+            opening = ASK_TOKEN if asked else GREETING
+            return {"reply": opening[lang], "turns": turns, "complete": False, "intent": None}
 
         lookup: Lookup | None = (config.get("configurable") or {}).get("lookup")
         intent = intent_of(utterance)
         # A bare number right after we asked for it is the tracking number.
-        if state.get("awaiting") == "token" and intent in ("unknown", "track"):
+        if asked and intent in ("unknown", "track"):
             intent = "track"
         text: str
         awaiting = None
+        tries = state.get("token_tries", 0)
         match intent:
             case "emergency":
                 return {
@@ -286,12 +312,19 @@ def build_helpline_graph(
             case "track":
                 token = find_token(utterance)
                 status = lookup(token) if token and lookup else None
-                if token is None:
+                if status is not None:
+                    text, tries = describe(status, lang), 0
+                elif token is None and not asked:
                     text, awaiting = ASK_TOKEN[lang], "token"
-                elif status is None:
-                    text, awaiting = TOKEN_UNKNOWN[lang], "token"
+                elif token is None and has_no_token(utterance):
+                    # "I don't have it": asking again would not help.
+                    text, tries = NO_TOKEN[lang], 0
+                # A miss: no number heard when we asked for one, or no case has it. A phone
+                # caller who cannot give a number that works is not asked forever.
+                elif (tries := tries + 1) < MAX_TOKEN_TRIES:
+                    text, awaiting = (TOKEN_UNKNOWN if token else ASK_TOKEN)[lang], "token"
                 else:
-                    text = describe(status, lang)
+                    text, tries = TOKEN_GIVE_UP[lang], 0
             case "unknown" if llm is not None:
                 result = llm.structured(
                     system=ANSWER_SYSTEM.format(language="Bangla" if lang == "bn" else "English"),
@@ -310,6 +343,7 @@ def build_helpline_graph(
             "complete": done,
             "intent": intent,
             "awaiting": awaiting,
+            "token_tries": tries,
             "turns": turns,
         }
 
@@ -330,11 +364,20 @@ class HelplineConversation:
     def _config(self, session_id: str, lookup: Lookup | None = None) -> RunnableConfig:
         return {"configurable": {"thread_id": session_id, "lookup": lookup}}
 
-    def start(self, session_id: str, *, language: str = "bn") -> HelplineState:
+    def start(
+        self, session_id: str, *, language: str = "bn", tracking: bool = False
+    ) -> HelplineState:
+        # tracking: a hotline caller who chose to hear about their case. Instead of the
+        # greeting they are asked for the tracking number, and their next answer fills it.
         lang: Lang = "en" if language == "en" else "bn"
-        state = self.graph.invoke(
-            {"language": lang, "utterance": "", "turns": 0}, self._config(session_id)
-        )
+        opening: HelplineState = {
+            "language": lang,
+            "utterance": "",
+            "turns": 0,
+            "awaiting": "token" if tracking else None,
+            "token_tries": 0,
+        }
+        state = self.graph.invoke(opening, self._config(session_id))
         return cast(HelplineState, state)
 
     def turn(self, session_id: str, utterance: str, lookup: Lookup | None = None) -> HelplineState:

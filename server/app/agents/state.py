@@ -110,6 +110,8 @@ class HelplineState(TypedDict, total=False):
     intent: str | None
     # "token" right after we asked for the tracking number, so a bare number fills it.
     awaiting: str | None
+    # Tracking numbers not heard or not found; at MAX_TOKEN_TRIES we stop asking.
+    token_tries: int
 
 
 class DocumentState(TypedDict, total=False):

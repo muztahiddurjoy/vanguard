@@ -62,6 +62,64 @@ def test_asks_for_the_number_then_reads_the_stage_only():
     assert s["complete"] is True and s["reply"] == helpline.GOODBYE["en"]
 
 
+def test_hotline_caller_is_asked_for_the_tracking_number_first():
+    conv = HelplineConversation(use_default_llm=False)
+    s = conv.start("h1", language="en", tracking=True)
+    assert s["reply"] == helpline.ASK_TOKEN["en"] and s["awaiting"] == "token"
+    s = conv.turn("h1", "4821 0937", lookup)
+    assert s["reply"] == f"{helpline.describe(STATUS, 'en')} {helpline.ANYTHING_ELSE['en']}"
+    assert s["intent"] == "track" and s["awaiting"] is None
+
+    assert conv.start("h2", tracking=True)["reply"] == helpline.ASK_TOKEN["bn"]
+    s = conv.turn("h2", "৪৮২১ ০৯৩৭", lookup)
+    assert s["reply"] == f"{helpline.describe(STATUS, 'bn')} {helpline.ANYTHING_ELSE['bn']}"
+
+
+def test_stops_asking_for_the_number_after_three_misses():
+    conv = HelplineConversation(use_default_llm=False)
+    conv.start("h3", language="en", tracking=True)
+    assert conv.turn("h3", "um", lookup)["reply"] == helpline.ASK_TOKEN["en"]
+    assert conv.turn("h3", "1111 2222", lookup)["reply"] == helpline.TOKEN_UNKNOWN["en"]
+    s = conv.turn("h3", "3333 4444", lookup)
+    assert s["reply"].startswith(helpline.TOKEN_GIVE_UP["en"])
+    assert s["reply"].endswith(helpline.ANYTHING_ELSE["en"])
+    assert s["awaiting"] is None and s["token_tries"] == 0 and s["complete"] is False
+    s = conv.turn("h3", "4821 0937", lookup)
+    assert s["reply"].startswith("Your case DLAS-2026-045 is active")
+
+
+def test_a_caller_without_the_number_is_told_where_to_find_it():
+    conv = HelplineConversation(use_default_llm=False)
+    conv.start("h4", language="en", tracking=True)
+    s = conv.turn("h4", "I don't have it", lookup)
+    assert s["reply"] == f"{helpline.NO_TOKEN['en']} {helpline.ANYTHING_ELSE['en']}"
+    assert s["awaiting"] is None
+
+    conv.start("h5", tracking=True)
+    s = conv.turn("h5", "নম্বরটা হারিয়ে ফেলেছি", lookup)
+    assert s["reply"] == f"{helpline.NO_TOKEN['bn']} {helpline.ANYTHING_ELSE['bn']}"
+
+    # A number said with a doubt is still read; so is a goodbye.
+    conv.start("h6", language="en", tracking=True)
+    s = conv.turn("h6", "I'm not sure, 4821 0937", lookup)
+    assert s["reply"].startswith("Your case DLAS-2026-045 is active")
+    conv.start("h7", tracking=True)
+    s = conv.turn("h7", "নেই, ধন্যবাদ", lookup)
+    assert s["intent"] == "goodbye" and s["complete"] is True
+
+
+def test_a_caller_asked_for_the_number_can_still_apply_or_get_help():
+    # The hotline hands the call back to intake on "apply" or "emergency".
+    conv = HelplineConversation(use_default_llm=False)
+    conv.start("h8", language="en", tracking=True)
+    assert conv.turn("h8", "I want to file a new case", lookup)["intent"] == "apply"
+
+    conv.start("h9", language="en", tracking=True)
+    s = conv.turn("h9", "I don't know it, he is beating me right now", lookup)
+    assert s["intent"] == "emergency" and s["complete"] is True
+    assert s["reply"] == helpline.EMERGENCY["en"]
+
+
 def test_respondent_hears_what_the_notice_means_in_bangla():
     conv = HelplineConversation(use_default_llm=False)
     conv.start("t2")
