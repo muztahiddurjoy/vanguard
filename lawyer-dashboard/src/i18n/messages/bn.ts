@@ -41,6 +41,7 @@ export const bn: Messages = {
     demoBody: "জেলার একজন প্যানেল আইনজীবী হিসেবে সাইন ইন করুন।",
     demoUpToDate: (name) => `${name} (সব প্রতিবেদন দেওয়া)`,
     demoMonitored: (name) => `${name} (প্রতিবেদন বাকি)`,
+    demoJailCase: (name) => `${name} (কারাগার থেকে আসা মামলা)`,
     errors: {
       idRequired: "আপনার প্যানেল আইনজীবী আইডি লিখুন।",
       idUnknown: "এই আইডি জেলা প্যানেলে নেই। লিগ্যাল এইড অফিসে যাচাই করে নিন।",

@@ -117,6 +117,7 @@ export function LoginPage() {
   const demos = [
     { id: DEMO_LAWYERS.upToDate, label: t.login.demoUpToDate },
     { id: DEMO_LAWYERS.monitored, label: t.login.demoMonitored },
+    { id: DEMO_LAWYERS.jailCase, label: t.login.demoJailCase },
   ]
 
   return (

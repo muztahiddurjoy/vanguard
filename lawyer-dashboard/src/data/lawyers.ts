@@ -47,7 +47,10 @@ export function findLawyer(id: string): Lawyer | undefined {
   return PANEL_LAWYERS.find((l) => l.id === key)
 }
 
-/** The two demo accounts: one lawyer who is up to date, one the office is monitoring. */
-export const DEMO_LAWYERS = { upToDate: "LAW-12", monitored: "LAW-07" } as const
+/**
+ * The demo accounts: one lawyer who is up to date, one the office is monitoring, and one
+ * who has taken over a case the jail sent (with its court record).
+ */
+export const DEMO_LAWYERS = { upToDate: "LAW-12", monitored: "LAW-07", jailCase: "LAW-24" } as const
 export const DEMO_PASSWORD = "demo1234"
 export const MIN_PASSWORD_LENGTH = 4

@@ -18,6 +18,10 @@ const COURT = {
     en: "Assistant Judge Court, Rangpur Sadar",
     bn: "সহকারী জজ আদালত, রংপুর সদর",
   },
+  chiefJudicialMagistrate: {
+    en: "Chief Judicial Magistrate Court, Rangpur",
+    bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+  },
 } satisfies Record<string, Localized>
 
 /** Every sample case, with the lawyer it is assigned to. */
@@ -266,6 +270,44 @@ export const SAMPLE_CASES: (LawyerCase & { lawyerId: string })[] = [
         hearingHeldOn: dateOnly(daysAgo(9)),
         nextHearingAt: inDays(3, 11),
         attachment: { name: "Order sheet (Labour Court).pdf" },
+      },
+    ],
+  },
+  {
+    // Sent by Rangpur Central Jail for an undertrial prisoner whose lawyer withdrew. Its court
+    // and jail records are in src/data/records.ts (the shared demo dataset's G.R. 455/2026).
+    lawyerId: "LAW-24",
+    id: "DLAS-2026-047",
+    category: "criminalDefence",
+    priority: "high",
+    sensitive: false,
+    summary: {
+      en: "Undertrial prisoner in Rangpur Central Jail since June, accused of theft. His lawyer withdrew in August, and nobody defended him when the charge was framed. Witness evidence starts on the next date.",
+      bn: "জুন থেকে রংপুর কেন্দ্রীয় কারাগারে বিচারাধীন বন্দি, চুরির মামলার আসামি। আগস্টে তাঁর আইনজীবী মামলা ছেড়ে দেন, অভিযোগ গঠনের দিন তাঁর পক্ষে কেউ ছিলেন না। পরবর্তী তারিখে সাক্ষ্যগ্রহণ শুরু।",
+    },
+    receivedAt: daysAgo(6),
+    client: {
+      name: { en: "Jalal Uddin", bn: "জালাল উদ্দিন" },
+      age: 36,
+      place: { en: "Pirgachha, Rangpur", bn: "পীরগাছা, রংপুর" },
+    },
+    lastUpdateAt: daysAgo(2),
+    updateDueAt: inDays(6, 10, 30),
+    missedUpdates: 0,
+    nextHearing: { at: inDays(3, 10, 30), court: COURT.chiefJudicialMagistrate },
+    courtStage: "other",
+    updates: [
+      {
+        id: "LU-0471",
+        at: daysAgo(2),
+        lawyerId: "LAW-24",
+        stage: "other",
+        summary: {
+          en: "Met Jalal Uddin at Rangpur Central Jail and signed the vakalatnama. Applied for certified copies of the charge sheet and the witness statements.",
+          bn: "রংপুর কেন্দ্রীয় কারাগারে জালাল উদ্দিনের সঙ্গে দেখা করে ওকালতনামায় সই নিয়েছি। অভিযোগপত্র ও সাক্ষীদের জবানবন্দির সার্টিফায়েড কপির আবেদন করেছি।",
+        },
+        court: COURT.chiefJudicialMagistrate,
+        nextHearingAt: inDays(3, 10, 30),
       },
     ],
   },

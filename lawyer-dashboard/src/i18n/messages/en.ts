@@ -44,6 +44,7 @@ export const en = {
     demoBody: "Sign in as one of the district's panel lawyers.",
     demoUpToDate: (name: string) => `${name} (up to date)`,
     demoMonitored: (name: string) => `${name} (reports late)`,
+    demoJailCase: (name: string) => `${name} (a case from the jail)`,
     errors: {
       idRequired: "Enter your panel lawyer ID.",
       idUnknown: "This ID is not on the district panel. Check it with the legal aid office.",
