@@ -392,9 +392,10 @@ flowchart TB
   Hold -->|"yes"| Wait["Held for an officer<br/>(release needs a written reason)"]
   Hold -->|"no"| Lvl{"Party's safety level"}
   Lvl -->|"standard"| Send["Send the full text"]
-  Lvl -->|"restricted, caution<br/>or shared phone"| Win{"Inside the weekly<br/>safe window?"}
+  Lvl -->|"caution or<br/>shared phone"| Neutral["Send a neutral text only<br/>(no case details)"]
+  Lvl -->|"restricted"| Win{"Inside the weekly<br/>safe window?"}
   Win -->|"no"| Block
-  Win -->|"yes"| Neutral["Send a neutral text only"]
+  Win -->|"yes"| Neutral
   Send --> Gate{"SMS_DRY_RUN or<br/>SMS_ALLOWLIST"}
   Neutral --> Gate
   Gate -->|"dry run, or not on the list"| Log["Logged, not sent"]
@@ -680,6 +681,189 @@ flowchart TB
    three days of each hearing. The officer sees each report at once; a lawyer who stops
    reporting is flagged, and one who stops across several cases raises a pattern alert, from
    which the officer can move their cases to another lawyer.
+
+## Case lifecycle diagrams
+
+### A case from call to closure
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Caller
+  participant Line as Hotline (T5)
+  participant NID as NID registry
+  participant Srv as Backend (T8, notices)
+  participant Off as DLAO dashboard
+  participant SMS as ADN SMS
+  actor Resp as Respondent
+  participant Law as Lawyer dashboard
+
+  Caller->>Line: calls, says what happened
+  Line->>NID: verify by three security questions (or SIM fallback)
+  NID-->>Line: one matching record, or unverified
+  Line->>Srv: file the application (APP-…)
+  Srv->>Srv: T4 duplicate check, T8 triage (priority + mark)
+  Srv->>SMS: tracking number to the filer (via safe_contact)
+  Srv->>SMS: visit-the-office notice to the respondent (held if risky)
+  SMS-->>Resp: notice with the helpline number
+  Off->>Srv: confirm or override triage and the mark (with a reason)
+  Off->>Srv: accept as a case (gains DLAS-… number)
+  alt mediation
+    Off->>Srv: schedule a session
+    Srv->>SMS: notices to both parties
+    Off->>Srv: record who came
+  end
+  Off->>Srv: assign a panel lawyer
+  loop every 14 days and within 3 days of each hearing
+    Law->>Srv: update from court (stage, next date, order sheet)
+    Srv-->>Off: report visible at once, late ones raise alerts
+  end
+  Off->>Srv: close the case with an outcome
+```
+
+### Case status and the officer's decisions
+
+A case's `status` and the separate marks an officer confirms. The AI only marks; a human
+decides.
+
+```mermaid
+stateDiagram-v2
+  [*] --> application: filed (hotline, UDC, web, court, jail)
+  application --> active: officer accepts, gains DLAS number
+  application --> referred: sent to another district office
+  active --> referred: referral
+  referred --> application: returned, no case number yet
+  referred --> active: returned, has a case number
+  active --> in_mediation: a session is scheduled
+  application --> in_mediation: a session is scheduled
+  in_mediation --> closed: officer closes with an outcome
+  active --> closed: officer closes with an outcome
+  closed --> [*]
+  note right of closed
+    Outcome: resolved, settled,
+    withdrawn or referred
+  end note
+```
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  state "Triage" as tri {
+    [*] --> pending: T8 runs on intake
+    pending --> accepted: officer accepts
+    pending --> overridden: officer overrides (20+ character reason)
+  }
+  state "Advice / mediation / sensitive mark" as trk {
+    [*] --> suggested: T8 marks it
+    suggested --> confirmed: officer confirms
+    suggested --> changed: officer changes (with a reason)
+  }
+```
+
+### A court or jail application, end to end
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Staff as Court or jail staff
+  participant Dash as court- or prison-dashboard
+  participant Srv as Backend
+  participant NID as NID registry
+  participant Off as DLAO dashboard
+  participant Law as Lawyer dashboard
+
+  Staff->>Dash: opens a party (or prisoner) and applies
+  Dash->>Srv: POST …/ekyc (NID, date of birth, name)
+  Srv->>NID: look the NID up
+  NID-->>Srv: record
+  Srv-->>Dash: verified, registry's details fill the form
+  Staff->>Dash: applicant signs on screen or scan is uploaded
+  Dash->>Srv: POST …/applications (client_ref, e-KYC id, signature)
+  Srv->>Srv: triage, duplicate check, audit; in custody = at least high priority
+  Srv->>Srv: link the court case, or the prisoner and all their cases
+  Srv-->>Dash: tracking number (no SMS: staff hand it over)
+  Srv-->>Off: appears in the queue, marked with the court or jail
+  Off->>Srv: assigns a panel lawyer
+  Srv-->>Dash: stage, lawyer and next hearing follow the case
+  Srv-->>Law: case appears with its court record
+```
+
+### Who sees which record
+
+```mermaid
+flowchart LR
+  subgraph Records["Records"]
+    CC["Court case<br/>parties, hearings, lawyers,<br/>cause list, restricted flag"]
+    PR["Prisoner<br/>custody, ward, cases held on"]
+    APP["Application<br/>how it came, e-KYC, e-signature"]
+  end
+  Court["Court staff"] -->|"own court only"| CC
+  Jail["Jail staff"] -->|"own jail only; of a court case only<br/>court, number, type, sections,<br/>status, next date, cause list"| PR
+  Officer["DLAO officer"] -->|"everything linked to a case,<br/>plus previous records by NID or name"| CC
+  Officer --> PR
+  Officer --> APP
+  Lawyer["Panel lawyer"] -->|"own cases only, no NID digits"| CC
+  Lawyer --> PR
+  CC -.->|"restricted: never a previous record,<br/>cannot be linked by an officer"| X(["hidden"])
+  Audit[("Every read, search and write<br/>is in the audit ledger")]
+  Officer --> Audit
+  Lawyer --> Audit
+```
+
+### Data model
+
+The main tables and how they connect (`server/app/models/`). Only the columns that explain
+the relationships are shown.
+
+```mermaid
+erDiagram
+  cases ||--o{ case_parties : has
+  parties ||--o{ case_parties : "plays a role in"
+  parties ||--o{ duplicate_reviews : "compared in"
+  incidents ||--o{ cases : groups
+  cases ||--o{ referrals : "moves between offices"
+  cases ||--o{ documents : holds
+  documents ||--o{ checklist_items : "missing-documents list"
+  documents ||--o{ signatures : "signed (Ed25519)"
+  parties ||--o{ signatures : signs
+  cases ||--o{ lawyer_updates : "reports from court"
+  cases ||--o{ mediation_sessions : schedules
+  mediation_sessions ||--o{ mediation_attendance : records
+  mediation_sessions ||--o{ mediation_notices : "SMS to each party"
+  mediation_sessions ||--o{ udc_notices : "asks a UDC to reach"
+  cases ||--o| institution_applications : "submitted by court or jail"
+  ekyc_checks ||--o| institution_applications : "identifies the applicant"
+  cases ||--o{ case_record_links : "linked to"
+  court_cases ||--o{ case_record_links : "linked to"
+  prisoners ||--o{ case_record_links : "linked to"
+  court_cases ||--o{ court_case_parties : has
+  court_cases ||--o{ court_proceedings : "what happened at each hearing"
+  court_cases ||--o{ court_case_lawyers : "lawyers now and before"
+  court_cases ||--o{ cause_list_entries : "daily cause list"
+  prisoners ||--o{ prisoner_cases : "held on"
+
+  cases {
+    string ref "APP-year-n, then DLAS-year-n"
+    string status "application, active, referred, in_mediation, closed"
+    string priority "critical, high, medium, low"
+    string track "advice, mediation, sensitive"
+    string channel "hotline, udc, online, court, prison, ..."
+  }
+  parties {
+    string nid_hash "keyed HMAC, never the NID"
+    string nid_last4
+    string safety_level "standard, restricted, caution, no_contact"
+  }
+  audit_entries {
+    string hash "SHA-256 chain, append-only"
+  }
+  sync_receipts {
+    string idempotency_key "T9 offline batches"
+  }
+```
+
+`audit_entries` (a hash chain the ORM refuses to update or delete) and `sync_receipts`
+(idempotent offline batches) stand alone: they refer to cases by reference, not by key.
 
 ## Run everything locally
 
