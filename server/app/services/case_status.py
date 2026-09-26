@@ -33,8 +33,11 @@ def stage_of(case: Case) -> str:
         return "mediation"
     if case.status == CaseStatus.REFERRED:
         return "referred"
+    # An officer may give an application a lawyer before accepting it as a case.
+    if case.lawyer_id:
+        return "lawyerAssigned"
     if case.status == CaseStatus.ACTIVE:
-        return "lawyerAssigned" if case.lawyer_id else "accepted"
+        return "accepted"
     return "received" if case.triage_status == TriageStatus.PENDING else "reviewed"
 
 

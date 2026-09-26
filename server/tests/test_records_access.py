@@ -199,4 +199,4 @@ def test_the_panel_lawyer_sees_their_own_case_records_without_nid_digits(client,
     status = client.get(f"/prison/applications/{jalal['ref']}", headers=RCJ_DESK).json()
     assert status["lawyer"] == {"id": "LAW-24", "name": "Adv. Rafiqul Hasan",
                                 "nameBn": "অ্যাড. রফিকুল হাসান"}  # fmt: skip
-    assert status["stage"] == "received"
+    assert status["stage"] == "lawyerAssigned"  # given a lawyer before it was accepted
