@@ -448,3 +448,20 @@ def publish_cause_list(
     )
     db.commit()
     return cause_list_view(db, staff.court_id, day)
+
+
+# --- e-KYC -----------------------------------------------------------------------------
+
+
+@router.post("/ekyc")
+def check_identity(
+    body: ekyc.EkycIn = Depends(ekyc.private_body(ekyc.EkycIn)),
+    db: Session = Depends(get_db),
+    staff: CourtStaff = Depends(current_court_staff),
+) -> dict[str, Any]:
+    """Someone's NID and date of birth against the NID registry (``services.ekyc``)."""
+    check = ekyc.run_check(
+        db, body, office_kind="court", office_id=staff.court_id, actor=staff.actor
+    )
+    db.commit()
+    return ekyc.check_view(check)
