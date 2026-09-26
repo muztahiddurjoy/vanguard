@@ -21,6 +21,10 @@ export interface CasesValue {
   hearings: Hearing[]
   /** A sensitive case's documents, named; opening them is recorded. */
   revealEvidence: (c: LegalCase) => Promise<CaseDocument[]>
+  /** With a backend: fetch one case again, e.g. after mediation changed its tags. */
+  refreshCase: (id: string) => void
+  /** With a backend: fetch the hearings again, e.g. after a session was scheduled. */
+  refreshHearings: () => void
 }
 
 export const CasesContext = createContext<CasesValue | null>(null)

@@ -172,7 +172,7 @@ describe("queue filters", () => {
   it("finds a case by the tracking number its filer was sent", async () => {
     const { user } = renderApp()
     await user.type(screen.getByRole("searchbox", { name: "Search cases" }), "7730-1946")
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 13")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 14")
     expect(within(queueList()).getByText("Jahanara Parvin")).toBeInTheDocument()
   })
 })

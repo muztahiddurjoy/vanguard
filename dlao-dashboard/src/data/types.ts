@@ -533,6 +533,81 @@ export interface RecordSearchResult {
   prisoners: PrisonerSummary[]
 }
 
+// --- Mediation: notices, attendance and Union Digital Centres ------------------
+
+export type MediationMode = "in_person" | "odr_phone" | "odr_video"
+
+export const MEDIATION_MODES: readonly MediationMode[] = ["in_person", "odr_phone", "odr_video"]
+
+export type SessionStatus = "scheduled" | "held" | "missed" | "cancelled"
+
+export type Attendance = "present" | "absent"
+
+/** The two sides of a mediation: the applicant and the other side. */
+export type MediationRole = "applicant" | "respondent"
+
+export const MEDIATION_ROLES: readonly MediationRole[] = ["applicant", "respondent"]
+
+/** The SMS notice one party got for one session. */
+export interface MediationNotice {
+  role: MediationRole
+  status: "sent" | "failed" | "held" | "blocked" | "notFound"
+  /** The notice number in the SMS ("1234-5678"): the helpline explains the notice to whoever says it. */
+  code?: string
+  /** Why it was held or blocked, e.g. "sensitive". */
+  reasons: string[]
+  /** The server's SMS gateway was in test mode, so nothing actually went out. */
+  dryRun?: boolean
+  at: string
+}
+
+export interface MediationSession {
+  id: number
+  scheduledFor: string
+  durationMinutes: number
+  mode: MediationMode
+  status: SessionStatus
+  meetingUrl?: string
+  notes?: Localized
+  place: Localized
+  attendance: Partial<Record<MediationRole, Attendance>>
+  notices: MediationNotice[]
+}
+
+export type UdcNoticeStatus = "sent" | "held" | "noUdc" | "failed" | "informed"
+
+/** A Union Digital Centre: the union's service centre, run by a local entrepreneur. */
+export interface Udc {
+  id: string
+  name: Localized
+  upazila: Localized
+  entrepreneur: Localized
+}
+
+/** A UDC asked to tell someone who keeps missing mediation about the next session. */
+export interface UdcNotice {
+  id: number
+  role: MediationRole
+  party: { name: Localized; fatherName?: Localized; village?: Localized; upazila?: Localized }
+  udc?: Udc
+  session: { id: number; scheduledFor: string; place: Localized }
+  missedInARow: number
+  status: UdcNoticeStatus
+  reasons: string[]
+  createdAt: string
+  informedAt?: string
+  informedNote?: string
+}
+
+export interface CaseMediation {
+  /** Soonest first. */
+  sessions: MediationSession[]
+  udcNotices: UdcNotice[]
+  missedInARow: Record<MediationRole, number>
+  /** Missed sessions in a row after which the party's UDC is asked to reach them. */
+  noShowLimit: number
+}
+
 export interface LegalCase {
   id: string
   applicant: Applicant
@@ -592,6 +667,8 @@ export interface LegalCase {
   submittedBy?: SubmittedBy
   /** Built-in cases only: the linked court and jail records (the server keeps its own). */
   linkedRecords?: { courtCaseIds: number[]; prisonerId?: number }
+  /** Built-in cases only: mediation sessions and UDC notices (the server keeps its own). */
+  mediation?: CaseMediation
 }
 
 export function nextActionOf(c: LegalCase): NextAction {

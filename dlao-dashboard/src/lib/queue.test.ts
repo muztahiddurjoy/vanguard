@@ -6,7 +6,7 @@ import { backlogCounts, countByQueue, filterCases } from "@/lib/queue"
 describe("countByQueue", () => {
   it("counts every queue in the seed data", () => {
     expect(countByQueue(INITIAL_CASES)).toEqual({
-      all: 13,
+      all: 14,
       actionToday: 6,
       pendingTriage: 4,
       duplicates: 1,

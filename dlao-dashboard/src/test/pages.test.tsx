@@ -50,11 +50,11 @@ describe("All cases", () => {
 
   it("lists open cases by default and closed cases with their outcome", async () => {
     const { user } = renderApp({ path: "/cases" })
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 13 of 18 cases")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 14 of 19 cases")
     expect(rowFor("APP-2026-001")).toHaveTextContent("Moyuri Akter")
 
     await user.click(screen.getByRole("button", { name: "Closed" }))
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 18 cases")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 19 cases")
     expect(rowFor("DLAS-2026-008")).toHaveTextContent("Settled by mediation")
   })
 
@@ -125,7 +125,7 @@ describe("Hearings", () => {
   it("groups hearings by day and sends a reminder", async () => {
     const { user } = renderApp({ path: "/hearings" })
     expect(screen.getByRole("heading", { level: 2, name: "Today" })).toBeInTheDocument()
-    expect(screen.getByRole("status")).toHaveTextContent("6 hearings in the next two weeks")
+    expect(screen.getByRole("status")).toHaveTextContent("7 hearings in the next two weeks")
 
     await user.click(screen.getByRole("button", { name: "Send reminder: Rahima Begum" }))
     expect(screen.getByRole("button", { name: "Reminder sent: Rahima Begum" })).toBeDisabled()

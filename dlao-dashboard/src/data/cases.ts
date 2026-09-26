@@ -1,5 +1,6 @@
 import { inDays } from "@/data/clock"
 import type { LegalCase, Localized, PanelLawyer } from "@/data/types"
+import { UDCS } from "@/data/udc"
 
 // Dates are relative to page load so "overdue" and "2 days ago" stay true
 // whenever the dashboard is opened.
@@ -29,6 +30,11 @@ const COURT = {
     bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
   },
 } satisfies Record<string, Localized>
+/** Where in-person mediation happens (the server's wording, lib/mediation's sessionPlace). */
+const OFFICE_ROOM: Localized = {
+  en: "District Legal Aid Office, Rangpur (District Judge Court building)",
+  bn: "জেলা লিগ্যাল এইড অফিস, রংপুর (জেলা জজ আদালত ভবন)",
+}
 const OFFICE = {
   rangpur: { en: "Rangpur", bn: "রংপুর" },
   dhaka: { en: "Dhaka", bn: "ঢাকা" },
@@ -969,6 +975,30 @@ export const INITIAL_CASES: LegalCase[] = [
       nidVerified: true,
       notice: { status: "sent" },
     },
+    mediation: {
+      sessions: [
+        {
+          id: 305,
+          scheduledFor: inDays(12, 11, 30),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "scheduled",
+          notes: {
+            en: "Mediation on unpaid denmohor and child maintenance",
+            bn: "বকেয়া দেনমোহর ও সন্তানের ভরণপোষণ নিয়ে মধ্যস্থতা",
+          },
+          place: OFFICE_ROOM,
+          attendance: {},
+          notices: [
+            { role: "applicant", status: "sent", code: "2748-6610", reasons: [], at: hoursAgo(8) },
+            { role: "respondent", status: "sent", code: "2748-6611", reasons: [], at: hoursAgo(8) },
+          ],
+        },
+      ],
+      udcNotices: [],
+      missedInARow: { applicant: 0, respondent: 0 },
+      noShowLimit: 2,
+    },
     callNotes: [
       {
         at: hoursAgo(9),
@@ -1108,6 +1138,168 @@ export const INITIAL_CASES: LegalCase[] = [
         en: "Can be resolved through mediation: both families agreed to mediation first.",
         bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: দুই পরিবারই প্রথমে মধ্যস্থতায় সম্মত।",
       },
+    },
+    respondent: {
+      name: { en: "Mamun Hossain", bn: "মামুন হোসেন" },
+      relation: { en: "former husband", bn: "সাবেক স্বামী" },
+      nidVerified: true,
+      upazila: { en: "Badarganj", bn: "বদরগঞ্জ" },
+      notice: { status: "sent" },
+    },
+    mediation: {
+      sessions: [
+        {
+          id: 303,
+          scheduledFor: inDays(6, 14),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "scheduled",
+          notes: {
+            en: "Mediation between the two families on guardianship",
+            bn: "অভিভাবকত্ব নিয়ে দুই পরিবারের মধ্যে মধ্যস্থতা",
+          },
+          place: OFFICE_ROOM,
+          attendance: {},
+          notices: [
+            { role: "applicant", status: "sent", code: "3816-5072", reasons: [], at: daysAgo(2) },
+            { role: "respondent", status: "sent", code: "3816-5073", reasons: [], at: daysAgo(2) },
+          ],
+        },
+      ],
+      udcNotices: [],
+      missedInARow: { applicant: 0, respondent: 0 },
+      noShowLimit: 2,
+    },
+  },
+  {
+    // She missed two sessions in a row; her UDC notice waits for the officer (shared phone).
+    id: "DLAS-2026-042",
+    applicant: {
+      name: { en: "Shahana Begum", bn: "শাহানা বেগম" },
+      phone: "01744-XXX-563",
+      village: { en: "Alampur", bn: "আলমপুর" },
+      upazila: { en: "Taraganj", bn: "তারাগঞ্জ" },
+      guardian: { en: "Abdul Latif (husband)", bn: "আব্দুল লতিফ (স্বামী)" },
+      nidMasked: "•••• •••• 7305",
+      age: 32,
+      nidVerified: true,
+      // She shares a phone with her mother-in-law: neutral SMS only.
+      safetyLevel: "caution",
+    },
+    category: "familyMaintenance",
+    priority: "medium",
+    queues: [],
+    flags: ["mediationNoShow"],
+    actions: [],
+    summary: {
+      en: "Her husband left for Dhaka two years ago and stopped sending money for her and their son. Both families agreed to mediation, but she missed the last two sessions. She shares a phone with her mother-in-law.",
+      bn: "দুই বছর আগে স্বামী ঢাকায় চলে যান, তারপর থেকে তাঁর ও ছেলের খরচ পাঠান না। দুই পরিবারই মধ্যস্থতায় রাজি হয়েছিল, কিন্তু তিনি শেষ দুটি বৈঠকে আসেননি। তিনি শাশুড়ির সঙ্গে একটি ফোন ব্যবহার করেন।",
+    },
+    channel: "walkIn",
+    receivedAt: daysAgo(40),
+    triage: {
+      priority: "medium",
+      confidence: 0.84,
+      status: "accepted",
+      generatedAt: daysAgo(40),
+      factors: [
+        { key: "financialDependency", detected: true, agent: "intake", weight: "medium" },
+        { key: "childrenInHousehold", detected: true, agent: "risk", weight: "medium" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Maintenance for a mother and child; no violence reported.",
+        bn: "মা ও সন্তানের ভরণপোষণ; সহিংসতার কোনো তথ্য নেই।",
+      },
+    },
+    activity: [
+      { type: "received", at: daysAgo(40), channel: "walkIn" },
+      { type: "aiTriage", at: daysAgo(40), priority: "medium" },
+      { type: "triageAccepted", at: daysAgo(39), priority: "medium" },
+      { type: "trackReviewed", at: daysAgo(39), to: "mediation" },
+    ],
+    track: {
+      key: "mediation",
+      status: "confirmed",
+      reason: {
+        en: "Can be resolved through mediation: maintenance from her husband, and no sign of violence.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: স্বামীর কাছ থেকে ভরণপোষণ, সহিংসতার কোনো ইঙ্গিত নেই।",
+      },
+    },
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: true,
+      callerSimRegistered: false,
+    },
+    respondent: {
+      name: { en: "Abdul Latif", bn: "আব্দুল লতিফ" },
+      relation: { en: "husband", bn: "স্বামী" },
+      nidVerified: true,
+      upazila: { en: "Taraganj", bn: "তারাগঞ্জ" },
+      notice: { status: "sent" },
+    },
+    mediation: {
+      sessions: [
+        {
+          id: 281,
+          scheduledFor: inDays(-28, 11),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "missed",
+          place: OFFICE_ROOM,
+          attendance: { applicant: "absent", respondent: "present" },
+          notices: [
+            { role: "applicant", status: "sent", code: "5903-1148", reasons: [], at: daysAgo(35) },
+            { role: "respondent", status: "sent", code: "5903-1149", reasons: [], at: daysAgo(35) },
+          ],
+        },
+        {
+          id: 282,
+          scheduledFor: inDays(-14, 11),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "missed",
+          place: OFFICE_ROOM,
+          attendance: { applicant: "absent", respondent: "present" },
+          notices: [
+            { role: "applicant", status: "sent", code: "5903-2267", reasons: [], at: daysAgo(27) },
+            { role: "respondent", status: "sent", code: "5903-2268", reasons: [], at: daysAgo(27) },
+          ],
+        },
+        {
+          id: 283,
+          scheduledFor: inDays(5, 11),
+          durationMinutes: 60,
+          mode: "in_person",
+          status: "scheduled",
+          place: OFFICE_ROOM,
+          attendance: {},
+          notices: [
+            { role: "applicant", status: "sent", code: "5903-3385", reasons: [], at: daysAgo(13) },
+            { role: "respondent", status: "sent", code: "5903-3386", reasons: [], at: daysAgo(13) },
+          ],
+        },
+      ],
+      udcNotices: [
+        {
+          id: 1,
+          role: "applicant",
+          party: {
+            name: { en: "Shahana Begum", bn: "শাহানা বেগম" },
+            village: { en: "Alampur", bn: "আলমপুর" },
+            upazila: { en: "Taraganj", bn: "তারাগঞ্জ" },
+          },
+          udc: UDCS.find((u) => u.id === "UDC-TRG")!,
+          session: { id: 283, scheduledFor: inDays(5, 11), place: OFFICE_ROOM },
+          missedInARow: 2,
+          status: "held",
+          reasons: ["applicantSafety"],
+          createdAt: daysAgo(14),
+        },
+      ],
+      missedInARow: { applicant: 2, respondent: 0 },
+      noShowLimit: 2,
     },
   },
 ]

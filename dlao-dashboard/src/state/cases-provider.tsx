@@ -9,6 +9,7 @@ import { DuplicateReviewDialog } from "@/components/duplicate/duplicate-review-d
 import { INITIAL_CASES } from "@/data/cases"
 import { HEARINGS } from "@/data/hearings"
 import type { Hearing, LegalCase, NextAction } from "@/data/types"
+import { mediationHearings } from "@/lib/mediation"
 import { useI18n } from "@/i18n/use-i18n"
 import { CasesContext, type CasesSync } from "@/state/cases-context"
 import { casesReducer, type CaseAction } from "@/state/cases-reducer"
@@ -36,8 +37,17 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const officerId = useAuth().user?.id
   const [cases, apply] = useReducer(casesReducer, live ? [] : INITIAL_CASES)
   const [sync, setSync] = useState<CasesSync>(live ? "loading" : "ready")
-  const [hearings, setHearings] = useState<Hearing[]>(live ? [] : HEARINGS)
+  const [serverHearings, setHearings] = useState<Hearing[]>([])
+  // Built-in mediation meetings come from the cases' sessions, so new ones appear too.
+  const hearings = useMemo(
+    () => (live ? serverHearings : [...HEARINGS, ...mediationHearings(cases)]),
+    [live, serverHearings, cases],
+  )
   const [dialog, setDialog] = useState<DialogState | null>(null)
+
+  const refreshHearings = useCallback(() => {
+    if (live) fetchHearings(officerId).then(setHearings, () => {})
+  }, [live, officerId])
 
   const reload = useCallback(() => {
     fetchCases(officerId).then(
@@ -48,8 +58,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
       () => setSync("error"),
     )
     // Lawyers report new dates from their own dashboard.
-    fetchHearings(officerId).then(setHearings, () => {})
-  }, [officerId])
+    refreshHearings()
+  }, [officerId, refreshHearings])
 
   useEffect(() => {
     if (live) reload()
@@ -130,8 +140,30 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const duplicateOf = current?.duplicate && cases.find((c) => c.id === current.duplicate!.otherId)
 
   const value = useMemo(
-    () => ({ cases, sync, retry, dispatch, openCase, runAction, hearings, revealEvidence }),
-    [cases, sync, retry, dispatch, openCase, runAction, hearings, revealEvidence],
+    () => ({
+      cases,
+      sync,
+      retry,
+      dispatch,
+      openCase,
+      runAction,
+      hearings,
+      revealEvidence,
+      refreshCase: refresh,
+      refreshHearings,
+    }),
+    [
+      cases,
+      sync,
+      retry,
+      dispatch,
+      openCase,
+      runAction,
+      hearings,
+      revealEvidence,
+      refresh,
+      refreshHearings,
+    ],
   )
 
   return (

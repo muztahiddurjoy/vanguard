@@ -1,5 +1,6 @@
 import type {
   ActivityEvent,
+  Attendance,
   CaseFlag,
   LegalCase,
   NextAction,
@@ -7,6 +8,14 @@ import type {
   QueueKey,
   ResolutionTrack,
 } from "@/data/types"
+import {
+  emptyMediation,
+  hasNoShow,
+  recordAttendance,
+  releaseUdcNotice,
+  scheduleSession,
+  type ScheduleInput,
+} from "@/lib/mediation"
 
 /** Overrides must be explained; this keeps "ok" or "n/a" out of the audit log. */
 export const MIN_JUSTIFICATION_LENGTH = 20
@@ -52,6 +61,18 @@ export type CaseAction =
   | { type: "acknowledgeEvidence"; id: string; by: string; at: string }
   /** Built-in cases: a court case or prisoner record found in the records search. */
   | { type: "linkRecord"; id: string; courtCaseId?: number; prisonerId?: number }
+  /** Built-in cases: mediation, with the server's rules (lib/mediation). */
+  | { type: "scheduleMediation"; id: string; session: Omit<ScheduleInput, "id" | "at">; at: string }
+  | {
+      type: "recordAttendance"
+      id: string
+      sessionId: number
+      applicant: Attendance
+      respondent: Attendance
+      notes?: string
+      at: string
+    }
+  | { type: "releaseUdcNotice"; id: string; noticeId: number; justification: string; at: string }
   /** Cases fetched from the server replace what is shown. */
   | { type: "load"; cases: LegalCase[] }
   | { type: "replace"; legalCase: LegalCase }
@@ -295,6 +316,40 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
           return { ...c, linkedRecords: { ...links, prisonerId } }
         }
         return c
+      })
+
+    case "scheduleMediation": {
+      // Session numbers are unique across cases, as on the server.
+      const id =
+        Math.max(0, ...cases.flatMap((c) => c.mediation?.sessions.map((s) => s.id) ?? [])) + 1
+      return update(cases, action.id, (c) => ({
+        ...c,
+        mediation: scheduleSession(c.mediation ?? emptyMediation(), c, {
+          ...action.session,
+          id,
+          at: action.at,
+        }),
+      }))
+    }
+
+    case "recordAttendance":
+      return update(cases, action.id, (c) => {
+        if (!c.mediation) return c
+        const mediation = recordAttendance(c.mediation, c, action)
+        if (mediation === c.mediation) return c
+        const flags = without(c.flags, "mediationNoShow")
+        return {
+          ...c,
+          mediation,
+          flags: hasNoShow(mediation) ? [...flags, "mediationNoShow"] : flags,
+        }
+      })
+
+    case "releaseUdcNotice":
+      return update(cases, action.id, (c) => {
+        if (!c.mediation) return c
+        if (action.justification.trim().length < MIN_JUSTIFICATION_LENGTH) return c
+        return { ...c, mediation: releaseUdcNotice(c.mediation, action.noticeId) }
       })
 
     case "load":
