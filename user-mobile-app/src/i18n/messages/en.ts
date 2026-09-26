@@ -359,7 +359,7 @@ const en = {
     on: 'SOS is on',
     off: 'SOS is off',
     explain: (number: string) =>
-      `In danger? Press volume up and volume down together. Your phone buzzes and calls ${number}, from any screen, even with the screen off.`,
+      `In danger? Press volume up and volume down together. Your phone buzzes and calls ${number}, from any screen, even the lock screen. If the screen is off, press the power button once first.`,
     turnOn: 'Turn on SOS',
     turnOff: 'Turn off SOS',
     needs: 'What SOS needs',
@@ -371,7 +371,7 @@ const en = {
     shortcutHint:
       'In Accessibility, open "Legal Aid SOS" and switch it on. It reads only the volume buttons.',
     service: 'Listening in the background',
-    serviceHint: 'Keeps SOS on while you use other apps, with the screen off, and after a restart.',
+    serviceHint: 'Keeps SOS on while you use other apps, when the app is closed, and after a restart.',
     allow: 'Allow',
     openSettings: 'Open settings',
     ready: 'Ready',

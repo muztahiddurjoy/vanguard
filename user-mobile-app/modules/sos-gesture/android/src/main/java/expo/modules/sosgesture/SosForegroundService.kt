@@ -22,15 +22,17 @@ import android.util.Log
 
 /**
  * Keeps SOS armed: a lasting notification that says so (with "Call now" and "Turn
- * off"), a process Android keeps alive, and, while the screen is off, the volume
- * buttons.
+ * off"), a process Android keeps alive after the app is closed and after a restart,
+ * and, on Android 12 and older, the volume buttons while the screen is off.
  *
- * With the screen off Android sends the volume keys to the media session that is
- * playing, not to apps or accessibility services. So while it is off this service
- * holds a silent, remotely controlled media session and reads each volume step
- * from it. Music playing behind a dark screen still gets its volume changed.
- * While the screen is on the session is released, so the volume keys behave as
- * usual and SosAccessibilityService listens instead.
+ * With the screen off Android sends the volume keys only to a media session, not
+ * to apps or accessibility services. Up to Android 12 this service holds a silent,
+ * remotely controlled session while the screen is off and reads each volume step
+ * from it (music playing behind a dark screen still gets its volume changed).
+ * Android 13 and newer ignore such a session, and any session not really playing
+ * audio (checked on an Android 15 emulator), so there the screen must be on, the
+ * lock screen included: one press of the power button, then the volume buttons.
+ * While the screen is on, SosAccessibilityService listens.
  */
 class SosForegroundService : Service() {
   private var session: MediaSession? = null
@@ -86,6 +88,7 @@ class SosForegroundService : Service() {
   }
 
   private fun listenWhileScreenOff(on: Boolean) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
     if (!on) {
       session?.release()
       session = null

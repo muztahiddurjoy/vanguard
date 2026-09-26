@@ -13,8 +13,12 @@ import android.view.accessibility.AccessibilityEvent
  * accessibility service that asks to filter them, which is why this exists.
  *
  * It reads the two volume keys and nothing else, and never consumes them, so the
- * volume still changes as usual. The screen must be on: Android does not pass keys
- * to accessibility services while it is off (SosForegroundService covers that).
+ * volume still changes as usual. The screen must be on (the lock screen counts):
+ * Android does not pass keys to accessibility services while it is off
+ * (SosForegroundService covers that up to Android 12).
+ *
+ * Only real button presses arrive here: keys injected with `adb shell input` skip
+ * accessibility filtering, so test with `sendevent` on the input device.
  */
 class SosAccessibilityService : AccessibilityService() {
   override fun onKeyEvent(event: KeyEvent): Boolean {
