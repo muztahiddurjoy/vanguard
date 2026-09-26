@@ -50,6 +50,8 @@ export type CaseAction =
   | { type: "viewEvidence"; id: string; at: string }
   /** The receiving officer confirms the evidence arrived (A3). */
   | { type: "acknowledgeEvidence"; id: string; by: string; at: string }
+  /** Built-in cases: a court case or prisoner record found in the records search. */
+  | { type: "linkRecord"; id: string; courtCaseId?: number; prisonerId?: number }
   /** Cases fetched from the server replace what is shown. */
   | { type: "load"; cases: LegalCase[] }
   | { type: "replace"; legalCase: LegalCase }
@@ -276,6 +278,23 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
           { ...c, evidence: { ...c.evidence, acknowledged: { at: action.at, by: action.by } } },
           { type: "evidenceAcknowledged", at: action.at },
         )
+      })
+
+    case "linkRecord":
+      return update(cases, action.id, (c) => {
+        const links = c.linkedRecords ?? { courtCaseIds: [] }
+        const { courtCaseId, prisonerId } = action
+        // Linking twice changes nothing, as on the server.
+        if (courtCaseId !== undefined && !links.courtCaseIds.includes(courtCaseId)) {
+          return {
+            ...c,
+            linkedRecords: { ...links, courtCaseIds: [...links.courtCaseIds, courtCaseId] },
+          }
+        }
+        if (prisonerId !== undefined && links.prisonerId !== prisonerId) {
+          return { ...c, linkedRecords: { ...links, prisonerId } }
+        }
+        return c
       })
 
     case "load":

@@ -4,7 +4,14 @@ import type {
   CallerVerifiedBy,
   CaseFlag,
   CaseCategory,
+  CourtCaseType,
+  CourtLawyerSide,
+  CourtPartyRole,
   CourtStage,
+  EkycStatus,
+  HelpNeeded,
+  PrisonerStatus,
+  ProceedingKind,
   DoNotCallReason,
   FilerReceiptStatus,
   FilingFor,
@@ -196,3 +203,134 @@ export const KNOWN_FLAGS: readonly CaseFlag[] = [
   "inCustody",
   "mediationNoShow",
 ]
+
+// --- Court and jail records (GET /dlao/cases/{ref}/records, /dlao/records/search) ---
+
+export interface ApiCourtRef {
+  id: string
+  name: string
+  nameBn: string
+  kind: string
+}
+
+export interface ApiPrisonRef {
+  id: string
+  name: string
+  nameBn: string
+}
+
+export interface ApiStaffRef {
+  id: string
+  name: string
+  nameBn: string
+}
+
+export interface ApiCourtCaseSummary {
+  id: number
+  court: ApiCourtRef
+  caseNumber: string
+  caseType: CourtCaseType
+  title: string
+  sections: string | null
+  filedOn: string | null
+  status: "pending" | "disposed"
+  restricted: boolean
+  nextDate: string | null
+  nextPurpose: string | null
+  parties: {
+    name: string
+    nameBn: string | null
+    role: CourtPartyRole
+    fatherName: string | null
+    age: number | null
+  }[]
+}
+
+export interface ApiCourtCaseDetail extends ApiCourtCaseSummary {
+  proceedings: {
+    id: number
+    heldOn: string
+    kind: ProceedingKind
+    summary: string
+    nextDate: string | null
+    nextPurpose: string | null
+    recordedBy: string
+    recordedAt: string
+  }[]
+  lawyers: {
+    id: number
+    name: string
+    nameBn: string | null
+    side: CourtLawyerSide
+    enrolment: string | null
+    panelLawyerId: string | null
+    from: string | null
+    until: string | null
+    current: boolean
+  }[]
+  causeList: {
+    date: string
+    serial: number
+    time: string | null
+    purpose: string
+    judge: string | null
+  }[]
+  custody: { prison: ApiPrisonRef; prisonerNo: string; status: PrisonerStatus }[]
+}
+
+export interface ApiPrisonerSummary {
+  id: number
+  prison: ApiPrisonRef
+  prisonerNo: string
+  name: string
+  nameBn: string | null
+  fatherName: string | null
+  age: number | null
+  gender: "male" | "female" | "other" | null
+  nidLast4: string | null
+  nidVerified: boolean
+  village: string | null
+  upazila: string | null
+  district: string | null
+  admittedOn: string
+  status: PrisonerStatus
+  ward: string | null
+  releasedOn: string | null
+  nextCourtDate: string | null
+}
+
+export interface ApiPrisonerDetail extends ApiPrisonerSummary {
+  cases: {
+    court: ApiCourtRef
+    caseNumber: string
+    found: boolean
+    caseType: string | null
+    sections: string | null
+    status: "pending" | "disposed" | null
+    nextDate: string | null
+    nextPurpose: string | null
+  }[]
+}
+
+export interface ApiCaseRecords {
+  submittedBy: {
+    kind: "court" | "prison"
+    office: ApiCourtRef | ApiPrisonRef
+    staff: ApiStaffRef
+    submittedAt: string
+    helpNeeded: HelpNeeded
+    inCustody: boolean
+  } | null
+  identity: {
+    ekyc: { status: EkycStatus; at: string; by: string; nidLast4: string | null } | null
+    signature: { uploadedAt: string; by: string; documentId: number; sha256: string } | null
+  }
+  courtCases: ApiCourtCaseDetail[]
+  prisoner: ApiPrisonerDetail | null
+  previousRecords: ApiCourtCaseSummary[]
+}
+
+export interface ApiRecordSearch {
+  courtCases: ApiCourtCaseSummary[]
+  prisoners: ApiPrisonerSummary[]
+}
