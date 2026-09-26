@@ -153,6 +153,70 @@ describe("the case page", () => {
   })
 })
 
+describe("the court record", () => {
+  it("shows a case from the jail: the proceedings, the previous lawyer and custody", async () => {
+    const { user } = renderApp({ path: "/login", lawyerId: null })
+    await user.click(
+      screen.getByRole("button", { name: "Adv. Rafiqul Hasan (a case from the jail)" }),
+    )
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+    await user.click(await screen.findByRole("link", { name: "Jalal Uddin" }))
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Jalal Uddin" }),
+    ).toBeInTheDocument()
+    const record = screen.getByRole("region", { name: "Court record" })
+
+    const application = within(record).getByRole("region", { name: "The application" })
+    expect(application).toHaveTextContent("Rangpur Central Jail (Nasima Khatun)")
+    expect(application).toHaveTextContent("Defence in court")
+    expect(application).toHaveTextContent(/Verified by e-KYC \(NID\) on/)
+    expect(application).toHaveTextContent(/Signed the application on/)
+
+    const grCase = within(record).getByRole("article", { name: "G.R. 455/2026" })
+    expect(grCase).toHaveTextContent("Chief Judicial Magistrate Court, Rangpur · Criminal")
+    expect(grCase).toHaveTextContent(/Listed on .+, serial 7, 10:30, for evidence/)
+    expect(grCase).toHaveTextContent("Accused: Jalal Uddin (father Abdus Sattar, age 36)")
+    const proceedings = within(
+      within(grCase).getByRole("group", { name: "Proceedings" }),
+    ).getAllByRole("listitem")
+    expect(proceedings).toHaveLength(3)
+    expect(proceedings[0]).toHaveTextContent("15 Jun 2026 · Order")
+    expect(proceedings[0]).toHaveTextContent("Next date: 20 Jul 2026, for police report")
+    expect(proceedings[2]).toHaveTextContent("No defence lawyer present.")
+    const lawyers = within(grCase).getByRole("group", { name: "Lawyers who appeared" })
+    expect(lawyers).toHaveTextContent(/Previous lawyer\s*Adv\. Kamrul Hasan/)
+    expect(lawyers).toHaveTextContent("Defence · 15 Jun 2026 to 10 Aug 2026")
+
+    const custody = within(record).getByRole("region", { name: "Custody" })
+    expect(custody).toHaveTextContent("Rangpur Central Jail")
+    expect(custody).toHaveTextContent("RCJ-2026-0412")
+    expect(custody).toHaveTextContent("Padma-3")
+    expect(custody).toHaveTextContent("Undertrial")
+
+    const previous = within(record).getByRole("region", { name: "Previous records" })
+    expect(previous).toHaveTextContent("Restricted records are never shown.")
+    expect(previous).toHaveTextContent("G.R. 1021/2024")
+    expect(previous).toHaveTextContent("Disposed")
+  })
+
+  it("says so when the office has linked no records to the case", () => {
+    renderApp({ path: "/cases/DLAS-2026-045" })
+    expect(screen.getByRole("region", { name: "Court record" })).toHaveTextContent(
+      "No court or jail records are linked to this case yet. The office links them.",
+    )
+  })
+
+  it("reads in Bangla", () => {
+    renderApp({ path: "/cases/DLAS-2026-047", lawyerId: "LAW-24", lang: "bn" })
+    const record = screen.getByRole("region", { name: "আদালতের নথি" })
+    expect(record).toHaveTextContent("আগের আইনজীবী")
+    expect(record).toHaveTextContent("অ্যাড. কামরুল হাসান")
+    expect(record).toHaveTextContent("ক্রমিক ৭, ১০:৩০, সাক্ষ্যগ্রহণের জন্য")
+    expect(record).toHaveTextContent("রংপুর কেন্দ্রীয় কারাগার")
+    expect(record).not.toHaveTextContent("Previous lawyer")
+  })
+})
+
 describe("Hearings", () => {
   it("lists the next 30 days and the hearings still to report on", () => {
     renderApp({ path: "/hearings" })

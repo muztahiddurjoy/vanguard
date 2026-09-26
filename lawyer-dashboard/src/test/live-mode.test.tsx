@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ApiLawyerCase } from "@/api/types"
 import type { CourtStage } from "@/data/types"
 import { renderApp } from "@/test/render-app"
+import { EMPTY_RECORDS, jalalRecords } from "@/test/server-records"
 
 type Call = { method: string; path: string; body?: unknown; lawyer?: string }
 
@@ -13,7 +14,7 @@ const json = (data: unknown, status = 200) =>
 const DAY = 24 * 60 * 60 * 1000
 const iso = (ms: number) => new Date(ms).toISOString()
 
-/** Two cases shaped exactly as server/app/routers/lawyer.py returns them. */
+/** Three cases shaped exactly as server/app/routers/lawyer.py returns them. */
 function serverCases(now: number): ApiLawyerCase[] {
   const base = {
     status: "active",
@@ -72,12 +73,40 @@ function serverCases(now: number): ApiLawyerCase[] {
       },
       doNotCall: null,
     },
+    {
+      // Sent by Rangpur Central Jail; its court and jail records are linked.
+      ...base,
+      id: "DLAS-2026-047",
+      category: "criminalDefence",
+      priority: "high",
+      track: "standard",
+      sensitive: false,
+      missedUpdates: 0,
+      remindedAt: null,
+      updateDueAt: iso(now + 6 * DAY),
+      summary: "Undertrial prisoner in Rangpur Central Jail; his lawyer withdrew in August.",
+      respondent: null,
+      client: {
+        name: "Jalal Uddin",
+        nameBn: "জালাল উদ্দিন",
+        age: 36,
+        village: null,
+        upazila: "Pirgachha",
+        district: "Rangpur",
+        phone: null,
+        safetyLevel: "standard",
+        safeContactWindows: [],
+      },
+      doNotCall: null,
+    },
   ]
 }
 
-function fakeServer(now: number) {
+/** `recordsFailures`: how many court record requests fail before one succeeds. */
+function fakeServer(now: number, { recordsFailures = 0 } = {}) {
   const calls: Call[] = []
   const cases = serverCases(now)
+  let failuresLeft = recordsFailures
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -99,6 +128,13 @@ function fakeServer(now: number) {
         })
       }
       if (path === "/lawyer/cases") return json(cases)
+      const records = path.match(/^\/lawyer\/cases\/([^/]+)\/records$/)
+      if (records) {
+        const id = decodeURIComponent(records[1])
+        if (!cases.some((c) => c.id === id)) return json({ detail: "Not your case" }, 403)
+        if (failuresLeft-- > 0) return json({ detail: "down" }, 503)
+        return json(id === "DLAS-2026-047" ? jalalRecords(new Date(now)) : EMPTY_RECORDS)
+      }
       const one = path.match(/^\/lawyer\/cases\/([^/]+)(\/updates)?$/)
       const found = one && cases.find((c) => c.id === decodeURIComponent(one[1]))
       if (!found) return json({ detail: "Not found" }, 404)
@@ -254,6 +290,66 @@ describe("with a backend (VITE_API_URL)", () => {
     expect(
       await within(dialog).findByText(
         "The update could not be sent. Check your connection and try again.",
+      ),
+    ).toBeInTheDocument()
+  })
+})
+
+describe("the court record, from the server", () => {
+  const recordCalls = (calls: Call[]) => calls.filter((c) => c.path.endsWith("/records"))
+
+  it("is fetched only when the lawyer opens the case, with their ID, and shown", async () => {
+    const calls = fakeServer(TUESDAY_3PM.getTime())
+    const { user } = renderApp({ lawyerId: "LAW-21" })
+    const link = await screen.findByRole("link", { name: "Jalal Uddin" })
+    // The list stays light: no records are fetched (or recorded as viewed) for it.
+    expect(recordCalls(calls)).toEqual([])
+
+    await user.click(link)
+    const record = await screen.findByRole("region", { name: "Court record" })
+    const grCase = await within(record).findByRole("article", { name: "G.R. 455/2026" })
+    expect(recordCalls(calls)).toEqual([
+      { method: "GET", path: "/lawyer/cases/DLAS-2026-047/records", lawyer: "LAW-21" },
+    ])
+
+    expect(within(record).getByRole("region", { name: "The application" })).toHaveTextContent(
+      "Rangpur Central Jail (Nasima Khatun)",
+    )
+    // Friday 2 October: the cause-list listing, three days after this Tuesday.
+    expect(grCase).toHaveTextContent(/Listed on Fri, 2 Oct 2026, serial 7, 10:30, for evidence/)
+    expect(grCase).toHaveTextContent("Charge framed under s. 379; accused pleaded not guilty.")
+    expect(within(grCase).getByRole("group", { name: "Lawyers who appeared" })).toHaveTextContent(
+      /Previous lawyer\s*Adv\. Kamrul Hasan/,
+    )
+    const custody = within(record).getByRole("region", { name: "Custody" })
+    expect(custody).toHaveTextContent("RCJ-2026-0412")
+    expect(custody).toHaveTextContent("Padma-3")
+    expect(within(record).getByRole("region", { name: "Previous records" })).toHaveTextContent(
+      "G.R. 1021/2024",
+    )
+  })
+
+  it("says so when it cannot be loaded, and tries again", async () => {
+    const calls = fakeServer(TUESDAY_3PM.getTime(), { recordsFailures: 1 })
+    const { user } = renderApp({ lawyerId: "LAW-21", path: "/cases/DLAS-2026-047" })
+    const record = await screen.findByRole("region", { name: "Court record" })
+    expect(await within(record).findByRole("alert")).toHaveTextContent(
+      "Could not load the court record.",
+    )
+
+    await user.click(within(record).getByRole("button", { name: "Try again" }))
+    expect(await within(record).findByRole("article", { name: "G.R. 455/2026" })).toBeVisible()
+    expect(within(record).queryByRole("alert")).not.toBeInTheDocument()
+    expect(recordCalls(calls)).toHaveLength(2)
+  })
+
+  it("says so when the office has linked nothing yet", async () => {
+    fakeServer(TUESDAY_3PM.getTime())
+    renderApp({ lawyerId: "LAW-21", path: "/cases/APP-2026-001" })
+    const record = await screen.findByRole("region", { name: "Court record" })
+    expect(
+      await within(record).findByText(
+        "No court or jail records are linked to this case yet. The office links them.",
       ),
     ).toBeInTheDocument()
   })
