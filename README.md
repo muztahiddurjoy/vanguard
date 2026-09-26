@@ -62,22 +62,17 @@ reaches a jail, the officer and the lawyer because they all read the same record
 server.
 
 ```mermaid
-flowchart LR
-  subgraph People["People"]
-    Caller(["Caller<br/>hotline or helpline"])
-    Officer(["DLAO officer"])
-    Lawyer(["Panel lawyer"])
-    CourtStaff(["Court staff"])
-    JailStaff(["Jail staff"])
-    UDCStaff(["Union Digital Centre"])
+flowchart TB
+  subgraph Front["Front ends (React, English and বাংলা)"]
+    direction LR
+    DLAO["dlao-dashboard :5173<br/>DLAO officer"]
+    LAW["lawyer-dashboard :5174<br/>panel lawyer"]
+    COURT["court-dashboard :5175<br/>court staff"]
+    PRISON["prison-dashboard :5176<br/>jail staff"]
   end
 
-  subgraph Front["Front ends (React, EN + বাংলা)"]
-    DLAO["dlao-dashboard<br/>:5173"]
-    LAW["lawyer-dashboard<br/>:5174"]
-    COURT["court-dashboard<br/>:5175"]
-    PRISON["prison-dashboard<br/>:5176"]
-  end
+  Caller(["Caller<br/>hotline or helpline"])
+  UDC(["Union Digital Centre<br/>tablet and SMS"])
 
   subgraph Back["server/ (FastAPI, :8000)"]
     direction TB
@@ -85,8 +80,8 @@ flowchart LR
     Agents["AI agents (LangGraph)<br/>T5 intake, T6 documents, T7 settlement,<br/>T8 triage, helpline, hotline menu"]
     Services["Services<br/>safe_contact, notices, ekyc, records,<br/>institution, mediation, case_status,<br/>court_progress, rosters"]
     Voice["Voice pipeline<br/>stream_manager, audio,<br/>speech_to_text, elevenlabs"]
-    Audit[("Audit ledger<br/>SHA-256 hash chain")]
     DB[("SQLite / Postgres<br/>cases, parties, records,<br/>mediation, documents")]
+    Audit[("Audit ledger<br/>SHA-256 hash chain")]
     Routers --> Agents
     Routers --> Services
     Routers --> Voice
@@ -95,9 +90,10 @@ flowchart LR
     Services --> Audit
   end
 
-  NID["nid-server<br/>National ID registry :8100<br/>(fictional citizens)"]
+  NID["nid-server :8100<br/>National ID registry<br/>(fictional citizens)"]
 
   subgraph Ext["External services"]
+    direction LR
     Twilio["Twilio<br/>voice + media stream"]
     STT["OpenAI<br/>gpt-live-transcribe"]
     TTS["ElevenLabs<br/>text-to-speech"]
@@ -105,25 +101,19 @@ flowchart LR
     ADN["ADN SMS"]
   end
 
-  Caller <-->|phone call| Twilio
-  Twilio <-->|webhooks + audio, via ngrok| Voice
-  Voice -->|caller audio| STT
-  Voice -->|reply text| TTS
-  Agents -.->|where rules are weak| LLM
-  Services -->|SMS| ADN
-  ADN -->|SMS| Caller
-  ADN -->|SMS| UDCStaff
-  Services -->|verify, family, SIM lookup| NID
-
-  Officer --> DLAO
-  Lawyer --> LAW
-  CourtStaff --> COURT
-  JailStaff --> PRISON
-  DLAO -->|/dlao, /mediation| Routers
-  LAW -->|/lawyer| Routers
-  COURT -->|/court| Routers
-  PRISON -->|/prison| Routers
-  UDCStaff -->|/udc| Routers
+  DLAO -->|"/dlao, /mediation"| Routers
+  LAW -->|"/lawyer"| Routers
+  COURT -->|"/court"| Routers
+  PRISON -->|"/prison"| Routers
+  UDC -->|"/udc, /sync"| Routers
+  Caller <-->|"phone call"| Twilio
+  Twilio <-->|"webhooks + audio (via ngrok)"| Voice
+  Voice -->|"caller audio"| STT
+  Voice -->|"reply text"| TTS
+  Agents -.->|"where rules are weak"| LLM
+  Services -->|"verify, family, SIM lookup"| NID
+  Services -->|"SMS"| ADN
+  ADN -.->|"SMS to filers, respondents,<br/>parties and UDCs"| Caller
 ```
 
 How to read it:
@@ -693,7 +683,7 @@ sequenceDiagram
   participant Line as Hotline (T5)
   participant NID as NID registry
   participant Srv as Backend (T8, notices)
-  participant Off as DLAO dashboard
+  participant DL as DLAO dashboard
   participant SMS as ADN SMS
   actor Resp as Respondent
   participant Law as Lawyer dashboard
@@ -706,19 +696,19 @@ sequenceDiagram
   Srv->>SMS: tracking number to the filer (via safe_contact)
   Srv->>SMS: visit-the-office notice to the respondent (held if risky)
   SMS-->>Resp: notice with the helpline number
-  Off->>Srv: confirm or override triage and the mark (with a reason)
-  Off->>Srv: accept as a case (gains DLAS-… number)
+  DL->>Srv: confirm or override triage and the mark (with a reason)
+  DL->>Srv: accept as a case (gains DLAS-… number)
   alt mediation
-    Off->>Srv: schedule a session
+    DL->>Srv: schedule a session
     Srv->>SMS: notices to both parties
-    Off->>Srv: record who came
+    DL->>Srv: record who came
   end
-  Off->>Srv: assign a panel lawyer
+  DL->>Srv: assign a panel lawyer
   loop every 14 days and within 3 days of each hearing
     Law->>Srv: update from court (stage, next date, order sheet)
-    Srv-->>Off: report visible at once, late ones raise alerts
+    Srv-->>DL: report visible at once, late ones raise alerts
   end
-  Off->>Srv: close the case with an outcome
+  DL->>Srv: close the case with an outcome
 ```
 
 ### Case status and the officer's decisions
@@ -769,7 +759,7 @@ sequenceDiagram
   participant Dash as court- or prison-dashboard
   participant Srv as Backend
   participant NID as NID registry
-  participant Off as DLAO dashboard
+  participant DL as DLAO dashboard
   participant Law as Lawyer dashboard
 
   Staff->>Dash: opens a party (or prisoner) and applies
@@ -779,11 +769,11 @@ sequenceDiagram
   Srv-->>Dash: verified, registry's details fill the form
   Staff->>Dash: applicant signs on screen or scan is uploaded
   Dash->>Srv: POST …/applications (client_ref, e-KYC id, signature)
-  Srv->>Srv: triage, duplicate check, audit; in custody = at least high priority
+  Srv->>Srv: triage, duplicate check, audit, in custody = at least high priority
   Srv->>Srv: link the court case, or the prisoner and all their cases
   Srv-->>Dash: tracking number (no SMS: staff hand it over)
-  Srv-->>Off: appears in the queue, marked with the court or jail
-  Off->>Srv: assigns a panel lawyer
+  Srv-->>DL: appears in the queue, marked with the court or jail
+  DL->>Srv: assigns a panel lawyer
   Srv-->>Dash: stage, lawyer and next hearing follow the case
   Srv-->>Law: case appears with its court record
 ```
@@ -948,3 +938,100 @@ the agents to use `gpt-6-luna`), then call a line from recorded answers with
 > The registry's people are fictional, but their phone numbers may belong to real
 > subscribers. Keep `SMS_DRY_RUN=true`, or list only your own numbers in `SMS_ALLOWLIST`,
 > while it is connected.
+
+## Testing and quality checks
+
+Run each module's checks from its own folder. Every command below is also listed in that
+module's README.
+
+| Module | Tests | Lint and format | Types | Build |
+| --- | --- | --- | --- | --- |
+| `server/` | `.venv/bin/pytest` (unit, API and a simulated phone call) | `.venv/bin/ruff check . && .venv/bin/ruff format --check .` | `.venv/bin/mypy` | `docker build -t dlas-backend .` |
+| `nid-server/` | `.venv/bin/pytest` (API, matching, registry integrity) | same as the server | `.venv/bin/mypy` | `docker build -t nid-registry .` |
+| each dashboard | `npm test` (Vitest, jsdom) | `npm run lint` (ESLint, including React Compiler rules) | `npm run typecheck` | `npm run build` (type-check, then production build) |
+
+If your shell exports a `PYTHONPATH` (ROS, for example), run the Python tools with
+`env -u PYTHONPATH …` so foreign pytest plugins are not loaded.
+
+What the backend's tests cover, by area: agents (`test_agents`, `test_hotline_menu`,
+`test_helpline`, `test_llm`), telephony and voice (`test_audio`, `test_speech_to_text`,
+`test_simulate_call`), the API for each role (`test_api_intake_dlao`, `test_api_lawyer`,
+`test_api_court`, `test_api_prison`, `test_api_documents_mediation`, `test_api_applications`,
+`test_api_t2_t3_t4`), identity and records (`test_nid_registry`, `test_ekyc`,
+`test_records_access`, `test_seed_records`), and safety (`test_safe_contact`, `test_notices`,
+`test_mediation_notices`, `test_crypto`, `test_models`).
+
+To refresh the dashboard's API contract fixture after changing the backend's response
+shapes: `cd server && .venv/bin/python -m scripts.dashboard_fixture`.
+
+## Configuration
+
+Copy `server/.env.example` to `server/.env` (`start.sh` does it on the first run). Every key is
+optional in development. The ones that matter most:
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| `ENVIRONMENT` | `production` turns on Twilio signature checks and refuses unsafe defaults | `development` |
+| `DATABASE_URL` | SQLite in development, Postgres in production | `server/dlas.db` |
+| `API_TOKEN` | Shared bearer token the dashboards send | empty (open) |
+| `CORS_ORIGINS` | Dashboard origins allowed to call the API (ports 5173 to 5176 by default) | localhost |
+| `NID_HASH_KEY` | Key for the HMAC of stored NIDs; production refuses the development value | `change-me` |
+| `NID_SERVER_URL`, `NID_SERVER_API_KEY` | Where the registry is, and its key | `http://localhost:8100` |
+| `LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Which optional model the agents consult | `anthropic`, no key |
+| `SMS_DRY_RUN`, `SMS_ALLOWLIST`, `ADNSMS_*` | ADN SMS. Keep `SMS_DRY_RUN=true`, or list only your own numbers, while the registry is connected | dry run |
+| `HELPLINE_NUMBER` | The number printed in every SMS | `16430` |
+| `PUBLIC_BASE_URL`, `TWILIO_AUTH_TOKEN` | Public address for Twilio's webhooks, and the signature check | empty |
+| `ELEVENLABS_*`, `VOICE_SPEED`, `VOICE_START_BUFFER_S` | The line's voice | see `.env.example` |
+| `STT_END_OF_TURN_MS`, `STT_STORY_END_OF_TURN_MS`, `STT_MIN_SPEECH_RMS`, `OPENAI_STT_*` | Speech-to-text turn detection and accuracy | 700, 1200, 500 |
+| `MEDIATION_NO_SHOW_LIMIT`, `EKYC_CHECK_VALID_MINUTES` | Two missed sessions flag a UDC notice; an e-KYC check lasts 120 minutes | 2, 120 |
+
+Each dashboard reads `VITE_API_URL` (and optionally `VITE_API_TOKEN`) from its
+`.env.local`. `nid-server` reads `NID_API_KEY`, `NAME_MATCH_THRESHOLD` (85), `DATA_FILE` and
+`ENVIRONMENT` from its own `.env`.
+
+For production set at least `ENVIRONMENT=production`, `DATABASE_URL` (Postgres), `API_TOKEN`,
+`NID_HASH_KEY`, `TWILIO_AUTH_TOKEN`, `SMS_DRY_RUN=false` with the ADN credentials,
+`NID_SERVER_URL` and `NID_SERVER_API_KEY`, `HELPLINE_NUMBER`, `OPENAI_API_KEY`, the UDC
+entrepreneurs' real numbers in `server/app/services/udc.py`, and `LLM_PROVIDER` with its key
+if the agents should use a model. See the *Known limitations* in
+[`server/README.md`](server/README.md#known-limitations) before any real deployment (no
+per-user sign-in yet, rosters are code, no migrations, single-worker conversation state).
+
+## Repository layout
+
+```
+vanguard/
+  README.md                this file
+  start.sh                 starts everything (NID registry, backend, ngrok, four dashboards)
+  server/                  FastAPI backend
+    app/                   main.py, config.py, database.py
+      models/  agents/  routers/  services/
+    scripts/               seed_records, simulate_call, dashboard_fixture
+    tests/
+  nid-server/              National ID registry
+    app/                   main.py, registry.py, schemas.py, data/citizens.json
+    tests/
+  dlao-dashboard/          officer dashboard (src/pages, api, state, i18n, lib, components)
+  lawyer-dashboard/        panel lawyers' dashboard
+  court-dashboard/         courts' dashboard
+  prison-dashboard/        jails' dashboard
+  @latest/                 an unrelated Expo app scaffold (not part of DLAS)
+  vanguard-digital-leagal-aid/   a local reference PWA, kept out of git (see .gitignore)
+```
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+| --- | --- |
+| The backend fails with a database error after pulling | The schema changed and there are no migrations yet. Run `./start.sh --reset-db` (the old file is kept as a backup) or delete `server/dlas.db` |
+| A dashboard shows sample data, not live cases | `VITE_API_URL` is not set in its `.env.local`. Set it to `http://localhost:8000` and restart `npm run dev` |
+| A dashboard's requests are blocked by the browser | The backend's `CORS_ORIGINS` does not include the dashboard's port |
+| Sign-in on the court, jail or lawyer dashboard fails with a live backend | The ID is not on the roster (`server/app/services/courts.py`, `prisons.py`, `panel.py`) |
+| A court or jail application says the identity could not be checked | The NID registry is not running or `NID_SERVER_URL` is not set. Staff can send it without e-KYC and verify later |
+| Callers are not asked the NID security questions | Same cause: without the registry, intake skips them and records the applicant as unverified |
+| A phone call is answered with a spoken "cannot take applications by phone" | The voice is broken. Check `GET /health` for `voice`, then `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` and `ELEVENLABS_MODEL_ID` (it must speak Bangla) |
+| A caller hears they cannot be heard, and the call ends | Speech-to-text is off or rejected: set `OPENAI_API_KEY` and check the log for the reason |
+| The line is interrupted by noise, or misses quiet callers | Raise or lower `STT_MIN_SPEECH_RMS` |
+| Twilio cannot reach the backend | No tunnel. Run `./start.sh` without `--no-ngrok`, and set `PUBLIC_BASE_URL` so the domain does not change between runs |
+| SMS are not arriving | `SMS_DRY_RUN` is `true` (the default), the number is not in `SMS_ALLOWLIST`, or the notice is **held** for an officer because the case is sensitive or do-not-call |
+| pytest loads unfamiliar plugins | Your shell exports `PYTHONPATH`. Use `env -u PYTHONPATH .venv/bin/pytest` |
