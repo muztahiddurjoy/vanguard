@@ -279,7 +279,7 @@ flowchart TB
 
   subgraph T8g["T8 triage: runs on every application"]
     direction LR
-    t1["categorize<br/>keyword rules, model for<br/>unclear narratives"] --> t2["compliance<br/>eligibility and jurisdiction"]
+    t1["categorize<br/>keyword rules, model for<br/>unclear narratives"] --> t2["compliance<br/>risk factors and warning signs,<br/>each with the evidence found"]
     t2 --> t3["urgency<br/>rule-based priority"]
     t3 --> t4["track<br/>advice, mediation or sensitive"]
   end
@@ -494,6 +494,137 @@ sequenceDiagram
   S->>D: applicant signs on screen or a scan is uploaded
   D->>API: POST /applications with the check id and signature
   API-->>D: tracking number
+```
+
+### The four dashboards
+
+All four are the same kind of app: React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui,
+hash URLs (so `dist/` works on any static host), and a whole UI in English and বাংলা. They
+share one shape:
+
+```mermaid
+flowchart TB
+  Main["main.tsx<br/>providers + hash router"] --> Guard["auth/<br/>sign-in (session storage)<br/>+ route guard"]
+  Guard --> Pages["pages/<br/>one file per screen"]
+  Pages --> State["state/<br/>reducers and providers"]
+  Pages --> I18N["i18n/<br/>en + bn dictionaries,<br/>formatters (Anek Bangla font)"]
+  Pages --> UI["components/<br/>ui (shadcn), layout, feature parts"]
+  State --> API["api/<br/>backend client:<br/>sends bearer token + identity header,<br/>maps server views to the UI's types"]
+  API --> Env{"VITE_API_URL set?"}
+  Env -->|"yes"| Server["server/ :8000<br/>live records"]
+  Env -->|"no"| Sample["data/<br/>built-in sample records<br/>(in memory, reset on reload)"]
+  Pages --> Lib["lib/<br/>rules mirrored from the backend<br/>(safe-contact window, court progress, record search)"]
+```
+
+Without `VITE_API_URL` each dashboard runs on built-in sample data, so it can be tried with
+no backend. With it, the backend's `CORS_ORIGINS` must include the dashboard's port.
+
+#### `dlao-dashboard/` (port 5173): the officer
+
+Sign in with any officer ID and a password of 4+ characters (a demo account is one click).
+Opening a case fetches its history, call notes, the lawyer's reports and transfers; the
+**Court and jail records** and **Mediation** tabs are fetched only when opened, because the
+server audits every look.
+
+```mermaid
+flowchart TB
+  SI["Sign in"] --> Home["Home<br/>summary numbers, pattern alerts,<br/>'Start here', upcoming hearings"]
+  Home --> Queue["Work queue<br/>New, Urgent, Overdue; filters and search"]
+  Home --> Lawyers["Lawyers<br/>open cases, who stopped reporting"]
+  Home --> Hearings["Hearings<br/>court dates + mediation, next 2 weeks"]
+  Queue --> Case
+  Lawyers --> Reassign["Review and Reassign<br/>move cases to another lawyer"]
+  Hearings --> Case
+  Home --> Others["All cases, Reports, Profile,<br/>Settings, Help, Notifications"]
+
+  subgraph Case["Case (dialog, full screen on a phone)"]
+    direction TB
+    C1["Safety warning + what to do now"]
+    C2["AI triage: accept or override<br/>(20+ character reason)"]
+    C3["Advice / mediation / sensitive mark:<br/>confirm or change"]
+    C4["Case information, respondent SMS<br/>(send if held), sensitive evidence (Role B6)"]
+    C5["Court and jail records tab<br/>view, search, link a record"]
+    C6["Court progress<br/>lawyer reports, remind"]
+    C7["Mediation tab<br/>schedule, attendance, UDC notices"]
+  end
+  Queue --> Dup["Duplicate check<br/>compare, confirm distinct (merge blocked)"]
+  Case --> API["/dlao/*, /mediation/*, /lawyer reports"]
+```
+
+Saved on the server: accepting or overriding triage, the advice / mediation / sensitive mark,
+sending a held SMS, assigning or moving a lawyer, reminding a lawyer, escalating to the Chief
+Legal Aid Officer, acknowledging sensitive evidence, linking a court case or prisoner,
+scheduling mediation, recording attendance, and sending a held UDC notice. Safe-call
+booking, duplicate decisions, marking a late task done and hearing reminders stay on screen
+only for now.
+
+#### `lawyer-dashboard/` (port 5174): the panel lawyer
+
+A lawyer sees only the cases an officer assigned to them. The server sends no phone number
+for an applicant nobody may call, and shows the safe time for a watched phone.
+
+```mermaid
+flowchart TB
+  SI["Sign in<br/>GET /lawyer/me checks the ID"] --> My["My cases<br/>profile, four numbers, 'office is waiting'<br/>when a report is late"]
+  My --> Case["Case<br/>court progress, client and safe contact,<br/>complaint against whom"]
+  My --> Hear["Hearings<br/>past dates with no report,<br/>then the next 30 days"]
+  Case --> Rec["Court record<br/>GET /lawyer/cases/ref/records<br/>(fetched on open, audited, no NID digits)"]
+  Case --> Upd
+  Hear --> Upd["Send an update (dialog)<br/>stage, court, hearing date, next date,<br/>what happened (20+ chars), order sheet up to 10 MB"]
+  Upd --> Srv["server: stores the report,<br/>next hearing = last date fixed"]
+  Srv --> Off["Officer sees it at once<br/>(Court progress tab)"]
+  Srv --> Rule{"Report every 14 days<br/>and within 3 days of a hearing?"}
+  Rule -->|"missed"| Late["Reports late, then<br/>lawyer inactivity alert,<br/>then pattern alert across cases"]
+```
+
+#### `court-dashboard/` (port 5175): court staff
+
+A court sees only its own register, cause lists and applications. Anything else is "not
+found", so another court's record IDs are never confirmed.
+
+```mermaid
+flowchart TB
+  SI["Sign in<br/>GET /court/me"] --> Today["Today<br/>today's cause list, applications<br/>waiting for e-KYC or a signature"]
+  Today --> CL["Cause list /cause-lists/date<br/>edit rows, paste from a spreadsheet,<br/>saving an empty list withdraws it"]
+  Today --> Cases["Cases /cases<br/>the register"]
+  Cases --> Reg["Register a case<br/>parties, sections, restricted flag"]
+  Cases --> Case["Case /cases/id<br/>parties, proceedings, lawyers,<br/>who is held and where"]
+  Case --> Proc["Record proceedings<br/>judgment disposes the case"]
+  Case --> Lw["Add lawyer, End appearance"]
+  Case --> Apply["Apply for legal aid<br/>(from a party)"]
+  Today --> Apply
+  subgraph Wiz["New application: four steps"]
+    direction LR
+    W1["1. e-KYC<br/>NID, date of birth, name"] --> W2["2. The application"] --> W3["3. Signature<br/>draw or scan, only once verified"] --> W4["4. Review and submit<br/>one client_ref, no double filing"]
+  end
+  Apply --> Wiz
+  W4 --> AppList["Legal aid /applications<br/>stage, lawyer, next hearing"]
+  AppList --> App["Application /applications/ref<br/>tracking number to hand over,<br/>Verify now, Add signature"]
+```
+
+#### `prison-dashboard/` (port 5176): jail staff
+
+A jail sees only its own prisoners and applications, and of each court case only what it needs
+to produce the prisoner. It never sees the case file, proceedings, other parties, or what the
+officer does inside a case beyond stage, lawyer and next hearing.
+
+```mermaid
+flowchart TB
+  SI["Sign in<br/>GET /prison/me"] --> Today["Today<br/>prisoners to produce today and tomorrow,<br/>undertrial prisoners with no application yet"]
+  Today --> CD["Court dates /court-dates<br/>production list by date then court,<br/>Print"]
+  Today --> Pr["Prisoners /prisoners<br/>search, filter by status"]
+  Pr --> Adm["Admit a prisoner<br/>optional e-KYC, court cases held on"]
+  Pr --> P["Prisoner /prisoners/id<br/>details, each court case<br/>(registered by the court or not yet)"]
+  P --> Apply["Apply for legal aid"]
+  Today --> Apply
+  subgraph Wiz["New application: four steps"]
+    direction LR
+    W1["1. e-KYC<br/>prefilled from the prisoner"] --> W2["2. The application"] --> W3["3. Signature<br/>only once verified"] --> W4["4. Review and submit"]
+  end
+  Apply --> Wiz
+  W4 --> Apps["Legal aid /applications"]
+  Apps --> App["Application /applications/ref<br/>tracking number for the prisoner or family,<br/>panel lawyer, next hearing"]
+  CD -.->|"cause lists saved by the court"| CourtSide["court-dashboard"]
 ```
 
 ## How a case moves
