@@ -22,6 +22,7 @@ import type { LegalAidStatus } from "@/data/types"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useResource } from "@/hooks/use-resource"
 import { useI18n } from "@/i18n/use-i18n"
+import { useActorName } from "@/lib/actor"
 import { emptyEkyc, isVerified, type EkycState } from "@/lib/ekyc"
 import { problemText, statusOf } from "@/lib/errors"
 import { maskedNid } from "@/lib/nid"
@@ -191,6 +192,7 @@ function ApplicationView({
   onSaved: (a: LegalAidStatus) => void
 }) {
   const { t, f, pickName } = useI18n()
+  const actorName = useActorName()
   const name = pickName(a.applicant)
   usePageTitle(name)
   const [verifying, setVerifying] = useState(false)
@@ -294,7 +296,10 @@ function ApplicationView({
             {a.signature ? (
               <p className="flex items-center gap-2 text-sm font-medium text-success-foreground">
                 <PenLine aria-hidden className="size-4" />
-                {t.application.signedOn(f.dateTime(a.signature.uploadedAt), a.signature.by)}
+                {t.application.signedOn(
+                  f.dateTime(a.signature.uploadedAt),
+                  actorName(a.signature.by),
+                )}
               </p>
             ) : (
               <div className="flex flex-col gap-3">

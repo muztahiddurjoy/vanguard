@@ -37,6 +37,12 @@ export function findStaff(id: string): JailStaff | undefined {
   return JAIL_STAFF.find((s) => s.id === key)
 }
 
+/** The server records who acted as "prison:JS-08": the member of staff, when on the roster. */
+export function staffOfActor(actor: string): JailStaff | undefined {
+  const [kind, id] = actor.split(":")
+  return kind === "prison" && id ? findStaff(id) : undefined
+}
+
 /** The two demo accounts, both at Rangpur Central Jail. */
 export const DEMO_STAFF = { desk: "JS-08", deputy: "JS-03" } as const
 export const DEMO_PASSWORD = "demo1234"

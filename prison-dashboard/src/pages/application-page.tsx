@@ -13,6 +13,7 @@ import { localized, type LegalAidStatus } from "@/data/types"
 import { useLoad } from "@/hooks/use-load"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useI18n } from "@/i18n/use-i18n"
+import { useActorName } from "@/lib/actor"
 import { NotFoundPage } from "@/pages/not-found-page"
 import { useBackend } from "@/state/use-backend"
 
@@ -24,6 +25,7 @@ function ApplicationView({
   onSaved: (a: LegalAidStatus) => void
 }) {
   const { t, f, pick } = useI18n()
+  const actorName = useActorName()
   const signHint = useId()
   const name = pick(localized(a.applicant.name, a.applicant.nameBn))
   usePageTitle(t.application.title(a.id))
@@ -117,7 +119,10 @@ function ApplicationView({
             <SignedBadge signed={!!a.signature} />
             {a.signature ? (
               <p className="text-sm text-muted-foreground">
-                {t.application.signedOn(f.dateTime(a.signature.uploadedAt), a.signature.by)}
+                {t.application.signedOn(
+                  f.dateTime(a.signature.uploadedAt),
+                  actorName(a.signature.by),
+                )}
               </p>
             ) : (
               <>
