@@ -9,12 +9,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { HOTLINE } from '@/lib/config';
 import { dial } from '@/lib/phone';
-import { useCases } from '@/state/cases';
+import { useCases, useRefreshOnFocus } from '@/state/cases';
 
 export default function HomeScreen() {
   const { t, f, lang, setLang } = useI18n();
   const theme = useTheme();
   const { cases, pending, sendPending } = useCases();
+  useRefreshOnFocus();
 
   return (
     <Screen padTop>

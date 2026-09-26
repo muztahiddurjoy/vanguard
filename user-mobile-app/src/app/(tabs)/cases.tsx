@@ -8,13 +8,14 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ago, useI18n } from '@/i18n';
 import { titleFrom } from '@/lib/cases';
-import { useCases } from '@/state/cases';
+import { useCases, useRefreshOnFocus } from '@/state/cases';
 
 export default function CasesScreen() {
   const i18n = useI18n();
   const { t } = i18n;
   const theme = useTheme();
   const { cases, pending, refreshAll, sendPending, dropPending } = useCases();
+  useRefreshOnFocus();
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
 

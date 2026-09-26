@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { AppState } from 'react-native';
 
 import { api, ApiError, tokenDigits } from '@/lib/api';
@@ -127,8 +128,9 @@ export function CasesProvider({ children }: { children: ReactNode }) {
         if (e instanceof ApiError && !e.offline && e.status < 500) {
           return { kind: 'rejected', message: e.message };
         }
-        // Offline or the server failed: keep it and try again later.
-        const why = e instanceof Error ? e.message : String(e);
+        // Offline or the server failed: keep it and try again later. A network
+        // failure needs no message of its own (the queue says it waits for one).
+        const why = e instanceof ApiError && e.offline ? null : e instanceof Error ? e.message : String(e);
         setPending((list) => queueFiling(list, draft, why));
         return { kind: 'queued' };
       }
@@ -203,6 +205,28 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   );
 
   return <CasesContext.Provider value={value}>{children}</CasesContext.Provider>;
+}
+
+/**
+ * Refreshes, when the screen comes into view, the cases not checked for a while,
+ * so a list never shows a stage from long ago without the person pulling it.
+ */
+export function useRefreshOnFocus(maxAgeMs = 60_000): void {
+  const { cases, refresh } = useCases();
+  const latest = useRef({ cases, refresh });
+  useEffect(() => {
+    latest.current = { cases, refresh };
+  }, [cases, refresh]);
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      for (const c of latest.current.cases) {
+        if (!c.checkedAt || now - Date.parse(c.checkedAt) > maxAgeMs) {
+          latest.current.refresh(c.token).catch(() => undefined);
+        }
+      }
+    }, [maxAgeMs])
+  );
 }
 
 export function useCases(): CasesValue {
