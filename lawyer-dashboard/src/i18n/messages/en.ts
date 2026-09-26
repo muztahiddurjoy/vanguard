@@ -188,6 +188,7 @@ export const en = {
     dowryHarassment: "Dowry Harassment",
     labourDispute: "Labour / Wages",
     childCustody: "Child Custody",
+    criminalDefence: "Criminal Defence",
     other: "Not sorted yet",
   },
   server: {

@@ -185,6 +185,7 @@ export const bn: Messages = {
     dowryHarassment: "যৌতুকের জন্য নির্যাতন",
     labourDispute: "শ্রম ও মজুরি",
     childCustody: "সন্তানের অভিভাবকত্ব",
+    criminalDefence: "ফৌজদারি মামলায় আত্মপক্ষ সমর্থন",
     other: "এখনো শ্রেণিভুক্ত হয়নি",
   },
   server: {
