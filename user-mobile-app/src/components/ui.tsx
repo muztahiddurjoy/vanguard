@@ -7,6 +7,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { forwardRef, type ComponentProps, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -62,12 +63,19 @@ function toneColor(tone: Tone, theme: Theme): string {
 }
 
 /**
- * Android's default "highQuality" line breaking measures Bangla text narrower
- * than it lays it out, so a label sized to fit its words drops the last one
- * ("আবেদন গৃহীত" shows as "আবেদন"). "simple" measures and lays out alike.
+ * Android measures some Bangla words (vowel signs, conjuncts) a few pixels
+ * narrower than it lays them out, so a label sized to fit its words wraps its
+ * last word out of sight ("আইনজীবী নিযুক্ত" showed as "আইনজীবী", "শুনুন" as
+ * "শুনু"). A trailing space is measured, but may hang past the edge when the
+ * line is laid out, which absorbs the difference.
  */
-function AppText(props: TextProps) {
-  return <Text textBreakStrategy="simple" {...props} />;
+function AppText({ children, ...props }: TextProps) {
+  const padded = typeof children === 'string' && Platform.OS === 'android' ? `${children} ` : children;
+  return (
+    <Text textBreakStrategy="simple" {...props}>
+      {padded}
+    </Text>
+  );
 }
 
 export function Txt({

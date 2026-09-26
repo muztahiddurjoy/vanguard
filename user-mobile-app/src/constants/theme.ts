@@ -73,14 +73,15 @@ export const Radius = {
 } as const;
 
 /**
- * Hind Siliguri, bundled: Bangla and Latin in one family, with a real file per
- * weight. Android's system Bengali font is drawn bolder than it is measured, so
- * bold Bangla labels wrapped or lost their last word.
+ * Noto Sans Bengali, bundled as one file per weight, so Bangla and Latin share a
+ * typeface and bold is real bold (Android's variable system font is drawn
+ * bolder than it is measured). It is the design Android phones already use for
+ * Bangla, with the usual digit shapes.
  */
 export const Fonts = {
-  regular: 'HindSiliguri_400Regular',
-  semibold: 'HindSiliguri_600SemiBold',
-  bold: 'HindSiliguri_700Bold',
+  regular: 'NotoSansBengali_400Regular',
+  semibold: 'NotoSansBengali_600SemiBold',
+  bold: 'NotoSansBengali_700Bold',
 } as const;
 
 /** Big enough for people who find small print and small buttons hard. */

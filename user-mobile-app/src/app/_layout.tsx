@@ -1,6 +1,6 @@
-import { HindSiliguri_400Regular } from '@expo-google-fonts/hind-siliguri/400Regular';
-import { HindSiliguri_600SemiBold } from '@expo-google-fonts/hind-siliguri/600SemiBold';
-import { HindSiliguri_700Bold } from '@expo-google-fonts/hind-siliguri/700Bold';
+import { NotoSansBengali_400Regular } from '@expo-google-fonts/noto-sans-bengali/400Regular';
+import { NotoSansBengali_600SemiBold } from '@expo-google-fonts/noto-sans-bengali/600SemiBold';
+import { NotoSansBengali_700Bold } from '@expo-google-fonts/noto-sans-bengali/700Bold';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
@@ -32,9 +32,9 @@ function AppStack() {
   const cases = useCases();
   const [fontsLoaded] = useFonts({
     ...MaterialCommunityIcons.font,
-    HindSiliguri_400Regular,
-    HindSiliguri_600SemiBold,
-    HindSiliguri_700Bold,
+    NotoSansBengali_400Regular,
+    NotoSansBengali_600SemiBold,
+    NotoSansBengali_700Bold,
   });
   const scheme = useColorScheme();
   const theme = useTheme();
