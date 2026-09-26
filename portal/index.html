@@ -192,6 +192,156 @@
         }
       }
 
+      .hotline-block {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.875rem;
+        padding-block: 1rem 2.5rem;
+      }
+
+      .hotline-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+      }
+
+      .hotline-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        max-width: 100%;
+      }
+
+      /* The number itself is the call button. */
+      .hotline {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        max-width: 100%;
+        padding: 0.625rem 1.25rem 0.625rem 0.625rem;
+        border-radius: calc(var(--radius) * 1.4);
+        background: var(--sidebar-primary);
+        color: var(--sidebar-primary-foreground);
+        text-decoration: none;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+        transition:
+          background-color 0.15s,
+          transform 0.15s;
+      }
+
+      .hotline:hover {
+        background: color-mix(in oklch, var(--sidebar-primary) 88%, var(--sidebar-ring));
+      }
+
+      .hotline:active {
+        transform: translateY(1px);
+      }
+
+      .hotline:focus-visible,
+      .btn-on-dark:focus-visible {
+        outline: 3px solid var(--sidebar-ring);
+        outline-offset: 3px;
+      }
+
+      .hotline-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: var(--radius);
+        background: var(--sidebar);
+        color: var(--sidebar-primary);
+      }
+
+      .hotline-icon .icon {
+        width: 1.375rem;
+        height: 1.375rem;
+      }
+
+      .hotline-number {
+        font-size: clamp(1.375rem, 6.4vw, 2.75rem);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+        line-height: 1.15;
+        white-space: nowrap;
+      }
+
+      .hotline-hint {
+        max-width: 36rem;
+        color: color-mix(in oklch, var(--sidebar-foreground) 85%, transparent);
+      }
+
+      /* The dashboards' button (components/ui/button.tsx), in plain CSS. */
+      .btn {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        height: 2.25rem;
+        padding-inline: 0.75rem;
+        border: 1px solid transparent;
+        border-radius: calc(var(--radius) * 0.8);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        text-decoration: none;
+        cursor: pointer;
+        transition:
+          background-color 0.15s,
+          border-color 0.15s,
+          color 0.15s;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .btn-lg {
+        height: 2.5rem;
+        padding-inline: 1rem;
+      }
+
+      .btn-on-dark {
+        border-color: color-mix(in oklch, var(--sidebar-foreground) 35%, transparent);
+        background: transparent;
+        color: var(--sidebar-foreground);
+      }
+
+      .btn-on-dark:hover {
+        background: var(--sidebar-accent);
+      }
+
+      .icon-copied,
+      [data-copied] .icon-copy {
+        display: none;
+      }
+
+      [data-copied] .icon-copied {
+        display: block;
+      }
+
+      @media (min-width: 640px) {
+        .hotline-block {
+          padding-block: 1.5rem 3.5rem;
+        }
+
+        .hotline-icon {
+          width: 3.25rem;
+          height: 3.25rem;
+        }
+
+        .hotline-icon .icon {
+          width: 1.625rem;
+          height: 1.625rem;
+        }
+      }
+
       main {
         flex: 1;
         padding-block: 2rem 3rem;
@@ -224,6 +374,18 @@
         <path d="M12 3v18" />
         <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
       </symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24">
+        <path
+          d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"
+        />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="M20 6 9 17l-5-5" />
+      </symbol>
     </svg>
 
     <a class="skip-link" href="#main" data-i18n="skip">Skip to main content</a>
@@ -241,6 +403,35 @@
             </div>
           </div>
         </div>
+
+        <section class="hotline-block" aria-labelledby="hotline-title">
+          <h2 id="hotline-title" class="hotline-title" data-i18n="hotline.title">
+            Legal aid hotline
+          </h2>
+          <div class="hotline-row">
+            <a
+              class="hotline"
+              href="tel:+19788458907"
+              aria-label="Call +1 978 845 8907"
+              data-i18n-label="hotline.call"
+            >
+              <span class="hotline-icon">
+                <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
+              </span>
+              <span class="hotline-number" data-digits>+1 978 845 8907</span>
+            </a>
+            <!-- Shown by the script when the browser lets the page copy -->
+            <button class="btn btn-lg btn-on-dark" type="button" id="copy-number" hidden>
+              <svg class="icon icon-copy" aria-hidden="true"><use href="#i-copy" /></svg>
+              <svg class="icon icon-copied" aria-hidden="true"><use href="#i-check" /></svg>
+              <span id="copy-label" data-i18n="hotline.copy">Copy number</span>
+            </button>
+          </div>
+          <p class="hotline-hint" data-i18n="hotline.hint">
+            Call to ask for legal aid, or to hear how your case is going.
+          </p>
+          <p class="sr-only" role="status" id="copy-status"></p>
+        </section>
       </div>
     </header>
 
@@ -251,5 +442,47 @@
         <p data-i18n="footer">Digital Legal Aid System (DLAS)</p>
       </div>
     </footer>
+
+    <script>
+      const HOTLINE = "+19788458907"
+
+      const MESSAGES = {
+        en: {
+          "hotline.copy": "Copy number",
+          "hotline.copied": "Copied",
+          "hotline.copyFailed": "Could not copy",
+        },
+      }
+
+      let lang = "en"
+      const t = (key) => MESSAGES[lang][key]
+
+      const copyButton = document.getElementById("copy-number")
+      const copyLabel = document.getElementById("copy-label")
+      const copyStatus = document.getElementById("copy-status")
+      let copyReset
+
+      // Copying needs a secure page (HTTPS or localhost); without it the button stays hidden.
+      if (navigator.clipboard) {
+        copyButton.hidden = false
+        copyButton.addEventListener("click", async () => {
+          const copied = await navigator.clipboard.writeText(HOTLINE).then(
+            () => true,
+            () => false,
+          )
+          copyButton.toggleAttribute("data-copied", copied)
+          copyLabel.dataset.i18n = copied ? "hotline.copied" : "hotline.copyFailed"
+          copyLabel.textContent = t(copyLabel.dataset.i18n)
+          copyStatus.textContent = copyLabel.textContent
+          clearTimeout(copyReset)
+          copyReset = setTimeout(() => {
+            copyButton.removeAttribute("data-copied")
+            copyLabel.dataset.i18n = "hotline.copy"
+            copyLabel.textContent = t("hotline.copy")
+            copyStatus.textContent = ""
+          }, 2000)
+        })
+      }
+    </script>
   </body>
 </html>
