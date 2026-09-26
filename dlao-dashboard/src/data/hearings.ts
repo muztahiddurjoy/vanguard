@@ -23,6 +23,18 @@ export const HEARINGS: Hearing[] = [
     lawyerId: "LAW-15",
   },
   {
+    id: "HR-306",
+    caseId: "DLAS-2026-047",
+    at: inDays(3, 10, 30),
+    kind: "court",
+    place: {
+      en: "Chief Judicial Magistrate Court, Rangpur",
+      bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+    },
+    purpose: { en: "Witness evidence in the theft case", bn: "চুরির মামলায় সাক্ষ্যগ্রহণ" },
+    lawyerId: "LAW-24",
+  },
+  {
     id: "HR-303",
     caseId: "APP-2026-031",
     at: inDays(6, 14),

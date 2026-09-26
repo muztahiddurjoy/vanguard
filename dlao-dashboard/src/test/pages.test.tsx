@@ -125,7 +125,7 @@ describe("Hearings", () => {
   it("groups hearings by day and sends a reminder", async () => {
     const { user } = renderApp({ path: "/hearings" })
     expect(screen.getByRole("heading", { level: 2, name: "Today" })).toBeInTheDocument()
-    expect(screen.getByRole("status")).toHaveTextContent("5 hearings in the next two weeks")
+    expect(screen.getByRole("status")).toHaveTextContent("6 hearings in the next two weeks")
 
     await user.click(screen.getByRole("button", { name: "Send reminder: Rahima Begum" }))
     expect(screen.getByRole("button", { name: "Reminder sent: Rahima Begum" })).toBeDisabled()
@@ -208,8 +208,8 @@ describe("Help", () => {
 describe("Notifications", () => {
   it("lists what needs attention, marks items read and opens the case", async () => {
     const { user } = renderApp({ path: "/" })
-    // 11 cases waiting on a step + 1 hearing today
-    await user.click(screen.getByRole("button", { name: "Notifications: 12 unread" }))
+    // 10 cases waiting on a step + 1 hearing today
+    await user.click(screen.getByRole("button", { name: "Notifications: 11 unread" }))
     const panel = await screen.findByRole("dialog", { name: "Notifications" })
     await user.click(within(panel).getByRole("button", { name: /Abdul Malek/ }))
 
@@ -217,7 +217,7 @@ describe("Notifications", () => {
     expect(within(caseDialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
     await user.keyboard("{Escape}")
     expect(
-      await screen.findByRole("button", { name: "Notifications: 11 unread" }),
+      await screen.findByRole("button", { name: "Notifications: 10 unread" }),
     ).toBeInTheDocument()
   })
 })

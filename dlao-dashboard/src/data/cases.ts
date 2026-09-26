@@ -24,6 +24,10 @@ const COURT = {
     en: "Assistant Judge Court, Rangpur Sadar",
     bn: "সহকারী জজ আদালত, রংপুর সদর",
   },
+  chiefJudicialMagistrate: {
+    en: "Chief Judicial Magistrate Court, Rangpur",
+    bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+  },
 } satisfies Record<string, Localized>
 const OFFICE = {
   rangpur: { en: "Rangpur", bn: "রংপুর" },
@@ -293,8 +297,9 @@ export const INITIAL_CASES: LegalCase[] = [
     linkedRecords: { courtCaseIds: [103], prisonerId: 202 },
   },
   {
-    // The magistrate's bench assistant applied after checking his NID by e-KYC.
-    id: "APP-2026-037",
+    // The magistrate's bench assistant applied after checking his NID by e-KYC. The same case
+    // is on Adv. Rafiqul Hasan's list in the panel lawyers' dashboard.
+    id: "DLAS-2026-047",
     applicant: {
       name: { en: "Jalal Uddin", bn: "জালাল উদ্দিন" },
       phone: "—",
@@ -307,35 +312,59 @@ export const INITIAL_CASES: LegalCase[] = [
     },
     category: "criminalDefence",
     priority: "high",
-    queues: ["actionToday"],
+    queues: [],
     flags: ["inCustody"],
-    actions: ["assignLawyer"],
+    actions: [],
     summary: {
-      en: "Accused of theft and in jail since June. His lawyer withdrew in August, and he had no lawyer when the charge was framed. The court asks for a legal aid lawyer before the evidence hearing in three days.",
-      bn: "চুরির অভিযোগে জুন থেকে কারাগারে আছেন। আগস্টে তাঁর আইনজীবী সরে যান; অভিযোগ গঠনের দিন তাঁর কোনো আইনজীবী ছিলেন না। তিন দিন পর সাক্ষ্যগ্রহণের আগে আদালত একজন লিগ্যাল এইড আইনজীবী চেয়েছে।",
+      en: "Undertrial prisoner in Rangpur Central Jail since June, accused of theft. His lawyer withdrew in August, and nobody defended him when the charge was framed. Witness evidence starts on the next date.",
+      bn: "জুন থেকে রংপুর কেন্দ্রীয় কারাগারে বিচারাধীন বন্দি, চুরির মামলার আসামি। আগস্টে তাঁর আইনজীবী মামলা ছেড়ে দেন, অভিযোগ গঠনের দিন তাঁর পক্ষে কেউ ছিলেন না। পরবর্তী তারিখে সাক্ষ্যগ্রহণ শুরু।",
     },
     channel: "court",
-    receivedAt: hoursAgo(26),
+    receivedAt: daysAgo(6),
+    lawyer: {
+      id: "LAW-24",
+      missedUpdates: 0,
+      lastUpdateAt: daysAgo(2),
+      updateDueAt: inDays(6, 10, 30),
+    },
+    lawyerUpdates: [
+      {
+        id: "LU-0471",
+        at: daysAgo(2),
+        lawyerId: "LAW-24",
+        stage: "other",
+        summary: {
+          en: "Met Jalal Uddin at Rangpur Central Jail and signed the vakalatnama. Applied for certified copies of the charge sheet and the witness statements.",
+          bn: "রংপুর কেন্দ্রীয় কারাগারে জালাল উদ্দিনের সঙ্গে দেখা করে ওকালতনামায় সই নিয়েছি। অভিযোগপত্র ও সাক্ষীদের জবানবন্দির সার্টিফায়েড কপির আবেদন করেছি।",
+        },
+        court: COURT.chiefJudicialMagistrate,
+        nextHearingAt: inDays(3, 10, 30),
+      },
+    ],
+    nextHearing: { at: inDays(3, 10, 30), court: COURT.chiefJudicialMagistrate },
+    courtStage: "other",
     triage: {
       priority: "high",
       confidence: 0.88,
       status: "accepted",
-      generatedAt: hoursAgo(26),
+      generatedAt: daysAgo(6),
       factors: [
         { key: "hearingImminent", detected: true, agent: "jurisdiction", weight: "high" },
         { key: "priorLegalAction", detected: true, agent: "intake", weight: "low" },
         { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
       ],
       rationale: {
-        en: "Recommended HIGH: the applicant is in custody with no defence lawyer and a hearing in three days.",
-        bn: "প্রস্তাবিত অগ্রাধিকার উচ্চ: আবেদনকারী হেফাজতে, আসামিপক্ষের আইনজীবী নেই, তিন দিন পর শুনানি।",
+        en: "Recommended HIGH: the applicant is in custody with no defence lawyer and a hearing soon.",
+        bn: "প্রস্তাবিত অগ্রাধিকার উচ্চ: আবেদনকারী হেফাজতে, আসামিপক্ষের আইনজীবী নেই, শিগগির শুনানি।",
       },
     },
     activity: [
-      { type: "received", at: hoursAgo(26), channel: "court" },
-      { type: "aiTriage", at: hoursAgo(26), priority: "high" },
-      { type: "identityChecked", at: hoursAgo(26), verified: true },
-      { type: "triageAccepted", at: hoursAgo(20), priority: "high" },
+      { type: "received", at: daysAgo(6), channel: "court" },
+      { type: "identityChecked", at: daysAgo(6), verified: true },
+      { type: "aiTriage", at: daysAgo(6), priority: "high" },
+      { type: "triageAccepted", at: daysAgo(6), priority: "high" },
+      { type: "lawyerAssigned", at: daysAgo(5), lawyerId: "LAW-24" },
+      { type: "lawyerUpdate", at: daysAgo(2), lawyerId: "LAW-24", stage: "other" },
     ],
     identity: {
       filingFor: "self",
@@ -348,12 +377,12 @@ export const INITIAL_CASES: LegalCase[] = [
     filerReceipt: { status: "handedOver" },
     documents: [
       {
-        id: "DOC-3701",
+        id: "DOC-4701",
         name: "applicant-signature.png",
         type: "image",
         sizeBytes: 18_400,
         signature: {
-          uploadedAt: hoursAgo(26.5),
+          uploadedAt: daysAgo(6),
           sha256: "3f8a91c2d07be45a6c19e0f27d4b8a5163ce92f0a1d7b6e4c85f3a2091de6b7c",
         },
       },
@@ -367,8 +396,8 @@ export const INITIAL_CASES: LegalCase[] = [
       },
       staff: { en: "Md. Abdul Hakim", bn: "মো. আব্দুল হাকিম" },
     },
-    // The court linked its own case; the jail's record of him is not linked yet.
-    linkedRecords: { courtCaseIds: [101] },
+    // G.R. 455/2026 and the jail's record of him; his 2024 case shows as a previous record.
+    linkedRecords: { courtCaseIds: [101], prisonerId: 201 },
   },
   {
     id: "DLAS-2026-045",

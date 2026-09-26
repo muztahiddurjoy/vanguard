@@ -449,8 +449,8 @@ export const SAMPLE_PRISONERS: PrisonerDetail[] = [
   },
 ]
 
-const HOUR = 60 * 60 * 1000
-const hoursAgo = (h: number) => new Date(Date.now() - h * HOUR).toISOString()
+const DAY = 24 * 60 * 60 * 1000
+const daysAgo = (d: number) => new Date(Date.now() - d * DAY).toISOString()
 
 /** What the court or jail recorded when it applied, for the built-in cases it sent. */
 export const SAMPLE_SUBMISSIONS: Record<
@@ -459,12 +459,12 @@ export const SAMPLE_SUBMISSIONS: Record<
 > = {
   // The jail could not check his NID yet: no e-KYC, no signature.
   "APP-2026-036": { helpNeeded: "bail", identity: {} },
-  "APP-2026-037": {
+  "DLAS-2026-047": {
     helpNeeded: "defence",
     identity: {
-      ekyc: { status: "verified", at: hoursAgo(27), by: "court:CS-11", nidLast4: "6397" },
+      ekyc: { status: "verified", at: daysAgo(6), by: "court:CS-11", nidLast4: "6397" },
       signature: {
-        uploadedAt: hoursAgo(26.5),
+        uploadedAt: daysAgo(6),
         by: "court:CS-11",
         sha256: "3f8a91c2d07be45a6c19e0f27d4b8a5163ce92f0a1d7b6e4c85f3a2091de6b7c",
       },

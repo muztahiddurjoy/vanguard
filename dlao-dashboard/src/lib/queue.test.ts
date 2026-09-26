@@ -7,7 +7,7 @@ describe("countByQueue", () => {
   it("counts every queue in the seed data", () => {
     expect(countByQueue(INITIAL_CASES)).toEqual({
       all: 13,
-      actionToday: 7,
+      actionToday: 6,
       pendingTriage: 4,
       duplicates: 1,
       alerts: 4,
