@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.agents import helpline
 from app.agents.helpline import HelplineConversation, LLMAnswer, find_token, intent_of
 from app.database import utcnow
-from app.models import Case, MediationSession, format_token
+from app.models import Case, MediationNotice, MediationSession, Party, format_token
 from app.services.stream_manager import StreamManager
 from tests.test_telephony import START, FakeTTS, FakeTwilio, ScriptedTranscriber, until
 
@@ -256,3 +256,242 @@ def test_reads_the_next_court_date_the_lawyer_reported(client, db):
     assert helpline.describe(status, "en").endswith(
         "The next court hearing is on " + helpline.say_date(status["nextHearing"], "en") + "."
     )
+
+
+# --- mediation notices -----------------------------------------------------------------
+
+PLACE = "District Legal Aid Office, Rangpur (District Judge Court building)"
+PLACE_BN = "জেলা লিগ্যাল এইড অফিস, রংপুর (জেলা জজ আদালত ভবন)"
+
+
+def a_notice(**changes) -> dict:
+    return {
+        "kind": "notice",
+        "code": "55556666",
+        "reference": "DLAS-2026-045",
+        "role": "respondent",
+        "scheduledFor": (utcnow() + timedelta(days=3)).isoformat(),
+        "place": PLACE,
+        "placeBn": PLACE_BN,
+        "mode": "in_person",
+        "status": "scheduled",
+        **changes,
+    }
+
+
+NOTICE = a_notice()
+
+
+def lookup_both(number: str) -> dict | None:
+    return {"48210937": {"kind": "case", **STATUS}, "55556666": NOTICE}.get(number)
+
+
+def test_mediation_notice_intents():
+    assert intent_of("I got a mediation notice") == "mediationNotice"
+    assert intent_of("মধ্যস্থতার নোটিশ পেয়েছি, বুঝতে পারছি না") == "mediationNotice"
+    assert intent_of("what is my notice number for?") == "mediationNotice"
+    # The respondent's "visit the office" SMS is still the other notice.
+    assert intent_of("I got a notice that a case was filed against me") == "notice"
+
+
+def test_reads_a_mediation_notice_and_answers_questions_about_it():
+    conv = HelplineConversation(use_default_llm=False)
+    conv.start("n1", language="en")
+    s = conv.turn("n1", "I got an SMS about a meeting, the number is 5555 6666", lookup_both)
+    date = helpline.say_date(NOTICE["scheduledFor"], "en")
+    assert s["intent"] == "mediationNotice" and s["notice"] == NOTICE
+    assert s["reply"] == (
+        "This notice is about a mediation meeting on case DLAS-2026-045. You are invited as the "
+        f"other party. The meeting is on {date}. Place: {PLACE}. Mediation is free and "
+        "voluntary: nobody has to agree to a settlement. Please bring your NID and the notice "
+        "number. If you cannot come, please call the office before the date. If you miss "
+        "meetings again and again, your Union Digital Centre may contact you about the next "
+        "date. Is there anything else?"
+    )
+
+    def ask(question: str) -> str:
+        return conv.turn("n1", question, lookup_both)["reply"]
+
+    assert ask("When is it?") == f"The meeting is on {date}. Is there anything else?"
+    assert ask("And what time again?") == f"The meeting is on {date}. Is there anything else?"
+    assert ask("Where do I have to go?") == f"Place: {PLACE}. Is there anything else?"
+    assert ask("What should I bring?").startswith(
+        "Please bring your NID, the notice number, 5 5 5 5, 6 6 6 6, and any papers"
+    )
+    cant = ask("What if I can't come?")
+    assert cant.startswith("If you cannot come, please tell the office before the date: call 16430")
+    assert "Union Digital Centre" in cant
+    assert ask("Can you repeat the notice?").startswith("This notice is about a mediation")
+    # A tracking number in the same call is still a case.
+    assert ask("my case is 4821 0937").startswith("Your case DLAS-2026-045 is active")
+    # What mediation is, and the goodbye, work as always.
+    assert ask("Is mediation free?").startswith("In mediation, a legal aid officer")
+    s = conv.turn("n1", "that's all, thank you", lookup_both)
+    assert s["complete"] is True and s["reply"] == helpline.GOODBYE["en"]
+
+
+def test_reads_a_mediation_notice_in_bangla():
+    conv = HelplineConversation(use_default_llm=False)
+    conv.start("n2")
+    s = conv.turn("n2", "আমার নোটিশ নম্বর ৫৫৫৫ ৬৬৬৬", lookup_both)
+    date = helpline.say_date(NOTICE["scheduledFor"], "bn")
+    assert s["reply"].startswith(
+        "এই নোটিশটি মামলা DLAS-2026-045-এর একটি মধ্যস্থতা সভা নিয়ে। আপনাকে অপর পক্ষ হিসেবে ডাকা হয়েছে। "
+        f"সভার সময় {date}। স্থান: {PLACE_BN}। মধ্যস্থতা বিনামূল্যে ও স্বেচ্ছামূলক"
+    )
+    assert "ইউনিয়ন ডিজিটাল সেন্টার" in s["reply"]
+    assert s["reply"].endswith(helpline.ANYTHING_ELSE["bn"])
+
+    def ask(question: str) -> str:
+        return conv.turn("n2", question, lookup_both)["reply"]
+
+    assert ask("সভাটা কখন?").startswith(f"সভার সময় {date}।")
+    assert ask("কোথায় যেতে হবে?").startswith(f"স্থান: {PLACE_BN}।")
+    assert ask("কী আনতে হবে?").startswith("আপনার এনআইডি, নোটিশ নম্বর ৫ ৫ ৫ ৫, ৬ ৬ ৬ ৬,")
+    cant = ask("যেতে না পারলে কী হবে?")
+    assert cant.startswith("আসতে না পারলে তারিখের আগেই অফিসকে জানান") and "১৬৪৩০" in cant
+
+
+def test_a_cancelled_or_past_notice_says_so():
+    cancelled = a_notice(status="cancelled")
+    text = helpline.describe_notice(cancelled, "en")
+    assert text.startswith("The mediation meeting on case DLAS-2026-045 that was set for")
+    assert "has been cancelled" in text
+    # Questions about it get the same answer, not a date that no longer holds.
+    assert helpline.about_notice(cancelled, "when", "en") == text
+    past = a_notice(scheduledFor=(utcnow() - timedelta(days=2)).isoformat())
+    assert helpline.describe_notice(past, "bn").startswith("মামলা DLAS-2026-045-এর মধ্যস্থতা সভা ছিল")
+
+
+def test_a_caller_with_a_mediation_notice_is_asked_for_its_number():
+    conv = HelplineConversation(use_default_llm=False)
+    conv.start("n3", language="en")
+    s = conv.turn("n3", "I got a mediation notice and I don't understand it", lookup_both)
+    assert s["reply"] == helpline.ASK_NOTICE["en"] and s["awaiting"] == "notice"
+    assert conv.turn("n3", "um", lookup_both)["reply"] == helpline.ASK_NOTICE["en"]
+    assert conv.turn("n3", "1111 2222", lookup_both)["reply"] == helpline.NOTICE_UNKNOWN["en"]
+    s = conv.turn("n3", "3333 4444", lookup_both)
+    assert s["reply"].startswith(helpline.NOTICE_GIVE_UP["en"])
+    assert s["awaiting"] is None and s["token_tries"] == 0 and s["complete"] is False
+    # Asked for a notice number, a caller who says a tracking number still hears the case.
+    conv.turn("n3", "mediation notice", lookup_both)
+    s = conv.turn("n3", "4821 0937", lookup_both)
+    assert s["reply"].startswith("Your case DLAS-2026-045 is active")
+
+    conv.start("n4")
+    s = conv.turn("n4", "মধ্যস্থতার নোটিশ পেয়েছি", lookup_both)
+    assert s["reply"] == helpline.ASK_NOTICE["bn"]
+    s = conv.turn("n4", "নোটিশ নম্বর তো নেই", lookup_both)
+    assert s["reply"] == f"{helpline.NO_NOTICE['bn']} {helpline.ANYTHING_ELSE['bn']}"
+
+    # Asked for the tracking number first (the hotline), a caller can switch to a notice.
+    conv.start("n5", language="en", tracking=True)
+    assert conv.turn("n5", "1111 2222", lookup_both)["reply"] == helpline.TOKEN_UNKNOWN["en"]
+    s = conv.turn("n5", "no, it's a mediation notice", lookup_both)
+    assert s["reply"] == helpline.ASK_NOTICE["en"] and s["token_tries"] == 0
+    assert conv.turn("n5", "5555 6666", lookup_both)["intent"] == "mediationNotice"
+
+
+def test_the_model_hears_the_notice_as_a_fact():
+    class FakeLLM:
+        def __init__(self):
+            self.calls = []
+
+        def structured(self, **kw):
+            self.calls.append(kw)
+            return LLMAnswer(answer="Yes, a relative may come with you.")
+
+    llm = FakeLLM()
+    conv = HelplineConversation(llm=llm)
+    conv.start("n6", language="en")
+    conv.turn("n6", "5555 6666", lookup_both)
+    s = conv.turn("n6", "Can my brother come with me?", lookup_both)
+    assert s["reply"].startswith("Yes, a relative may come with you.")
+    assert "mediation meeting on case DLAS-2026-045" in llm.calls[0]["content"]
+
+
+def test_http_notice_lookup_and_conversation(client, db):
+    body = {
+        "applicant": {"name": "Abdul Malek", "phone": "01819000560", "district": "Rangpur"},
+        "narrative": "My cousins have occupied 22 decimals of my inherited farmland.",
+    }
+    ref = client.post("/intake/web", json=body).json()["id"]
+    at = utcnow() + timedelta(days=4)
+    session = client.post(
+        "/mediation/sessions",
+        json={"case_ref": ref, "scheduled_for": at.isoformat(), "mode": "odr_phone"},
+    ).json()
+    code = session["notices"][0]["code"]
+
+    found = client.get(f"/helpline/notice/{code}").json()
+    assert found == {
+        "reference": ref,
+        "role": "applicant",
+        "scheduledFor": session["scheduledFor"],
+        "place": "By phone (the office will call)",
+        "placeBn": "ফোনে (অফিস থেকে ফোন করা হবে)",
+        "mode": "odr_phone",
+        "status": "scheduled",
+    }
+    assert "Malek" not in str(found) and "farmland" not in str(found)
+    assert client.get(f"/helpline/notice/{code.replace('-', '')}").status_code == 200
+    assert client.get("/helpline/notice/0000-0000").status_code == 404
+    assert client.get(f"/helpline/track/{code}").status_code == 404  # not a tracking number
+
+    sid = client.post("/helpline/conversations", json={"language": "en"}).json()["sessionId"]
+    turn = f"/helpline/conversations/{sid}/turns"
+    r = client.post(turn, json={"utterance": f"my notice number is {code}"}).json()
+    assert r["intent"] == "mediationNotice"
+    assert r["reply"].startswith(f"This notice is about a mediation meeting on case {ref}.")
+    assert "You are invited as the applicant." in r["reply"]
+    r = client.post(turn, json={"utterance": "where is it?"}).json()
+    assert r["reply"].startswith("Place: By phone (the office will call).")
+    token = db.scalars(select(Case.tracking_token)).one()
+    r = client.post(turn, json={"utterance": f"and my case, {token}"}).json()
+    assert r["reply"].startswith(f"Your case {ref} is in mediation. The next mediation session")
+
+
+def test_phone_call_on_the_helpline_reads_a_mediation_notice(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    with factory() as db:
+        case = Case(application_id="APP-2026-778", tracking_token="48210937", channel="hotline",
+                    current_office="Rangpur", summary="x")  # fmt: skip
+        db.add(case)
+        db.flush()
+        session = MediationSession(case_id=case.id, scheduled_for=utcnow() + timedelta(days=2),
+                                   mode="in_person", created_by="dlao-1")  # fmt: skip
+        party = Party(name="Abdul Jalil")
+        db.add_all([session, party])
+        db.flush()
+        db.add(
+            MediationNotice(session_id=session.id, case_id=case.id, party_id=party.id,
+                            role="respondent", code="55556666", status="sent")
+        )  # fmt: skip
+        db.commit()
+
+    async def scenario():
+        ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+        manager = StreamManager(
+            ws,
+            tts=tts,
+            transcriber_factory=lambda lang: stt,
+            helpline_agent=HelplineConversation(use_default_llm=False),
+            session_factory=factory,
+        )
+        runner = asyncio.create_task(manager.run())
+        params = {"language": "en", "line": "helpline", "caller": "+8801811223344"}
+        ws.push({**START, "start": {**START["start"], "customParameters": params}})
+        await until(lambda: len(tts.spoken) == 1)
+        stt.say("I got a notice, the number is 5555 6666")
+        stt.say("where is the meeting?")
+        stt.say("that's all, thank you")
+        await asyncio.wait_for(runner, 5)
+        return tts
+
+    tts = asyncio.run(scenario())
+    assert tts.spoken[1].startswith(
+        "This notice is about a mediation meeting on case APP-2026-778. You are invited as the "
+        "other party."
+    )
+    assert tts.spoken[2] == f"Place: {PLACE}. {helpline.ANYTHING_ELSE['en']}"
+    assert tts.spoken[-1] == helpline.GOODBYE["en"]

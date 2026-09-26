@@ -108,10 +108,14 @@ class HelplineState(TypedDict, total=False):
     reply: str
     complete: bool
     intent: str | None
-    # "token" right after we asked for the tracking number, so a bare number fills it.
+    # "token" or "notice" right after we asked for the tracking number or a mediation
+    # notice's number, so a bare number fills it.
     awaiting: str | None
-    # Tracking numbers not heard or not found; at MAX_TOKEN_TRIES we stop asking.
+    # Numbers not heard or not found; at MAX_TOKEN_TRIES we stop asking.
     token_tries: int
+    # The mediation notice the caller gave the number of (services.mediation.public_notice,
+    # plus "code"), so "when is it?" or "where?" is answered from it.
+    notice: dict[str, Any] | None
 
 
 class DocumentState(TypedDict, total=False):
