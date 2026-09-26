@@ -376,7 +376,7 @@ export const bn: Messages = {
     description:
       "এই কারাগারের একজন বন্দির জন্য। আবেদনটি সরাসরি জেলা লিগ্যাল এইড অফিসে যায়, কাউকে আবার লিখতে হয় না।",
     steps: "ধাপসমূহ",
-    stepOf: (n, total) => `ধাপ ${n}, মোট ${total}`,
+    stepOf: (n, total) => `${total}টি ধাপের ${n} নম্বর`,
     step: {
       identity: "পরিচয়",
       application: "আবেদন",
@@ -384,9 +384,9 @@ export const bn: Messages = {
       review: "দেখে জমা দিন",
     },
     stepDone: (step) => `${step}: সম্পন্ন`,
-    next: "পরের ধাপ",
-    back: "আগের ধাপ",
-    later: "পরে যোগ করব",
+    next: "পরবর্তী",
+    back: "পেছনে",
+    later: "এখন নয়: পরে যোগ করুন",
     identity: {
       title: "পরিচয় (ই-কেওয়াইসি)",
       prisoner: (name) => `বন্দির নথি থেকে পূরণ করা হয়েছে: ${name}।`,
@@ -439,8 +439,8 @@ export const bn: Messages = {
       noSignature: "এখনো নেই। পরে আবেদনের পাতা থেকে যোগ করতে পারবেন।",
       change: "বদলান",
       changeStep: (step) => `বদলান: ${step}`,
-      submit: "লিগ্যাল এইড অফিসে পাঠান",
-      submitting: "পাঠানো হচ্ছে…",
+      submit: "লিগ্যাল এইড অফিসে জমা দিন",
+      submitting: "জমা হচ্ছে…",
       server:
         "আবেদনটি পাঠানো যায়নি। সংযোগ দেখে আবার চেষ্টা করুন: আবার পাঠালেও দ্বিতীয় কোনো আবেদন তৈরি হবে না।",
     },

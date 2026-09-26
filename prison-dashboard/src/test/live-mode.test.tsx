@@ -351,7 +351,7 @@ describe("with a backend (VITE_API_URL)", () => {
       new File(["jpeg-bytes"], "thumbprint.jpg", { type: "image/jpeg" }),
     )
     await user.click(await screen.findByRole("button", { name: "Next" }))
-    await user.click(await screen.findByRole("button", { name: "Send to the legal aid office" }))
+    await user.click(await screen.findByRole("button", { name: "Submit to the legal aid office" }))
 
     expect(await screen.findByText("5831-2046")).toBeInTheDocument()
     const post = calls.find((c) => c.method === "POST" && c.path === "/prison/applications")!

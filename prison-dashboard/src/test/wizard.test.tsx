@@ -78,7 +78,7 @@ describe("a new legal aid application", () => {
     expect(review).toHaveTextContent("Defence in a criminal case")
     expect(review).toHaveTextContent(why)
     expect(within(review).getByAltText("The signature")).toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Send to the legal aid office" }))
+    await user.click(screen.getByRole("button", { name: "Submit to the legal aid office" }))
 
     expect(await screen.findByRole("heading", { name: "Application sent" })).toBeInTheDocument()
     expect(screen.getByText("Tracking number").nextElementSibling?.textContent).toMatch(
@@ -135,10 +135,10 @@ describe("a new legal aid application", () => {
       screen.getByText(/A signature needs a verified identity. Verify the prisoner in step 1/),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Scanned signature or thumbprint")).not.toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Add it later" }))
+    await user.click(screen.getByRole("button", { name: "Skip: add it later" }))
     const review = await screen.findByRole("region", { name: "Review and submit" })
     expect(review).toHaveTextContent("Not verified. You can verify it later from the application.")
-    await user.click(screen.getByRole("button", { name: "Send to the legal aid office" }))
+    await user.click(screen.getByRole("button", { name: "Submit to the legal aid office" }))
     await user.click(await screen.findByRole("link", { name: "Open the application" }))
 
     // Later, from the application: verify, then sign.
@@ -187,6 +187,6 @@ describe("a new legal aid application", () => {
     await anyFile.upload(input, new File(["%PDF"], "scan.pdf", { type: "application/pdf" }))
     expect(screen.getByText("Choose a PNG or JPEG image.")).toBeInTheDocument()
     // Nothing usable chosen: the step can still be skipped.
-    expect(screen.getByRole("button", { name: "Add it later" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Skip: add it later" })).toBeInTheDocument()
   })
 })

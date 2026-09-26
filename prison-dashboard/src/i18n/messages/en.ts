@@ -390,7 +390,7 @@ export const en = {
     stepDone: (step: string) => `${step}: done`,
     next: "Next",
     back: "Back",
-    later: "Add it later",
+    later: "Skip: add it later",
     identity: {
       title: "Identity (e-KYC)",
       prisoner: (name: string) => `Filled in from the prisoner's record: ${name}.`,
@@ -444,8 +444,8 @@ export const en = {
       noSignature: "None yet. You can add it later from the application.",
       change: "Change",
       changeStep: (step: string) => `Change: ${step}`,
-      submit: "Send to the legal aid office",
-      submitting: "Sending…",
+      submit: "Submit to the legal aid office",
+      submitting: "Submitting…",
       server:
         "The application could not be sent. Check your connection and try again: sending it again never makes a second application.",
     },
