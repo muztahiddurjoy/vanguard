@@ -21,6 +21,7 @@ import {
 import type { CauseList } from "@/data/types"
 import { useResource } from "@/hooks/use-resource"
 import { useI18n } from "@/i18n/use-i18n"
+import { useActorName } from "@/lib/actor"
 import { addDays, isDay, today } from "@/lib/dates"
 import { useBackend } from "@/state/use-backend"
 
@@ -73,6 +74,7 @@ function CauseListView({ list }: { list: CauseList }) {
 
 export function CauseListPage() {
   const { t, f } = useI18n()
+  const actorName = useActorName()
   const backend = useBackend()
   const navigate = useNavigate()
   const { date: param } = useParams()
@@ -148,7 +150,7 @@ export function CauseListPage() {
                 {resource.data.publishedAt && (
                   <p>
                     {t.causeList.published(
-                      resource.data.publishedBy ?? "—",
+                      actorName(resource.data.publishedBy),
                       f.dateTime(resource.data.publishedAt),
                     )}
                   </p>

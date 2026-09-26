@@ -13,6 +13,7 @@ import type { CourtCaseDetail, CourtLawyer } from "@/data/types"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useResource } from "@/hooks/use-resource"
 import { useI18n } from "@/i18n/use-i18n"
+import { useActorName } from "@/lib/actor"
 import { NotFoundPage } from "@/pages/not-found-page"
 import { useBackend } from "@/state/use-backend"
 
@@ -88,6 +89,7 @@ function CaseView({
   onSaved: (d: CourtCaseDetail) => void
 }) {
   const { t, f, pickName } = useI18n()
+  const actorName = useActorName()
   usePageTitle(c.caseNumber)
   const proceedings = [...c.proceedings].reverse()
   const current = c.lawyers.filter((l) => l.current)
@@ -175,7 +177,7 @@ function CaseView({
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {t.case.recordedBy(p.recordedBy, f.dateTime(p.recordedAt))}
+                      {t.case.recordedBy(actorName(p.recordedBy), f.dateTime(p.recordedAt))}
                     </p>
                   </li>
                 ))}

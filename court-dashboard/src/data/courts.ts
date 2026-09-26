@@ -88,6 +88,12 @@ export function findStaff(id: string): CourtStaff | undefined {
   return COURT_STAFF.find((s) => s.id === key)
 }
 
+/** The server records who acted as "court:CS-11": the member of staff, when on the roster. */
+export function staffOfActor(actor: string): CourtStaff | undefined {
+  const [kind, id] = actor.split(":")
+  return kind === "court" && id ? findStaff(id) : undefined
+}
+
 /** The jails whose prisoners appear before the district's courts (server/app/services/prisons.py). */
 export const PRISONS: PrisonRef[] = [
   { id: "RNG-CJ", name: "Rangpur Central Jail", nameBn: "রংপুর কেন্দ্রীয় কারাগার" },
