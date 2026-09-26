@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="sos_gesture_accessibility_label">আইনি সহায়তা SOS</string>
+  <string name="sos_gesture_accessibility_summary">সাহায্যের জন্য ফোন করতে ভলিউম বাড়ানো ও কমানোর বোতাম একসাথে চাপুন।</string>
+  <string name="sos_gesture_accessibility_description">যেকোনো স্ক্রিন থেকে ভলিউম বাড়ানো ও কমানোর বোতাম একসাথে চাপলে সাহায্যের জন্য ফোন যাবে। অ্যাপটি শুধু এই দুটি বোতাম পড়ে। আপনার স্ক্রিনে কী আছে বা আপনি কী লিখছেন তা দেখে না, আর ভলিউম আগের মতোই কাজ করে।</string>
+  <string name="sos_gesture_channel_name">SOS</string>
+  <string name="sos_gesture_channel_description">SOS চালু থাকলে দেখা যায়।</string>
+  <string name="sos_gesture_notification_title">SOS চালু আছে</string>
+  <string name="sos_gesture_notification_text">%1$s নম্বরে ফোন করতে ভলিউম বাড়ানো ও কমানোর বোতাম একসাথে চাপুন।</string>
+  <string name="sos_gesture_action_call">এখনই ফোন করুন</string>
+  <string name="sos_gesture_action_stop">বন্ধ করুন</string>
+</resources>
