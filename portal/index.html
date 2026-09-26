@@ -683,7 +683,7 @@
               <span class="hotline-icon">
                 <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
               </span>
-              <span class="hotline-number" id="hotline-number">+1 978 845 8907</span>
+              <span class="hotline-number" id="hotline-number">+1&nbsp;978&nbsp;845&nbsp;8907</span>
             </a>
             <!-- Shown by the script when the browser lets the page copy -->
             <button class="btn btn-lg btn-on-dark" type="button" id="copy-number" hidden>
@@ -845,7 +845,8 @@
 
     <script>
       const HOTLINE = "+19788458907"
-      const HOTLINE_SHOWN = "+1 978 845 8907"
+      // Non-breaking spaces: the number never wraps.
+      const HOTLINE_SHOWN = "+1\u00a0978\u00a0845\u00a08907"
       // The dashboards keep the reader's language under this key too.
       const STORAGE_KEY = "dlas.lang"
 
