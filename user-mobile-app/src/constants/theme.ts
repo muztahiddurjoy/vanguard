@@ -1,65 +1,87 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Colors, spacing and type for the app, in light and dark. Green for the legal
+ * aid office, red kept for SOS and danger.
  */
-
-import '@/global.css';
-
-import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#0f172a',
+    textSecondary: '#475569',
+    textMuted: '#64748b',
+    background: '#f4f6f8',
+    card: '#ffffff',
+    cardAlt: '#eef2f5',
+    border: '#dde3ea',
+    primary: '#047857',
+    primaryText: '#ffffff',
+    primarySoft: '#d1fae5',
+    primarySoftText: '#065f46',
+    danger: '#dc2626',
+    dangerText: '#ffffff',
+    dangerSoft: '#fee2e2',
+    dangerSoftText: '#991b1b',
+    warning: '#b45309',
+    warningSoft: '#fef3c7',
+    warningSoftText: '#92400e',
+    info: '#1d4ed8',
+    infoSoft: '#dbeafe',
+    infoSoftText: '#1e40af',
+    tabBar: '#ffffff',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#f1f5f9',
+    textSecondary: '#cbd5e1',
+    textMuted: '#94a3b8',
+    background: '#0b1015',
+    card: '#151c24',
+    cardAlt: '#1c252f',
+    border: '#27313d',
+    primary: '#34d399',
+    primaryText: '#04241a',
+    primarySoft: '#0f3a2d',
+    primarySoftText: '#a7f3d0',
+    danger: '#f87171',
+    dangerText: '#2a0606',
+    dangerSoft: '#3b1215',
+    dangerSoftText: '#fecaca',
+    warning: '#fbbf24',
+    warningSoft: '#3a2a0a',
+    warningSoftText: '#fde68a',
+    info: '#60a5fa',
+    infoSoft: '#11264a',
+    infoSoftText: '#bfdbfe',
+    tabBar: '#11171e',
   },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
+export type Theme = { [K in keyof typeof Colors.light]: string };
 
 export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+export const Radius = {
+  sm: 8,
+  md: 12,
+  lg: 18,
+  pill: 999,
+} as const;
+
+/** Big enough for people who find small print and small buttons hard. */
+export const Type = {
+  title: { fontSize: 26, lineHeight: 34, fontWeight: '800' },
+  heading: { fontSize: 19, lineHeight: 26, fontWeight: '700' },
+  body: { fontSize: 16, lineHeight: 24, fontWeight: '400' },
+  bodyStrong: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  small: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  smallStrong: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  number: { fontSize: 32, lineHeight: 40, fontWeight: '800', letterSpacing: 2 },
+} as const;
+
+/** Tap targets are at least this tall. */
+export const MIN_TOUCH = 48;
