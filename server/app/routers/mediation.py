@@ -1,4 +1,9 @@
-"""Online dispute resolution: scheduling, settlement drafts (T7) and e-signatures (T11).
+"""Online dispute resolution: scheduling, attendance, settlement drafts (T7) and e-signatures (T11).
+
+Scheduling a session sends each party an SMS notice with its own notice number
+and the helpline's; the officer then records who came, and a party who keeps
+missing sessions is looked for through their Union Digital Centre
+(``services.mediation``).
 
 Lifecycle of a settlement document:
 
@@ -20,8 +25,9 @@ from sqlalchemy.orm import Session
 
 from app.agents.t7_settlement import run_settlement_draft
 from app.config import get_settings
-from app.database import as_utc, get_db
+from app.database import as_utc, get_db, utcnow
 from app.models import (
+    Attendance,
     AuditAction,
     Case,
     CaseStatus,
@@ -35,11 +41,13 @@ from app.models import (
     PartyRole,
     SafetyLevel,
     Signature,
+    UdcNotice,
+    UdcNoticeStatus,
     record_audit,
 )
 from app.routers import current_actor, require_api_token
-from app.routers.dlao import get_case_or_404
-from app.services import crypto, safe_contact
+from app.routers.dlao import JustificationIn, get_case_or_404
+from app.services import crypto, mediation, safe_contact
 
 router = APIRouter(
     prefix="/mediation", tags=["mediation"], dependencies=[Depends(require_api_token)]
@@ -47,20 +55,6 @@ router = APIRouter(
 
 
 # --- scheduling ---------------------------------------------------------------
-
-
-def session_view(s: MediationSession) -> dict[str, Any]:
-    return {
-        "id": s.id,
-        "caseId": s.case_id,
-        "scheduledFor": as_utc(s.scheduled_for).isoformat(),
-        "durationMinutes": s.duration_minutes,
-        "mode": s.mode,
-        "status": s.status,
-        "meetingUrl": s.meeting_url,
-        "notes": s.notes,
-        "settlementDocumentId": s.settlement_document_id,
-    }
 
 
 def fits_safe_window(party: Party, start: datetime, minutes: int) -> bool:
@@ -87,7 +81,9 @@ class SessionIn(BaseModel):
     mode: MediationMode
     meeting_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=2000)
-    # Send the applicant a (neutral) SMS confirmation through safe_contact.
+    # SMS notices to both parties (services.mediation). notify_applicant is the older
+    # name for it: either one asks for the notices.
+    notify_parties: bool = True
     notify_applicant: bool = False
 
 
@@ -113,7 +109,8 @@ def schedule_session(
         )
     session = MediationSession(
         case_id=case.id,
-        scheduled_for=body.scheduled_for,
+        # In UTC: SQLite keeps the wall time and drops the offset.
+        scheduled_for=as_utc(body.scheduled_for),
         duration_minutes=body.duration_minutes,
         mode=body.mode,
         meeting_url=body.meeting_url,
@@ -131,34 +128,45 @@ def schedule_session(
         entity_id=case.id,
         details={"sessionId": session.id, "at": body.scheduled_for.isoformat(), "mode": body.mode},
     )
-    notified = None
-    if body.notify_applicant and applicant:
-        when = body.scheduled_for.astimezone(get_settings().tz).strftime("%d/%m/%Y %H:%M")
-        outcome = safe_contact.contact_party(
-            db,
-            applicant,
-            body=f"District Legal Aid Office: your mediation session for {case.display_id} is on {when}.",
-            neutral_body=f"Your appointment is confirmed for {when}.",
-            actor=actor,
-            case_ref=case.display_id,
-        )
-        notified = {
-            "sent": bool(outcome.sms and outcome.sms.ok),
-            "blockedReason": outcome.decision.reason,
-        }
+    if body.notify_parties or body.notify_applicant:
+        mediation.send_session_notices(db, case, session, actor)
+    # Someone who has missed too many in a row is told of this one by their UDC too.
+    mediation.ask_udcs(db, case, session, mediation.missed_in_a_row(db, case), actor)
     db.commit()
-    return {**session_view(session), "notification": notified}
+    return mediation.session_view(db, session)
+
+
+def sessions_of(db: Session, case: Case) -> list[MediationSession]:
+    return list(
+        db.scalars(
+            select(MediationSession)
+            .where(MediationSession.case_id == case.id)
+            .order_by(MediationSession.scheduled_for, MediationSession.id)
+        )
+    )
 
 
 @router.get("/sessions")
 def list_sessions(case_ref: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     case = get_case_or_404(db, case_ref)
-    rows = db.scalars(
-        select(MediationSession)
-        .where(MediationSession.case_id == case.id)
-        .order_by(MediationSession.scheduled_for)
+    return mediation.session_views(db, sessions_of(db, case))
+
+
+@router.get("/cases/{ref}")
+def case_mediation(ref: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Sessions (soonest first), UDC notices (newest first) and who keeps missing sessions."""
+    case = get_case_or_404(db, ref)
+    udc_notices = db.scalars(
+        select(UdcNotice)
+        .where(UdcNotice.case_id == case.id)
+        .order_by(UdcNotice.created_at.desc(), UdcNotice.id.desc())
     )
-    return [session_view(s) for s in rows]
+    return {
+        "sessions": mediation.session_views(db, sessions_of(db, case)),
+        "udcNotices": [mediation.udc_notice_view(db, n) for n in udc_notices],
+        "missedInARow": mediation.missed_in_a_row(db, case),
+        "noShowLimit": get_settings().mediation_no_show_limit,
+    }
 
 
 class SessionStatusIn(BaseModel):
@@ -166,18 +174,75 @@ class SessionStatusIn(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
+def get_session_or_404(db: Session, session_id: int) -> MediationSession:
+    session = db.get(MediationSession, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such session")
+    return session
+
+
 @router.post("/sessions/{session_id}/status")
 def update_session_status(
     session_id: int, body: SessionStatusIn, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    session = db.get(MediationSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such session")
+    session = get_session_or_404(db, session_id)
     session.status = MediationStatus(body.status)
     if body.notes:
         session.notes = body.notes
+    db.flush()
+    # A cancelled session's attendance no longer counts towards missing too many.
+    case = db.get(Case, session.case_id)
+    assert case is not None
+    mediation.refresh_no_show(db, case)
     db.commit()
-    return session_view(session)
+    return mediation.session_view(db, session)
+
+
+class AttendanceIn(BaseModel):
+    applicant: Attendance
+    respondent: Attendance
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/sessions/{session_id}/attendance")
+def record_attendance(
+    session_id: int,
+    body: AttendanceIn,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    """Who came. Recording it again replaces it; both present means it was held."""
+    session = get_session_or_404(db, session_id)
+    if session.status == MediationStatus.CANCELLED:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This session was cancelled")
+    if as_utc(session.scheduled_for) > utcnow():
+        raise HTTPException(status.HTTP_409_CONFLICT, "This session has not started yet")
+    case = db.get(Case, session.case_id)
+    assert case is not None
+    came = {"applicant": body.applicant, "respondent": body.respondent}
+    mediation.record_attendance(db, case, session, came, actor)
+    if body.notes:
+        session.notes = body.notes
+    db.commit()
+    return mediation.session_view(db, session)
+
+
+@router.post("/udc-notices/{notice_id}/release")
+def release_udc_notice(
+    notice_id: int,
+    body: JustificationIn,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    """Ask the UDC after all, on the officer's judgement that it is safe."""
+    notice = db.get(UdcNotice, notice_id)
+    if notice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such UDC notice")
+    if notice.status != UdcNoticeStatus.HELD:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only a held notice can be released")
+    mediation.release_udc_notice(db, notice, actor, body.justification)
+    db.commit()
+    return mediation.udc_notice_view(db, notice)
 
 
 # --- settlement drafts (T7) -------------------------------------------------------

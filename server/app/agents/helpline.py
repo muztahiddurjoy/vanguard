@@ -229,7 +229,7 @@ BN_MONTHS = (
 )  # fmt: skip
 
 
-def _bn_part_of_day(hour: int) -> str:
+def bn_part_of_day(hour: int) -> str:
     if 5 <= hour < 12:
         return "সকাল"
     if 12 <= hour < 15:
@@ -246,7 +246,7 @@ def say_date(iso: str, lang: Lang) -> str:
     if lang == "en":
         return f"{at.day} {at:%B} {at.year}, {hour12}:{at:%M} {'am' if at.hour < 12 else 'pm'}"
     text = (
-        f"{at.day} {BN_MONTHS[at.month - 1]} {at.year}, {_bn_part_of_day(at.hour)} {hour12}:{at:%M}"
+        f"{at.day} {BN_MONTHS[at.month - 1]} {at.year}, {bn_part_of_day(at.hour)} {hour12}:{at:%M}"
     )
     return text.translate(EN_TO_BN_DIGITS)
 
