@@ -26,7 +26,8 @@ import {
   type PartyRole,
 } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
-import { asciiDigits, isCaseNumber, tidyCaseNumber } from "@/lib/case-number"
+import { parseAge } from "@/lib/application"
+import { isCaseNumber, tidyCaseNumber } from "@/lib/case-number"
 import { today } from "@/lib/dates"
 import { problemText, statusOf } from "@/lib/errors"
 import { isNid, normalizeNid } from "@/lib/nid"
@@ -54,14 +55,6 @@ const emptyParty = (): PartyRow => ({
   age: "",
   nid: "",
 })
-
-/** An age as typed (either digit set), or null when it is not a whole number from 0 to 120. */
-function parseAge(value: string): number | null {
-  const text = asciiDigits(value).trim()
-  if (!/^\d{1,3}$/.test(text)) return null
-  const n = Number(text)
-  return n <= 120 ? n : null
-}
 
 export function RegisterCasePage() {
   const { t, f } = useI18n()

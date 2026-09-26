@@ -21,10 +21,10 @@ import { MAX_ENTRIES, MAX_PURPOSE_LENGTH, MAX_SERIAL } from "@/lib/cause-list"
 import { caseNumberKey, isCaseNumber, tidyCaseNumber } from "@/lib/case-number"
 import { isDay, today } from "@/lib/dates"
 import { isNid, normalizeNid } from "@/lib/nid"
+import { MAX_SIGNATURE_BYTES } from "@/lib/signature"
 
 /** How long a verified e-KYC check can be used (the server's EKYC_CHECK_VALID_MINUTES). */
 export const EKYC_CHECK_VALID_MINUTES = 120
-export const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024
 
 const notFound = () => new ApiError(404, "Not found")
 const invalid = (detail: string) => new ApiError(422, detail)

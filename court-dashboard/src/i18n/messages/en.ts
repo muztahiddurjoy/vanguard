@@ -404,7 +404,6 @@ export const en = {
     cancel: "Cancel",
     errors: {
       expired: "This check has expired or was already used. Verify again.",
-      alreadyVerified: "The identity is already verified.",
       alreadySigned: "The applicant has already signed.",
       server: "This could not be saved. Check your connection and try again.",
     },
@@ -464,6 +463,7 @@ export const en = {
     signatureNone: "Not signed: add it later",
     doneTitle: "Application sent",
     doneBody: "The District Legal Aid Office has it now.",
+    reference: (id: string) => `Application ${id}`,
     nextSteps: "What happens next",
     nextStep1: "A legal aid officer reviews the application, usually within one working day.",
     nextStep2: "If legal aid is granted, a panel lawyer is assigned to appear for the applicant.",
