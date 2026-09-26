@@ -1,4 +1,5 @@
-import type { LegalCase, PanelLawyer } from "@/data/types"
+import { inDays } from "@/data/clock"
+import type { LegalCase, Localized, PanelLawyer } from "@/data/types"
 
 // Dates are relative to page load so "overdue" and "2 days ago" stay true
 // whenever the dashboard is opened.
@@ -11,6 +12,23 @@ export const SESSION_STARTED_AT = now
 const daysAgo = (d: number) => new Date(now - d * DAY).toISOString()
 const hoursAgo = (h: number) => new Date(now - h * HOUR).toISOString()
 const daysFromNow = (d: number) => new Date(now + d * DAY).toISOString()
+const dateOnly = (iso: string) => iso.slice(0, 10)
+
+// Courts and offices, named the same way wherever they appear.
+const COURT = {
+  family: { en: "Family Court, Rangpur", bn: "পারিবারিক আদালত, রংপুর" },
+  labour: { en: "Labour Court, Rangpur", bn: "শ্রম আদালত, রংপুর" },
+  jointJudge1: { en: "Joint District Judge Court 1, Rangpur", bn: "যুগ্ম জেলা জজ আদালত ১, রংপুর" },
+  jointJudge2: { en: "Joint District Judge Court 2, Rangpur", bn: "যুগ্ম জেলা জজ আদালত ২, রংপুর" },
+  assistantJudge: {
+    en: "Assistant Judge Court, Rangpur Sadar",
+    bn: "সহকারী জজ আদালত, রংপুর সদর",
+  },
+} satisfies Record<string, Localized>
+const OFFICE = {
+  rangpur: { en: "Rangpur", bn: "রংপুর" },
+  dhaka: { en: "Dhaka", bn: "ঢাকা" },
+} satisfies Record<string, Localized>
 
 export const PANEL_LAWYERS: PanelLawyer[] = [
   {
@@ -152,6 +170,7 @@ export const INITIAL_CASES: LegalCase[] = [
     proxy: {
       name: { en: "Ripon", bn: "রিপন" },
       relation: { en: "neighbour", bn: "প্রতিবেশী" },
+      consent: false,
     },
     safeContact: { day: 2, startHour: 14, endHour: 16 },
     triage: {
@@ -237,7 +256,40 @@ export const INITIAL_CASES: LegalCase[] = [
     channel: "walkIn",
     receivedAt: daysAgo(96),
     dueAt: daysFromNow(9),
-    lawyer: { id: "LAW-07", missedUpdates: 2, lastUpdateAt: daysAgo(34) },
+    lawyer: { id: "LAW-07", missedUpdates: 2, lastUpdateAt: daysAgo(34), updateDueAt: daysAgo(20) },
+    lawyerUpdates: [
+      {
+        id: "LU-0451",
+        at: daysAgo(90),
+        lawyerId: "LAW-07",
+        stage: "plaintFiled",
+        summary: {
+          en: "Title suit filed against the three cousins; summons issued.",
+          bn: "তিন চাচাতো ভাইয়ের বিরুদ্ধে স্বত্ব মামলা দায়ের; সমন জারি হয়েছে।",
+        },
+        court: COURT.jointJudge2,
+      },
+      {
+        id: "LU-0452",
+        at: daysAgo(34),
+        lawyerId: "LAW-07",
+        stage: "hearingAdjourned",
+        summary: {
+          en: "The cousins filed their written statement. The court fixed a date to frame the issues.",
+          bn: "চাচাতো ভাইয়েরা লিখিত জবাব দাখিল করেছেন। বিচার্য বিষয় নির্ধারণের তারিখ ধার্য হয়েছে।",
+        },
+        court: COURT.jointJudge2,
+        hearingHeldOn: dateOnly(daysAgo(34)),
+        nextHearingAt: inDays(9, 10, 30),
+        attachment: { name: "Order sheet.pdf" },
+      },
+    ],
+    nextHearing: { at: inDays(9, 10, 30), court: COURT.jointJudge2 },
+    courtStage: "hearingAdjourned",
+    documents: [
+      { id: "DOC-0451", name: "Khatian (record of rights).pdf", type: "pdf", sizeBytes: 820_000 },
+      { id: "DOC-0452", name: "Inheritance certificate.jpg", type: "image", sizeBytes: 1_300_000 },
+    ],
     triage: {
       priority: "medium",
       confidence: 0.84,
@@ -258,6 +310,8 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "aiTriage", at: daysAgo(96), priority: "medium" },
       { type: "triageAccepted", at: daysAgo(95), priority: "medium" },
       { type: "lawyerAssigned", at: daysAgo(94), lawyerId: "LAW-07" },
+      { type: "lawyerUpdate", at: daysAgo(90), lawyerId: "LAW-07", stage: "plaintFiled" },
+      { type: "lawyerUpdate", at: daysAgo(34), lawyerId: "LAW-07", stage: "hearingAdjourned" },
       { type: "lawyerUpdateMissed", at: daysAgo(20) },
       { type: "lawyerUpdateMissed", at: daysAgo(6) },
     ],
@@ -277,6 +331,165 @@ export const INITIAL_CASES: LegalCase[] = [
     },
     trackingToken: "3107-5582",
     filerReceipt: { status: "sent" },
+  },
+  {
+    // Same lawyer as Abdul Malek: no report on the injunction hearing four days ago.
+    id: "DLAS-2026-041",
+    applicant: {
+      name: { en: "Anwara Begum", bn: "আনোয়ারা বেগম" },
+      phone: "01722-XXX-615",
+      village: { en: "Paglapir", bn: "পাগলাপীর" },
+      upazila: { en: "Rangpur Sadar", bn: "রংপুর সদর" },
+      guardian: { en: "Late Abdul Latif (husband)", bn: "মৃত আব্দুল লতিফ (স্বামী)" },
+      nidMasked: "•••• •••• 3306",
+      age: 52,
+    },
+    category: "landDispute",
+    priority: "medium",
+    queues: ["alerts"],
+    flags: ["lawyerInactivity"],
+    actions: ["followUpLawyer"],
+    summary: {
+      en: "A widow whose husband's brothers are trying to take her homestead with a forged deed. A suit for an injunction is at the Assistant Judge Court; the lawyer has not reported on the hearing held four days ago.",
+      bn: "স্বামীর ভাইয়েরা জাল দলিল দিয়ে এক বিধবার বসতভিটা দখলের চেষ্টা করছেন। সহকারী জজ আদালতে নিষেধাজ্ঞার মামলা চলছে; চার দিন আগের শুনানির প্রতিবেদন আইনজীবী এখনো দেননি।",
+    },
+    channel: "udc",
+    receivedAt: daysAgo(58),
+    lawyer: { id: "LAW-07", missedUpdates: 1, lastUpdateAt: daysAgo(17), updateDueAt: daysAgo(3) },
+    lawyerUpdates: [
+      {
+        id: "LU-0411",
+        at: daysAgo(17),
+        lawyerId: "LAW-07",
+        stage: "plaintFiled",
+        summary: {
+          en: "Suit for a permanent injunction filed. The court will hear the temporary injunction on the next date.",
+          bn: "চিরস্থায়ী নিষেধাজ্ঞার মামলা দায়ের করা হয়েছে। পরবর্তী তারিখে অস্থায়ী নিষেধাজ্ঞার শুনানি হবে।",
+        },
+        court: COURT.assistantJudge,
+        nextHearingAt: inDays(-4, 10),
+      },
+    ],
+    nextHearing: { at: inDays(-4, 10), court: COURT.assistantJudge },
+    courtStage: "plaintFiled",
+    triage: {
+      priority: "medium",
+      confidence: 0.81,
+      status: "accepted",
+      generatedAt: daysAgo(58),
+      factors: [
+        { key: "financialDependency", detected: true, agent: "intake", weight: "medium" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Risk of losing her only home, but no report of violence.",
+        bn: "একমাত্র বসতভিটা হারানোর ঝুঁকি, তবে সহিংসতার কোনো তথ্য নেই।",
+      },
+    },
+    activity: [
+      { type: "received", at: daysAgo(58), channel: "udc" },
+      { type: "aiTriage", at: daysAgo(58), priority: "medium" },
+      { type: "triageAccepted", at: daysAgo(57), priority: "medium" },
+      { type: "lawyerAssigned", at: daysAgo(55), lawyerId: "LAW-07" },
+      { type: "lawyerUpdate", at: daysAgo(17), lawyerId: "LAW-07", stage: "plaintFiled" },
+      { type: "lawyerUpdateMissed", at: daysAgo(1) },
+    ],
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: false,
+      callerSimRegistered: false,
+    },
+    trackingToken: "6215-0348",
+    filerReceipt: { status: "sent" },
+  },
+  {
+    // Same lawyer again, and up to date on this one.
+    id: "DLAS-2026-044",
+    applicant: {
+      name: { en: "Motaleb Mia", bn: "মোতালেব মিয়া" },
+      phone: "01911-XXX-730",
+      village: { en: "Lalbag", bn: "লালবাগ" },
+      upazila: { en: "Kaunia", bn: "কাউনিয়া" },
+      guardian: { en: "Late Kader Mia (father)", bn: "মৃত কাদের মিয়া (পিতা)" },
+      nidMasked: "•••• •••• 8124",
+      age: 63,
+    },
+    category: "landDispute",
+    priority: "low",
+    queues: [],
+    flags: [],
+    actions: [],
+    summary: {
+      en: "Partition suit over his late father's land among five brothers. The written statements are filed; the next hearing is in three weeks.",
+      bn: "পাঁচ ভাইয়ের মধ্যে প্রয়াত পিতার জমি বণ্টনের মামলা। লিখিত জবাব দাখিল হয়েছে; পরবর্তী শুনানি তিন সপ্তাহ পর।",
+    },
+    channel: "walkIn",
+    receivedAt: daysAgo(120),
+    lawyer: {
+      id: "LAW-07",
+      missedUpdates: 0,
+      lastUpdateAt: daysAgo(6),
+      updateDueAt: daysFromNow(8),
+    },
+    lawyerUpdates: [
+      {
+        id: "LU-0441",
+        at: daysAgo(110),
+        lawyerId: "LAW-07",
+        stage: "plaintFiled",
+        summary: {
+          en: "Partition suit filed; notices served on the four brothers.",
+          bn: "বণ্টন মামলা দায়ের; চার ভাইয়ের ওপর নোটিশ জারি হয়েছে।",
+        },
+        court: COURT.jointJudge1,
+      },
+      {
+        id: "LU-0442",
+        at: daysAgo(6),
+        lawyerId: "LAW-07",
+        stage: "hearingAdjourned",
+        summary: {
+          en: "All four brothers have filed written statements. The court fixed the next date for hearing on the issues.",
+          bn: "চার ভাই-ই লিখিত জবাব দাখিল করেছেন। বিচার্য বিষয়ে শুনানির জন্য পরবর্তী তারিখ ধার্য হয়েছে।",
+        },
+        court: COURT.jointJudge1,
+        hearingHeldOn: dateOnly(daysAgo(6)),
+        nextHearingAt: inDays(21, 10),
+      },
+    ],
+    nextHearing: { at: inDays(21, 10), court: COURT.jointJudge1 },
+    courtStage: "hearingAdjourned",
+    triage: {
+      priority: "low",
+      confidence: 0.88,
+      status: "accepted",
+      generatedAt: daysAgo(120),
+      factors: [
+        { key: "priorLegalAction", detected: false, agent: "intake", weight: "low" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "A family dispute over land with no safety risk.",
+        bn: "জমি নিয়ে পারিবারিক বিরোধ, কোনো নিরাপত্তা ঝুঁকি নেই।",
+      },
+    },
+    activity: [
+      { type: "received", at: daysAgo(120), channel: "walkIn" },
+      { type: "aiTriage", at: daysAgo(120), priority: "low" },
+      { type: "triageAccepted", at: daysAgo(119), priority: "low" },
+      { type: "lawyerAssigned", at: daysAgo(115), lawyerId: "LAW-07" },
+      { type: "lawyerUpdate", at: daysAgo(110), lawyerId: "LAW-07", stage: "plaintFiled" },
+      { type: "lawyerUpdate", at: daysAgo(6), lawyerId: "LAW-07", stage: "hearingAdjourned" },
+    ],
+    track: {
+      key: "mediation",
+      status: "confirmed",
+      reason: {
+        en: "Can be resolved through mediation: a family dispute over land and no sign of violence.",
+        bn: "মধ্যস্থতার মাধ্যমে সমাধানযোগ্য: জমি নিয়ে পারিবারিক বিরোধ, সহিংসতার কোনো ইঙ্গিত নেই।",
+      },
+    },
   },
   {
     id: "APP-2026-012",
@@ -300,6 +513,59 @@ export const INITIAL_CASES: LegalCase[] = [
     },
     channel: "online",
     receivedAt: daysAgo(2),
+    referrals: [
+      {
+        id: "REF-121",
+        at: hoursAgo(44),
+        from: OFFICE.rangpur,
+        to: OFFICE.dhaka,
+        reason: { en: "The accused lives in Dhaka.", bn: "অভিযুক্ত ঢাকায় থাকেন।" },
+        status: "returned",
+        respondedAt: hoursAgo(38),
+        response: {
+          en: "The applicant lives in Rangpur, so the Rangpur office must support her.",
+          bn: "আবেদনকারী রংপুরে থাকেন, তাই রংপুর অফিসকেই তাঁকে সহায়তা দিতে হবে।",
+        },
+      },
+      {
+        id: "REF-122",
+        at: hoursAgo(30),
+        from: OFFICE.rangpur,
+        to: OFFICE.dhaka,
+        reason: {
+          en: "Only the Cyber Tribunal in Dhaka can try this offence.",
+          bn: "এই অপরাধের বিচার কেবল ঢাকার সাইবার ট্রাইব্যুনালে হতে পারে।",
+        },
+        status: "returned",
+        respondedAt: hoursAgo(20),
+        response: {
+          en: "Sent back again: Dhaka will act only on an order from the national office.",
+          bn: "আবার ফেরত: জাতীয় অফিসের আদেশ ছাড়া ঢাকা অফিস ব্যবস্থা নেবে না।",
+        },
+      },
+    ],
+    timesReturned: 2,
+    documents: [
+      {
+        id: "DOC-1201",
+        name: "Facebook post screenshots.png",
+        type: "image",
+        sizeBytes: 2_400_000,
+      },
+      {
+        id: "DOC-1202",
+        name: "Blackmail messages (chat log).pdf",
+        type: "pdf",
+        sizeBytes: 1_100_000,
+      },
+      {
+        id: "DOC-1203",
+        name: "Police general diary (GD) copy.pdf",
+        type: "pdf",
+        sizeBytes: 480_000,
+      },
+    ],
+    evidence: { from: OFFICE.dhaka },
     jurisdiction: {
       reason: {
         en: "Accused resides in Dhaka; the offence is a cyber-crime triable only by the Cyber Tribunal.",
@@ -362,7 +628,40 @@ export const INITIAL_CASES: LegalCase[] = [
     },
     channel: "walkIn",
     receivedAt: daysAgo(12),
-    lawyer: { id: "LAW-12", missedUpdates: 0, lastUpdateAt: daysAgo(3) },
+    lawyer: {
+      id: "LAW-12",
+      missedUpdates: 0,
+      lastUpdateAt: daysAgo(3),
+      updateDueAt: inDays(3, 15, 30),
+    },
+    lawyerUpdates: [
+      {
+        id: "LU-0181",
+        at: daysAgo(9),
+        lawyerId: "LAW-12",
+        stage: "plaintFiled",
+        summary: {
+          en: "Maintenance suit filed at the Family Court; summons served on Abdur Rashid.",
+          bn: "পারিবারিক আদালতে ভরণপোষণের মামলা দায়ের; আব্দুর রশিদের ওপর সমন জারি হয়েছে।",
+        },
+        court: COURT.family,
+        nextHearingAt: inDays(0, 15, 30),
+      },
+      {
+        id: "LU-0182",
+        at: daysAgo(3),
+        lawyerId: "LAW-12",
+        stage: "other",
+        summary: {
+          en: "Met Rahima Begum to prepare her evidence for the first hearing. Abdur Rashid has hired a lawyer.",
+          bn: "প্রথম শুনানির সাক্ষ্যের প্রস্তুতির জন্য রহিমা বেগমের সঙ্গে দেখা করেছি। আব্দুর রশিদ আইনজীবী নিয়োগ করেছেন।",
+        },
+        court: COURT.family,
+        nextHearingAt: inDays(0, 15, 30),
+      },
+    ],
+    nextHearing: { at: inDays(0, 15, 30), court: COURT.family },
+    courtStage: "other",
     triage: {
       priority: "medium",
       confidence: 0.86,
@@ -383,6 +682,8 @@ export const INITIAL_CASES: LegalCase[] = [
       { type: "aiTriage", at: daysAgo(12), priority: "medium" },
       { type: "triageAccepted", at: daysAgo(11), priority: "medium" },
       { type: "lawyerAssigned", at: daysAgo(10), lawyerId: "LAW-12" },
+      { type: "lawyerUpdate", at: daysAgo(9), lawyerId: "LAW-12", stage: "plaintFiled" },
+      { type: "lawyerUpdate", at: daysAgo(3), lawyerId: "LAW-12", stage: "other" },
     ],
   },
   {
@@ -478,6 +779,7 @@ export const INITIAL_CASES: LegalCase[] = [
     proxy: {
       name: { en: "Arif Hossain", bn: "আরিফ হোসেন" },
       relation: { en: "son", bn: "ছেলে" },
+      consent: true,
     },
     track: {
       key: "mediation",
@@ -542,10 +844,46 @@ export const INITIAL_CASES: LegalCase[] = [
         bn: "শ্রম আদালতের শুনানির নথি",
       },
     },
-    lawyer: { id: "LAW-15", missedUpdates: 0, lastUpdateAt: daysAgo(9) },
+    lawyer: {
+      id: "LAW-15",
+      missedUpdates: 0,
+      lastUpdateAt: daysAgo(9),
+      updateDueAt: daysFromNow(5),
+    },
+    lawyerUpdates: [
+      {
+        id: "LU-0391",
+        at: daysAgo(35),
+        lawyerId: "LAW-15",
+        stage: "plaintFiled",
+        summary: {
+          en: "Wage claim for the 11 workers filed at the Labour Court.",
+          bn: "১১ জন শ্রমিকের মজুরির দাবিতে শ্রম আদালতে মামলা দায়ের করা হয়েছে।",
+        },
+        court: COURT.labour,
+      },
+      {
+        id: "LU-0392",
+        at: daysAgo(9),
+        lawyerId: "LAW-15",
+        stage: "hearingAdjourned",
+        summary: {
+          en: "The kiln owner asked for time to file his reply. The court gave him until the next date.",
+          bn: "ভাটার মালিক জবাব দিতে সময় চেয়েছেন। আদালত পরবর্তী তারিখ পর্যন্ত সময় দিয়েছেন।",
+        },
+        court: COURT.labour,
+        hearingHeldOn: dateOnly(daysAgo(9)),
+        nextHearingAt: inDays(3, 11),
+        attachment: { name: "Order sheet (Labour Court).pdf" },
+      },
+    ],
+    nextHearing: { at: inDays(3, 11), court: COURT.labour },
+    courtStage: "hearingAdjourned",
     activity: [
       { type: "received", at: daysAgo(41), channel: "walkIn" },
       { type: "lawyerAssigned", at: daysAgo(39), lawyerId: "LAW-15" },
+      { type: "lawyerUpdate", at: daysAgo(35), lawyerId: "LAW-15", stage: "plaintFiled" },
+      { type: "lawyerUpdate", at: daysAgo(9), lawyerId: "LAW-15", stage: "hearingAdjourned" },
     ],
     track: {
       key: "mediation",

@@ -24,6 +24,8 @@ from app.models import (
     ChecklistItem,
     Document,
     DoNotCallReason,
+    MediationSession,
+    MediationStatus,
     PartyRole,
     Priority,
     ReferralStatus,
@@ -39,6 +41,17 @@ from app.models import (
 from app.models.case import PRIORITY_RANK
 from app.routers import current_actor, require_api_token
 from app.services import notices, safe_contact
+from app.services.court_progress import (
+    latest_stage,
+    missed_updates,
+    next_hearing,
+    next_hearing_view,
+    reminded_at,
+    update_due_at,
+    update_view,
+    waiting_after_reminder,
+)
+from app.services.panel import get_lawyer
 
 router = APIRouter(prefix="/dlao", tags=["dlao"], dependencies=[Depends(require_api_token)])
 
@@ -78,18 +91,11 @@ def mask_phone(phone: str | None) -> str | None:
 def live_flags(case: Case, now: datetime) -> list[str]:
     """Stored flags plus the ones that depend on the clock (T1)."""
     flags = list(case.flags or [])
-    settings = get_settings()
     is_open = case.status in OPEN_STATUSES
     if is_open and case.due_at and as_utc(case.due_at) < now and "overdue" not in flags:
         flags.append("overdue")
-    if (
-        is_open
-        and case.lawyer_id
-        and case.lawyer_last_update_at
-        and now - as_utc(case.lawyer_last_update_at)
-        > timedelta(days=settings.lawyer_inactivity_days)
-        and "lawyerInactivity" not in flags
-    ):
+    # Fortnightly reports, and one within days of every hearing (services.court_progress).
+    if is_open and missed_updates(case, now) > 0 and "lawyerInactivity" not in flags:
         flags.append("lawyerInactivity")
     return flags
 
@@ -108,7 +114,9 @@ def queues_for(case: Case, flags: list[str], now: datetime) -> list[str]:
     # Set when T4 queues a review, cleared once no review for its parties is pending.
     if "possibleDuplicate" in flags:
         queues.append("duplicates")
-    if {"overdue", "lawyerInactivity", "jurisdictionEscalation"} & set(flags):
+    # A late lawyer who was just reminded is waiting on the lawyer, not the officer.
+    late_lawyer = "lawyerInactivity" in flags and not waiting_after_reminder(case, now)
+    if {"overdue", "jurisdictionEscalation"} & set(flags) or late_lawyer:
         queues.append("alerts")
     return queues
 
@@ -135,6 +143,19 @@ def party_view(party: Any, *, full_phone: bool) -> dict[str, Any]:
         view["motherName"] = party.mother_name
         view["dateOfBirth"] = party.date_of_birth.isoformat() if party.date_of_birth else None
     return view
+
+
+def lawyer_view(case: Case, now: datetime) -> dict[str, Any]:
+    due = update_due_at(case)
+    return {
+        "id": case.lawyer_id,
+        "lastUpdateAt": (
+            as_utc(case.lawyer_last_update_at).isoformat() if case.lawyer_last_update_at else None
+        ),
+        "missedUpdates": missed_updates(case, now),
+        "updateDueAt": due.isoformat() if due else None,
+        "remindedAt": reminded.isoformat() if (reminded := reminded_at(case)) else None,
+    }
 
 
 def track_view(case: Case) -> dict[str, Any] | None:
@@ -229,19 +250,18 @@ def case_view(
         "doNotCall": {"reason": case.do_not_call_reason} if case.do_not_call_reason else None,
         "identity": identity_view(case),
         "notices": case.notices or {},
-        "lawyer": (
-            {
-                "id": case.lawyer_id,
-                "lastUpdateAt": as_utc(case.lawyer_last_update_at).isoformat()
-                if case.lawyer_last_update_at
-                else None,
-            }
-            if case.lawyer_id
-            else None
-        ),
+        "lawyer": lawyer_view(case, now) if case.lawyer_id else None,
+        "nextHearing": next_hearing_view(case),
+        "courtStage": latest_stage(case),
         "triage": ({**case.triage, "status": case.triage_status} if case.triage else None),
+        # T2: how often another office sent the case back.
+        "timesReturned": times_returned(case),
         "incidentId": case.incident_id,
     }
+
+
+def times_returned(case: Case) -> int:
+    return sum(1 for r in case.referrals if r.status == ReferralStatus.RETURNED)
 
 
 def by_urgency(view: dict[str, Any]) -> tuple[int, str, float]:
@@ -414,33 +434,156 @@ def get_case(
             .order_by(AuditEntry.seq)
         )
     ]
-    view["documents"] = [
-        {
-            "id": d.id,
-            "kind": d.kind,
-            "filename": d.filename,
-            "status": d.status,
-            "summary": d.summary,
-        }
-        for d in db.scalars(select(Document).where(Document.case_id == case.id))
-    ]
+    # A sensitive case's file names and summaries can reveal what the files show:
+    # they are given only on request, and each request is audited (evidence/view).
+    view["documents"] = documents_view(db, case, withhold="sensitive" in (case.flags or []))
+    receipt = db.scalars(
+        select(AuditEntry)
+        .where(
+            AuditEntry.entity_type == "case",
+            AuditEntry.entity_id == str(case.id),
+            AuditEntry.action == AuditAction.EVIDENCE_ACKNOWLEDGED,
+        )
+        .order_by(AuditEntry.seq.desc())
+    ).first()
+    view["evidenceReceipt"] = (
+        {"at": as_utc(receipt.occurred_at).isoformat(), "by": receipt.actor} if receipt else None
+    )
     view["checklist"] = [
         {"key": i.item_key, "label": i.label, "labelBn": i.label_bn, "required": i.required,
          "status": i.status, "documentId": i.document_id}
         for i in db.scalars(select(ChecklistItem).where(ChecklistItem.case_id == case.id))
     ]  # fmt: skip
     view["callNotes"] = case.call_notes or []
+    view["lawyerUpdates"] = [update_view(u) for u in case.lawyer_updates]
     view["referrals"] = [
         {
             "id": r.id,
+            "at": as_utc(r.created_at).isoformat(),
             "from": r.from_office,
             "to": r.to_office,
             "status": r.status,
             "reason": r.reason,
+            "respondedAt": as_utc(r.responded_at).isoformat() if r.responded_at else None,
+            "responseNote": r.response_note,
         }
         for r in case.referrals
     ]
     return view
+
+
+def documents_view(db: Session, case: Case, *, withhold: bool) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": d.id,
+            "kind": d.kind,
+            "filename": None if withhold else d.filename,
+            "contentType": d.content_type,
+            "sizeBytes": d.size_bytes,
+            "status": d.status,
+            "summary": None if withhold else d.summary,
+            "withheld": withhold,
+        }
+        for d in db.scalars(
+            select(Document).where(Document.case_id == case.id).order_by(Document.id)
+        )
+    ]
+
+
+def evidence_acknowledged(db: Session, case: Case) -> bool:
+    return (
+        db.scalars(
+            select(AuditEntry.id).where(
+                AuditEntry.entity_type == "case",
+                AuditEntry.entity_id == str(case.id),
+                AuditEntry.action == AuditAction.EVIDENCE_ACKNOWLEDGED,
+            )
+        ).first()
+        is not None
+    )
+
+
+@router.post("/cases/{ref}/evidence/view")
+def view_evidence(
+    ref: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """The documents in full, for the officer allowed to see a sensitive case's evidence."""
+    case = get_case_or_404(db, ref)
+    documents = documents_view(db, case, withhold=False)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.EVIDENCE_VIEWED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documents": len(documents)},
+    )
+    db.commit()
+    return {"documents": documents}
+
+
+@router.post("/cases/{ref}/evidence/receipt")
+def acknowledge_evidence(
+    ref: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """The receiving officer confirms the evidence arrived and is in their keeping (A3)."""
+    case = get_case_or_404(db, ref)
+    if evidence_acknowledged(db, case):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Receipt has already been acknowledged")
+    count = db.scalars(select(Document.id).where(Document.case_id == case.id)).all()
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.EVIDENCE_ACKNOWLEDGED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documents": len(count)},
+    )
+    db.commit()
+    return case_view(case)
+
+
+@router.get("/hearings")
+def hearings(
+    days: int = Query(14, ge=1, le=90), db: Session = Depends(get_db)
+) -> list[dict[str, Any]]:
+    """Court dates the lawyers reported and mediation meetings, soonest first."""
+    now = utcnow()
+    start, end = now - timedelta(hours=1), now + timedelta(days=days)
+    out: list[dict[str, Any]] = []
+    for case in db.scalars(select(Case).where(Case.status.in_(OPEN_STATUSES))):
+        found = next_hearing(case)
+        if found and start <= found[0] <= end:
+            out.append(
+                {
+                    "id": f"court-{case.id}",
+                    "caseId": case.display_id,
+                    "at": found[0].isoformat(),
+                    "kind": "court",
+                    "place": found[1],
+                    "lawyerId": case.lawyer_id,
+                    "stage": latest_stage(case),
+                }
+            )
+    sessions = db.execute(
+        select(MediationSession, Case)
+        .join(Case, Case.id == MediationSession.case_id)
+        .where(MediationSession.status == MediationStatus.SCHEDULED)
+    )
+    for session, case in sessions:
+        at = as_utc(session.scheduled_for)
+        if start <= at <= end:
+            out.append(
+                {
+                    "id": f"mediation-{session.id}",
+                    "caseId": case.display_id,
+                    "at": at.isoformat(),
+                    "kind": "mediation",
+                    "mode": session.mode,
+                    "lawyerId": None,
+                }
+            )
+    return sorted(out, key=lambda h: h["at"])
 
 
 @router.get("/alerts")
@@ -557,14 +700,26 @@ def promote_to_case(
 
 class LawyerIn(BaseModel):
     lawyer_id: str = Field(min_length=1, max_length=20)
+    # Why the case moves to another lawyer (e.g. the last one stopped reporting).
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 @router.post("/cases/{ref}/lawyer")
 def assign_lawyer(
     ref: str, body: LawyerIn, db: Session = Depends(get_db), actor: str = Depends(current_actor)
 ) -> dict[str, Any]:
+    """Assign a panel lawyer, or move the case to another one."""
     case = get_case_or_404(db, ref)
-    case.lawyer_id = body.lawyer_id
+    lawyer = get_lawyer(body.lawyer_id)
+    if lawyer is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"{body.lawyer_id} is not on the panel"
+        )
+    if case.lawyer_id == lawyer.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{lawyer.id} already has this case")
+    previous = case.lawyer_id
+    case.lawyer_id = lawyer.id
+    # The new lawyer's reporting clock starts now.
     case.lawyer_last_update_at = utcnow()
     case.remove_flag("lawyerInactivity")
     record_audit(
@@ -573,7 +728,8 @@ def assign_lawyer(
         action=AuditAction.LAWYER_ASSIGNED,
         entity_type="case",
         entity_id=case.id,
-        details={"lawyerId": body.lawyer_id},
+        details={"lawyerId": lawyer.id, **({"from": previous} if previous else {})},
+        justification=(body.reason or "").strip() or None,
     )
     db.commit()
     return case_view(case)
@@ -589,6 +745,64 @@ def lawyer_update_received(
         raise HTTPException(status.HTTP_409_CONFLICT, "No lawyer assigned")
     case.lawyer_last_update_at = utcnow()
     case.remove_flag("lawyerInactivity")
+    db.commit()
+    return case_view(case)
+
+
+@router.post("/cases/{ref}/lawyer-reminder")
+def remind_lawyer(
+    ref: str, db: Session = Depends(get_db), actor: str = Depends(current_actor)
+) -> dict[str, Any]:
+    """Ask the lawyer for their overdue report. They see it on their own dashboard."""
+    case = get_case_or_404(db, ref)
+    if not case.lawyer_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No lawyer assigned")
+    case.notices = {
+        **(case.notices or {}),
+        "lawyerReminder": {"lawyerId": case.lawyer_id, "at": utcnow().isoformat()},
+    }
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.LAWYER_REMINDED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"lawyerId": case.lawyer_id},
+    )
+    db.commit()
+    return case_view(case)
+
+
+class EscalateIn(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/cases/{ref}/escalate")
+def escalate_to_chief(
+    ref: str,
+    body: EscalateIn | None = None,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    """Send the case above district level, to the Chief Legal Aid Officer (NLASO).
+
+    For a case this office cannot act on (T2), or one that other offices keep
+    sending back: the chief's decision on who handles it binds every office.
+    """
+    case = get_case_or_404(db, ref)
+    if "escalated" in case.flags and "jurisdictionEscalation" not in case.flags:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The case has already been escalated")
+    case.remove_flag("jurisdictionEscalation")
+    case.add_flag("escalated")
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.CASE_ESCALATED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"to": "chiefLegalAidOfficer", "timesReturned": times_returned(case)},
+        justification=((body.note if body else None) or "").strip() or None,
+    )
     db.commit()
     return case_view(case)
 

@@ -8,6 +8,7 @@ decision.
 | [`server/`](server/README.md) | The backend: AI hotline intake by phone (live speech-to-text), triage, SMS notices, the AI query helpline, and the officer API | 8000 |
 | [`nid-server/`](nid-server/README.md) | A National ID registry with fictional citizens, parent links and registered SIMs | 8100 |
 | [`dlao-dashboard/`](dlao-dashboard/README.md) | The District Legal Aid Officer's dashboard (English and বাংলা) | 5173 |
+| [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, and updates from court (English and বাংলা) | 5174 |
 
 ## How a case moves
 
@@ -28,8 +29,14 @@ decision.
    visit the DLAO office. That notice waits for an officer whenever sending it could put the
    applicant at risk.
 5. **The helpline number in each SMS reaches an AI.** It tells a caller their case's progress
-   from the tracking number, and answers questions about notices, the office, documents and
-   mediation.
+   from the tracking number (and the next court date), and answers questions about notices, the
+   office, documents and mediation.
+6. **A panel lawyer takes the case to court.** The officer assigns one of the district's panel
+   lawyers, who sees the case on their own dashboard and reports after every hearing: what
+   happened, the next date, and the order sheet. A report is due every two weeks and within
+   three days of each hearing. The officer sees each report at once; a lawyer who stops
+   reporting is flagged, and one who stops across several cases raises a pattern alert, from
+   which the officer can move their cases to another lawyer.
 
 ## Run everything locally
 
@@ -38,7 +45,7 @@ decision.
 ```
 
 This starts the NID registry, the backend with its SQLite database (`server/dlas.db`, created
-at startup), an ngrok tunnel for the phone lines and the dashboard, then prints their
+at startup), an ngrok tunnel for the phone lines and both dashboards, then prints their
 addresses, the Twilio webhooks and whether the AI, speech-to-text and the voice are working
 (the voice is checked with ElevenLabs at startup). The first run installs the dependencies and creates
 `server/.env`. Each service's output is shown with its name and kept in `.logs/`. Ctrl-C
@@ -47,7 +54,7 @@ stops everything, and so does any one service stopping.
 | Option | What it does |
 | --- | --- |
 | `--no-ngrok` | No tunnel: everything but real phone calls works |
-| `--no-dashboard` | Backend only |
+| `--no-dashboard` | Backend only (neither dashboard) |
 | `--reset-db` | Starts with an empty database (after a schema change); the old file is kept as a backup |
 | `--install` | Reinstalls every dependency first |
 
@@ -71,8 +78,18 @@ cp .env.example .env    # NID_SERVER_URL=http://localhost:8100 is already set
 # 3. Dashboard, showing the backend's cases
 cd ../dlao-dashboard && npm install
 echo "VITE_API_URL=http://localhost:8000" > .env.local
+npm run dev &
+
+# 4. Panel lawyers' dashboard, on the same backend (port 5174)
+cd ../lawyer-dashboard && npm install
+echo "VITE_API_URL=http://localhost:8000" > .env.local
 npm run dev
 ```
+
+To follow a case from the officer to the lawyer and back: assign a panel lawyer on the DLAO
+dashboard (for example Adv. Nasrin Jahan, `LAW-12`), sign in as that lawyer on the lawyers'
+dashboard, send an update from court, then open the case's **Court progress** tab on the DLAO
+dashboard.
 
 Try a call without a phone line at <http://localhost:8000/docs>. Start with
 `POST /intake/conversations`, then send each answer to `/intake/conversations/{id}/turns`.

@@ -5,6 +5,7 @@ export const DEMO_OFFICER: Officer = {
   id: "DLAO-RGP-0142",
   name: { en: "Farhana Rahman", bn: "ফারহানা রহমান" },
   role: { en: "District Legal Aid Officer", bn: "জেলা লিগ্যাল এইড অফিসার" },
+  sensitiveAccess: true,
   district: { en: "Rangpur", bn: "রংপুর" },
   office: {
     en: "District Legal Aid Office, Judge Court Building, Rangpur",

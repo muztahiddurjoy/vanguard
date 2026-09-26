@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest"
 
 import { INITIAL_CASES } from "@/data/cases"
-import { countByQueue, filterCases } from "@/lib/queue"
+import { backlogCounts, countByQueue, filterCases } from "@/lib/queue"
 
 describe("countByQueue", () => {
   it("counts every queue in the seed data", () => {
     expect(countByQueue(INITIAL_CASES)).toEqual({
-      all: 9,
+      all: 11,
       actionToday: 5,
       pendingTriage: 3,
       duplicates: 1,
-      alerts: 3,
+      alerts: 4,
     })
   })
 })
@@ -35,5 +35,36 @@ describe("filterCases", () => {
     ).toBe("Abdul Malek")
     expect(filterCases(INITIAL_CASES, { ...all, query: "moyuri" })[0].id).toBe("APP-2026-001")
     expect(filterCases(INITIAL_CASES, { ...all, query: "ময়ূরী" })[0].id).toBe("APP-2026-001")
+  })
+})
+
+describe("wider search and the 'show only' filter", () => {
+  const all = { queue: "all" as const, priority: "all" as const, query: "" }
+  const ids = (options: Partial<Parameters<typeof filterCases>[1]>) =>
+    filterCases(INITIAL_CASES, { ...all, ...options }).map((c) => c.id)
+
+  it("finds a case by tracking number, reporter or place", () => {
+    expect(ids({ query: "48210937" })).toEqual(["APP-2026-001"])
+    expect(ids({ query: "4821-0937" })).toEqual(["APP-2026-001"])
+    expect(ids({ query: "arif" })).toEqual(["APP-2026-027"])
+    expect(ids({ query: "গঙ্গাচড়া" })).toEqual(["APP-2026-027"])
+  })
+
+  it("never matches a sensitive case by its place", () => {
+    // Nabila lives in Kaunia; so does Motaleb Mia, whose case is not sensitive.
+    expect(ids({ query: "kaunia" })).toEqual(["DLAS-2026-044"])
+  })
+
+  it("narrows to children at risk, proxy reports or sensitive cases", () => {
+    expect(ids({ concern: "proxy" })).toEqual(["APP-2026-001", "APP-2026-027"])
+    expect(ids({ concern: "sensitive" })).toEqual(["APP-2026-034", "APP-2026-012"])
+    expect(ids({ concern: "children" })).toContain("APP-2026-018")
+    expect(ids({ concern: "children" })).not.toContain("APP-2026-034")
+  })
+})
+
+describe("backlogCounts", () => {
+  it("counts new, urgent and late cases", () => {
+    expect(backlogCounts(INITIAL_CASES, Date.now())).toEqual({ new: 3, urgent: 3, overdue: 3 })
   })
 })

@@ -146,10 +146,33 @@ describe("queue filters", () => {
   it("filters to the alerts queue, including Abdul Malek's lawyer inactivity", async () => {
     const { user } = renderApp()
     await user.click(screen.getByRole("tab", { name: /Overdue \/ Alerts/ }))
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 3 of 3")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 4 of 4")
     expect(
       within(rowFor("DLAS-2026-045")).getByText("Lawyer Inactivity: missed 2 updates"),
     ).toBeInTheDocument()
     expect(within(queueList()).queryByText("Shirin Sultana")).not.toBeInTheDocument()
+  })
+
+  it("shows the backlog, and narrows the list to one kind of case", async () => {
+    const { user } = renderApp()
+    const backlog = screen.getByRole("region", { name: "Backlog right now" })
+    // "New" depends on the fixed clock here; lib/queue.test.ts counts it.
+    expect(backlog).toHaveTextContent(/\d New/)
+    expect(backlog).toHaveTextContent("3 Urgent")
+    expect(backlog).toHaveTextContent("3 Overdue")
+
+    await user.click(screen.getByRole("combobox", { name: "Show only" }))
+    await user.click(await screen.findByRole("option", { name: "Reported by someone else" }))
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 2 of 2")
+    expect(rowFor("APP-2026-001")).toBeDefined()
+    expect(rowFor("APP-2026-027")).toBeDefined()
+    expect(screen.getByRole("tab", { name: /All open cases/ })).toHaveTextContent("(2)")
+  })
+
+  it("finds a case by the tracking number its filer was sent", async () => {
+    const { user } = renderApp()
+    await user.type(screen.getByRole("searchbox", { name: "Search cases" }), "7730-1946")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 11")
+    expect(within(queueList()).getByText("Jahanara Parvin")).toBeInTheDocument()
   })
 })

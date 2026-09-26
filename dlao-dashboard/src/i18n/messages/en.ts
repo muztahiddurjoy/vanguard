@@ -1,3 +1,6 @@
+/** English plurals: counts arrive formatted, and English writes 1 as "1". */
+const count = (n: string, one: string, many: string) => `${n} ${n === "1" ? one : many}`
+
 // English is the source of truth for the message shape; bn.ts must match it.
 // Function messages receive values that are already locale-formatted.
 //
@@ -142,7 +145,7 @@ export const en = {
     status: {
       ok: "Up to date",
       free: "Available for new cases",
-      late: (n: string) => `Missed ${n} updates`,
+      late: (n: string) => `Missed ${count(n, "update", "updates")}`,
       reminded: "Reminder sent — waiting for a reply",
     },
     theirCases: "Their open cases",
@@ -152,6 +155,10 @@ export const en = {
     callToast: (name: string) =>
       `Calls from the dashboard are not available yet. Please phone ${name} directly.`,
     reminderToast: (name: string) => `Reminder sent to ${name}`,
+    latest: "Latest report",
+    nextHearing: "Next hearing",
+    none: "None fixed",
+    moveCases: "Move their cases",
   },
   reports: {
     title: "Reports",
@@ -200,6 +207,8 @@ export const en = {
     officerId: "Officer ID",
     office: "Office",
     since: (date: string) => `Officer since ${date}`,
+    sensitiveAccess:
+      "Authorized receiving DLAO (Role B6): you can open the evidence in sensitive cases.",
     contact: "Contact details",
     contactHint: "Used for case alerts and by the district office.",
     email: "Email",
@@ -301,6 +310,14 @@ export const en = {
         a: "Panel lawyers send a progress update every two weeks. After two missed updates the case shows an alert. Send a reminder first; if nothing changes, assign another lawyer.",
       },
       {
+        q: "How do lawyers report from court?",
+        a: "Panel lawyers post what happened at each hearing, and the next date, from their own dashboard. It appears in the case's Court progress tab and on Hearings. A report is due every 2 weeks and within 3 days of each hearing; a lawyer who misses them is flagged.",
+      },
+      {
+        q: "What if other offices keep sending a case back?",
+        a: "Every transfer is recorded in the case. After a case has been sent back twice, press Escalate to Chief Officer: the Chief Legal Aid Officer decides who handles it, and every office must follow that decision.",
+      },
+      {
         q: "Why must some cases be transferred?",
         a: "A district office can only act on cases inside its area. If the accused lives elsewhere, or the case needs a special court, it is sent to the right office through the national legal aid organisation. You keep supporting the applicant.",
       },
@@ -349,6 +366,16 @@ export const en = {
         term: "Jurisdiction",
         meaning: "The area or court that is allowed to handle a case.",
       },
+      {
+        term: "Receiving DLAO (Role B6)",
+        meaning:
+          "The officer allowed to open the evidence in a sensitive case and confirm it arrived.",
+      },
+      {
+        term: "Pattern alert",
+        meaning:
+          "A warning that one lawyer has missed several reports across their cases, not just one.",
+      },
     ],
     contactTitle: "Need more help?",
     contacts: {
@@ -376,7 +403,14 @@ export const en = {
     reminded: "Reminder sent",
     remindHint: "Texts the lawyer and applicant the date, time and place.",
     remindedToast: (name: string) => `Reminder sent for ${name}'s hearing`,
-    summary: (n: string) => `${n} hearings in the next two weeks`,
+    summary: (n: string) => `${count(n, "hearing", "hearings")} in the next two weeks`,
+    afterStage: (stage: string) => `Next date after: ${stage}`,
+    mode: {
+      in_person: "Mediation room, District Legal Aid Office",
+      odr_video: "Video call",
+      odr_phone: "Phone call",
+    },
+    reported: "Date reported by the lawyer",
   },
   queue: {
     title: "Work queue",
@@ -398,7 +432,25 @@ export const en = {
         "Late work, lawyers who stopped reporting, and cases that must move to another office.",
     },
     searchLabel: "Search cases",
-    searchPlaceholder: "Search by name or case number",
+    searchPlaceholder: "Name, case or tracking number, or place",
+    backlog: {
+      label: "Backlog right now",
+      new: (n: string) => `${n} New`,
+      urgent: (n: string) => `${n} Urgent`,
+      overdue: (n: string) => `${n} Overdue`,
+      hint: {
+        new: "Received in the last 24 hours",
+        urgent: "High or critical priority",
+        overdue: "Late tasks and late lawyer reports",
+      },
+    },
+    concernFilter: "Show only",
+    concern: {
+      any: "All kinds of case",
+      children: "Children at risk",
+      proxy: "Reported by someone else",
+      sensitive: "Sensitive cases",
+    },
     priorityFilter: "Filter by priority",
     anyPriority: "Any priority",
     listLabel: "Cases, most urgent first",
@@ -459,7 +511,7 @@ export const en = {
     doNotCall: "Do not call this number",
     callDropped: "Call was cut",
     proxyBy: (name: string) => `Proxy Reported by ${name}`,
-    lawyerMissed: (n: string) => `Lawyer Inactivity: missed ${n} updates`,
+    lawyerMissed: (n: string) => `Lawyer Inactivity: missed ${count(n, "update", "updates")}`,
   },
   action: {
     reviewTriage: "Review AI suggestion",
@@ -475,9 +527,12 @@ export const en = {
   reason: {
     reviewTriage: (p: string) => `The AI suggests ${p} priority. It needs your check.`,
     reviewDuplicate: (id: string) => `May be the same person as ${id}.`,
-    followUpLawyer: (n: string) => `The lawyer has missed ${n} progress updates.`,
+    followUpLawyer: (n: string) =>
+      `The lawyer has missed ${count(n, "progress update", "progress updates")}.`,
     escalateJurisdiction:
       "The accused lives outside this district, so the case must be transferred.",
+    returned: (n: string) =>
+      `Other offices sent it back ${n} times. The Chief Legal Aid Officer must decide.`,
     resolveOverdue: (task: string) => `${task} is late.`,
     assignLawyer: "No lawyer has been assigned yet.",
     scheduleSafeCall: "Book a call with the applicant in her next safe time.",
@@ -508,6 +563,7 @@ export const en = {
     tabsLabel: "Case sections",
     tabTriage: "AI suggestion",
     tabDetails: "Case information",
+    tabCourt: "Court progress",
     tabActivity: "History",
     summary: "What happened",
     applicant: "About the applicant",
@@ -520,7 +576,6 @@ export const en = {
     category: "Type of case",
     channel: "How it was reported",
     received: "Received",
-    reportedBy: "Reported by",
     filedHow: "Who filed it",
     identity: "National ID check",
     trackingToken: "Tracking number",
@@ -630,7 +685,7 @@ export const en = {
   followUp: {
     lawyerTitle: "The lawyer has stopped reporting",
     lawyerMissed: (name: string, n: string) =>
-      `${name} has missed ${n} progress updates in a row (they are due every 2 weeks).`,
+      `${name} has missed ${count(n, "progress update", "progress updates in a row")} (they are due every 2 weeks).`,
     lawyerLast: (rel: string) => `Last update ${rel}`,
     sendReminder: "Send reminder to lawyer",
     reminderToast: (name: string) => `Reminder sent to ${name}`,
@@ -638,6 +693,11 @@ export const en = {
     escalateTo: (target: string) => `Send to: ${target}`,
     escalate: "Transfer case",
     escalatedToast: (id: string) => `${id} sent for transfer`,
+    chiefTitle: "Sent back twice: ask the Chief Legal Aid Officer to decide",
+    chiefBody: (n: string) =>
+      `Other offices have sent this case back ${n} times. The Chief Legal Aid Officer's decision on who handles it binds every office, so the applicant stops waiting.`,
+    chief: "Escalate to Chief Officer",
+    chiefToast: (id: string) => `${id} escalated to the Chief Legal Aid Officer`,
     overdueTitle: "A task is late",
     overdueWas: (task: string, rel: string) => `${task} was due ${rel}.`,
     markSubmitted: "Mark as done",
@@ -673,6 +733,12 @@ export const en = {
     lawyerUpdateMissed: "Lawyer missed a progress update",
     lawyerReminder: "Reminder sent to the lawyer",
     escalated: "Sent for transfer to the national legal aid office",
+    escalatedChief: "Escalated to the Chief Legal Aid Officer after other offices sent it back",
+    lawyer: "Lawyer",
+    lawyerUpdate: (name: string, stage: string) => `${name} reported from court: ${stage}`,
+    lawyerReassigned: (from: string, to: string) => `Case moved from ${from} to ${to}`,
+    evidenceViewed: "Sensitive evidence opened",
+    evidenceAcknowledged: "Receipt of the sensitive evidence acknowledged",
     overdueResolved: "Late task marked as done",
     lawyerAssigned: (name: string) => `Assigned to ${name}`,
     safeCallScheduled: (when: string) => `Safe call booked for ${when}`,
@@ -697,6 +763,8 @@ export const en = {
     },
     what: "Calls and SMS to the applicant are blocked. Wait for them to call the helpline again, or work with the police.",
     blocked: "Calling and SMS are blocked for this applicant.",
+    police: "Call the police (999)",
+    policeHint: "If you believe someone is in danger now, call 999 and give the case number.",
   },
   track: {
     title: "Suggested way forward",
@@ -804,6 +872,109 @@ export const en = {
       phone: "Phone number",
       safe_to_call: "Safe time to call",
     },
+  },
+  courtStage: {
+    plaintFiled: "Case filed (plaint and vakalatnama)",
+    evidenceRecorded: "Witness evidence recorded",
+    hearingAdjourned: "Heard; order reserved or date moved",
+    bailHeard: "Bail hearing held",
+    settlementFiled: "Settlement filed with the court",
+    judgment: "Judgment given",
+    other: "Other progress",
+  },
+  court: {
+    title: "Court progress",
+    hint: "The panel lawyer reports from their own dashboard: every 2 weeks, and within 3 days of each hearing.",
+    noLawyer: "No lawyer yet. Reports from court appear here once a lawyer is assigned.",
+    nextHearing: "Next hearing",
+    noHearing: "No date fixed",
+    hearingPassed: (date: string) => `Hearing on ${date}: waiting for the lawyer's report`,
+    stage: "Where the case stands",
+    notStarted: "Not in court yet",
+    reports: "Reports from court",
+    none: "No reports yet.",
+    lastReport: (rel: string) => `Last report ${rel}`,
+    dueBy: (when: string) => `Next report due ${when}`,
+    late: (n: string, when: string) =>
+      `${count(n, "report", "reports")} missed. The last one was due ${when}.`,
+    reminded: "Reminder sent: waiting for the lawyer's report.",
+    from: (name: string) => `From ${name}`,
+    heldOn: (date: string) => `Hearing held ${date}`,
+    nextFixed: (when: string) => `Next date fixed: ${when}`,
+    attachment: (name: string) => `Attached: ${name}`,
+  },
+  provenance: {
+    title: "Who reported it, and who it is about",
+    hint: "Someone may report for a person who cannot reach us safely. Keep who spoke apart from who the case is about.",
+    caller: "Who reported it",
+    subject: "Who the case is about",
+    self: "The applicant reported it themselves.",
+    confirmed: "Identity confirmed",
+    notConfirmed: "Identity not confirmed",
+    age: (n: string) => `Age ${n}`,
+    consentYes: "The applicant agreed to this report being made for them.",
+    consentNo:
+      "The applicant's agreement is not recorded yet. Confirm it with them, safely, before acting.",
+  },
+  referral: {
+    title: "Transfers between offices",
+    hint: "Each time the case was sent to another office, and what that office did.",
+    sentBack: (n: string) => `Sent back ${n === "1" ? "once" : `${n} times`}`,
+    office: (name: string) => `Legal aid office, ${name}`,
+    hop: (from: string, to: string) => `From ${from} to ${to}`,
+    status: {
+      pending: "Waiting for an answer",
+      accepted: "Accepted",
+      returned: "Sent back",
+      escalated: "Stopped: needs a decision above district level",
+    },
+    why: "Why it was sent",
+    answer: "Their answer",
+    answered: (date: string) => `Answered ${date}`,
+    escalated: "Escalated to the Chief Legal Aid Officer. Their decision binds every office.",
+  },
+  evidence: {
+    title: "Documents and evidence",
+    hint: "Files sent with the application, and court orders from the lawyer.",
+    restricted: "Access Restricted - Viewable only by Authorized Receiving DLAO (Role B6).",
+    authorized:
+      "You are the authorized receiving DLAO (Role B6). Opening the files is recorded in the case history.",
+    show: "Show the files",
+    hide: "Hide the files",
+    file: (n: string) => `File ${n}`,
+    type: { image: "Image", pdf: "PDF document", text: "Text" },
+    waiting: "Waiting for the receiving officer to acknowledge receipt.",
+    sentBy: (office: string) => `Sent by ${office}.`,
+    acknowledged: (name: string, when: string) =>
+      `Receipt acknowledged by ${name}, ${when}. The sending office sees this.`,
+    acknowledge: "Acknowledge Receipt",
+    openFailed: "The files could not be opened. Please try again.",
+    acknowledgedToast: (id: string) => `${id}: receipt of the evidence acknowledged`,
+  },
+  pattern: {
+    eyebrow: "Pattern alert: lawyer inactivity",
+    warning: (missed: string, cases: string) =>
+      `Inactivity Threshold Reached: Missed ${count(missed, "update", "updates")} across ${count(cases, "case", "cases")}.`,
+    body: "Lawyers report every 2 weeks and within 3 days of each hearing. Without these reports, nobody can tell the applicants what is happening in court.",
+    review: "Review & Reassign",
+    title: "Move this lawyer's cases",
+    description: (name: string) =>
+      `${name} has stopped reporting. Choose the cases to move and the lawyer who takes them. Each move is saved in the case history with your name.`,
+    cases: "Cases to move",
+    late: (n: string) => `Missed ${count(n, "update", "updates")}`,
+    upToDate: "Up to date",
+    nextHearing: (when: string) => `Next hearing ${when}`,
+    newLawyer: "New lawyer",
+    choose: "Choose a lawyer",
+    option: (name: string, n: string) => `${name} (${count(n, "open case", "open cases")})`,
+    errors: {
+      cases: "Choose at least one case.",
+      lawyer: "Choose the lawyer who will take the cases.",
+    },
+    move: (n: string) => `Move ${count(n, "case", "cases")}`,
+    cancel: "Cancel",
+    movedToast: (n: string, from: string, to: string) =>
+      `${count(n, "case", "cases")} moved from ${from} to ${to}`,
   },
   server: {
     loading: "Loading cases…",

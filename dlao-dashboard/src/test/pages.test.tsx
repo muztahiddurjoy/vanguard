@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderApp } from "@/test/render-app"
@@ -50,11 +50,11 @@ describe("All cases", () => {
 
   it("lists open cases by default and closed cases with their outcome", async () => {
     const { user } = renderApp({ path: "/cases" })
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 9 of 14 cases")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 11 of 16 cases")
     expect(rowFor("APP-2026-001")).toHaveTextContent("Moyuri Akter")
 
     await user.click(screen.getByRole("button", { name: "Closed" }))
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 14 cases")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 16 cases")
     expect(rowFor("DLAS-2026-008")).toHaveTextContent("Settled by mediation")
   })
 
@@ -63,6 +63,46 @@ describe("All cases", () => {
     await user.click(screen.getByRole("button", { name: "Open case: Abdul Malek" }))
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
+  })
+})
+
+describe("Pattern alert (T1)", () => {
+  it("flags a lawyer who stopped reporting across cases and moves their cases", async () => {
+    const { user } = renderApp({ path: "/" })
+    const alert = screen
+      .getByRole("heading", { name: /Adv\. Shahidul Islam/ })
+      .closest("section") as HTMLElement
+    expect(alert).toHaveTextContent("Pattern alert: lawyer inactivity")
+    expect(alert).toHaveTextContent(
+      "Inactivity Threshold Reached: Missed 3 updates across 3 cases.",
+    )
+
+    await user.click(within(alert).getByRole("button", { name: "Review & Reassign" }))
+    const dialog = await screen.findByRole("dialog", { name: "Move this lawyer's cases" })
+    const boxes = within(dialog).getAllByRole("checkbox")
+    expect(boxes).toHaveLength(3)
+    boxes.forEach((box) => expect(box).toBeChecked())
+
+    // Keep the up-to-date case with him; move the two late ones.
+    await user.click(within(dialog).getByRole("checkbox", { name: /Motaleb Mia/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Move 2 cases" }))
+    expect(within(dialog).getByText("Choose the lawyer who will take the cases.")).toBeVisible()
+
+    await user.click(within(dialog).getByRole("combobox", { name: "New lawyer" }))
+    await user.click(await screen.findByRole("option", { name: /Adv\. Taslima Akter/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Move 2 cases" }))
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: /Adv\. Shahidul Islam/ }),
+      ).not.toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole("link", { name: /^Lawyers$/ }))
+    const card = screen
+      .getByRole("heading", { name: "Adv. Taslima Akter" })
+      .closest("[data-slot=card]") as HTMLElement
+    expect(within(card).getByRole("button", { name: "Abdul Malek" })).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "Anwara Begum" })).toBeInTheDocument()
   })
 })
 
@@ -168,8 +208,8 @@ describe("Help", () => {
 describe("Notifications", () => {
   it("lists what needs attention, marks items read and opens the case", async () => {
     const { user } = renderApp({ path: "/" })
-    // 8 cases waiting on a step + 1 hearing today
-    await user.click(screen.getByRole("button", { name: "Notifications: 9 unread" }))
+    // 9 cases waiting on a step + 1 hearing today
+    await user.click(screen.getByRole("button", { name: "Notifications: 10 unread" }))
     const panel = await screen.findByRole("dialog", { name: "Notifications" })
     await user.click(within(panel).getByRole("button", { name: /Abdul Malek/ }))
 
@@ -177,7 +217,7 @@ describe("Notifications", () => {
     expect(within(caseDialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
     await user.keyboard("{Escape}")
     expect(
-      await screen.findByRole("button", { name: "Notifications: 8 unread" }),
+      await screen.findByRole("button", { name: "Notifications: 9 unread" }),
     ).toBeInTheDocument()
   })
 })

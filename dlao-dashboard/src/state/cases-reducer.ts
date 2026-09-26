@@ -11,6 +11,10 @@ import type {
 /** Overrides must be explained; this keeps "ok" or "n/a" out of the audit log. */
 export const MIN_JUSTIFICATION_LENGTH = 20
 
+/** Panel lawyers report at least this often (the server's LAWYER_INACTIVITY_DAYS). */
+export const LAWYER_UPDATE_DAYS = 14
+const DAY = 24 * 60 * 60 * 1000
+
 export type CaseAction =
   | { type: "acceptTriage"; id: string; at: string }
   | {
@@ -24,7 +28,14 @@ export type CaseAction =
   | { type: "sendLawyerReminder"; id: string; at: string }
   | { type: "escalateJurisdiction"; id: string; at: string }
   | { type: "resolveOverdue"; id: string; at: string }
-  | { type: "assignLawyer"; id: string; lawyerId: string; at: string }
+  | {
+      type: "assignLawyer"
+      id: string
+      lawyerId: string
+      at: string
+      /** Why the case moves from its current lawyer (saved in the history). */
+      reason?: string
+    }
   | { type: "scheduleSafeCall"; id: string; scheduledFor: string; at: string }
   | {
       type: "reviewTrack"
@@ -35,6 +46,10 @@ export type CaseAction =
       at: string
     }
   | { type: "releaseNotice"; id: string; justification: string; at: string }
+  /** The authorized officer opened a sensitive case's evidence. */
+  | { type: "viewEvidence"; id: string; at: string }
+  /** The receiving officer confirms the evidence arrived (A3). */
+  | { type: "acknowledgeEvidence"; id: string; by: string; at: string }
   /** Cases fetched from the server replace what is shown. */
   | { type: "load"; cases: LegalCase[] }
   | { type: "replace"; legalCase: LegalCase }
@@ -146,19 +161,22 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
     }
 
     case "sendLawyerReminder":
-      return update(cases, action.id, (c) =>
-        log(complete(c, "followUpLawyer", ["alerts"]), {
-          type: "lawyerReminder",
-          at: action.at,
-        }),
-      )
+      return update(cases, action.id, (c) => {
+        const done = complete(c, "followUpLawyer", ["alerts"])
+        return log(
+          { ...done, ...(done.lawyer ? { lawyer: { ...done.lawyer, reminded: true } } : {}) },
+          { type: "lawyerReminder", at: action.at },
+        )
+      })
 
     case "escalateJurisdiction":
       return update(cases, action.id, (c) => {
         const done = complete(c, "escalateJurisdiction", ["alerts"], ["jurisdictionEscalation"])
+        // Sent back twice: the Chief Legal Aid Officer decides (T2).
+        const toChief = (c.timesReturned ?? 0) >= 2
         return log(
           { ...done, flags: [...done.flags, "escalated"] },
-          { type: "escalated", at: action.at },
+          { type: "escalated", at: action.at, ...(toChief ? { toChief } : {}) },
         )
       })
 
@@ -171,15 +189,35 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
       )
 
     case "assignLawyer":
-      return update(cases, action.id, (c) =>
-        log(
+      return update(cases, action.id, (c) => {
+        if (c.lawyer?.id === action.lawyerId) return c
+        const lawyer = {
+          id: action.lawyerId,
+          missedUpdates: 0,
+          lastUpdateAt: action.at,
+          updateDueAt: new Date(Date.parse(action.at) + LAWYER_UPDATE_DAYS * DAY).toISOString(),
+        }
+        if (!c.lawyer) {
+          return log(
+            { ...complete(c, "assignLawyer"), lawyer },
+            { type: "lawyerAssigned", at: action.at, lawyerId: action.lawyerId },
+          )
+        }
+        // Moving the case: the late lawyer's alert goes with them; court dates stay.
+        const moved = complete(c, "followUpLawyer", [], ["lawyerInactivity"])
+        const alerts = moved.flags.some((f) => f === "overdue" || f === "jurisdictionEscalation")
+        const reason = action.reason?.trim()
+        return log(
+          { ...moved, queues: alerts ? moved.queues : without(moved.queues, "alerts"), lawyer },
           {
-            ...complete(c, "assignLawyer"),
-            lawyer: { id: action.lawyerId, missedUpdates: 0, lastUpdateAt: action.at },
+            type: "lawyerReassigned",
+            at: action.at,
+            from: c.lawyer.id,
+            to: action.lawyerId,
+            ...(reason ? { justification: reason } : {}),
           },
-          { type: "lawyerAssigned", at: action.at, lawyerId: action.lawyerId },
-        ),
-      )
+        )
+      })
 
     case "scheduleSafeCall":
       return update(cases, action.id, (c) =>
@@ -225,6 +263,18 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
         return log(
           { ...c, respondent: { ...c.respondent, notice: { status: "sent" } } },
           { type: "noticeReleased", at: action.at, justification: action.justification.trim() },
+        )
+      })
+
+    case "viewEvidence":
+      return update(cases, action.id, (c) => log(c, { type: "evidenceViewed", at: action.at }))
+
+    case "acknowledgeEvidence":
+      return update(cases, action.id, (c) => {
+        if (c.evidence?.acknowledged) return c
+        return log(
+          { ...c, evidence: { ...c.evidence, acknowledged: { at: action.at, by: action.by } } },
+          { type: "evidenceAcknowledged", at: action.at },
         )
       })
 

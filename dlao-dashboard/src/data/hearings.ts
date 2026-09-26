@@ -1,12 +1,7 @@
+import { inDays } from "@/data/clock"
 import type { Hearing } from "@/data/types"
 
-// Relative to page load, at fixed times of day, so "today"/"tomorrow" stay true.
-function inDays(days: number, hour: number, minute = 0) {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  d.setHours(hour, minute, 0, 0)
-  return d.toISOString()
-}
+// Court dates match what the cases' lawyers reported (src/data/cases.ts).
 
 export const HEARINGS: Hearing[] = [
   {

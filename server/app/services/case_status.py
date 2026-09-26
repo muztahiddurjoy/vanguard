@@ -20,6 +20,7 @@ from app.models import (
     TrackStatus,
     TriageStatus,
 )
+from app.services.court_progress import next_hearing
 
 
 def stage_of(case: Case) -> str:
@@ -46,8 +47,16 @@ def next_mediation(db: Session, case: Case, now: datetime) -> datetime | None:
     return next((as_utc(t) for t in upcoming if as_utc(t) > now), None)
 
 
+def next_court_date(case: Case, now: datetime) -> datetime | None:
+    """The next hearing the case's lawyer reported, if it is still ahead."""
+    found = next_hearing(case)
+    return found[0] if found and found[0] > now else None
+
+
 def public_status(db: Session, case: Case) -> dict[str, Any]:
-    nxt = next_mediation(db, case, utcnow())
+    now = utcnow()
+    nxt = next_mediation(db, case, now)
+    hearing = next_court_date(case, now)
     decided = case.track_status != TrackStatus.SUGGESTED
     return {
         "reference": case.display_id,
@@ -57,6 +66,8 @@ def public_status(db: Session, case: Case) -> dict[str, Any]:
         "track": case.track if decided else None,
         "office": case.current_office,
         "nextMediation": nxt.isoformat() if nxt else None,
+        # Only the date: the court's name is not read to anyone who says the number.
+        "nextHearing": hearing.isoformat() if hearing else None,
     }
 
 

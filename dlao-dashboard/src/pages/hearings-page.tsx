@@ -6,7 +6,6 @@ import { HearingCard } from "@/components/hearings/hearing-card"
 import { PageHeader } from "@/components/layout/page-header"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { HEARINGS } from "@/data/hearings"
 import { PANEL_LAWYERS } from "@/data/cases"
 import type { Hearing } from "@/data/types"
 import { useNow } from "@/hooks/use-now"
@@ -17,14 +16,16 @@ const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000
 
 export function HearingsPage() {
   const { t, f, pick } = useI18n()
-  const { cases, openCase } = useCases()
+  const { cases, openCase, hearings } = useCases()
   const now = useNow(60_000).getTime()
   const [reminded, setReminded] = useState<Set<string>>(() => new Set())
 
-  const upcoming = HEARINGS.filter((h) => {
-    const at = Date.parse(h.at)
-    return at >= now - 60 * 60 * 1000 && at <= now + TWO_WEEKS
-  }).sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  const upcoming = hearings
+    .filter((h) => {
+      const at = Date.parse(h.at)
+      return at >= now - 60 * 60 * 1000 && at <= now + TWO_WEEKS
+    })
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
 
   // Group by calendar day so the page reads like a diary.
   const days = new Map<string, Hearing[]>()
@@ -83,7 +84,9 @@ export function HearingsPage() {
                               variant="outline"
                               size="sm"
                               aria-label={t.queue.actionFor(t.hearings.openCase, name)}
-                              onClick={() => openCase(legalCase, "details")}
+                              onClick={() =>
+                                openCase(legalCase, legalCase.lawyer ? "court" : "details")
+                              }
                             >
                               <FolderOpen aria-hidden data-icon="inline-start" />
                               {t.hearings.openCase}

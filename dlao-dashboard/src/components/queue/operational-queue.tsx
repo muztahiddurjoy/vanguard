@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { Inbox, Info, Search } from "lucide-react"
 
 import { PageHeader } from "@/components/layout/page-header"
+import { BacklogStrip } from "@/components/queue/backlog-strip"
 import { CaseRow } from "@/components/queue/case-row"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,7 +17,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PRIORITIES, type LegalCase, type NextAction, type Priority } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
-import { QUEUE_FILTERS, countByQueue, filterCases, type QueueFilter } from "@/lib/queue"
+import {
+  CONCERNS,
+  QUEUE_FILTERS,
+  countByQueue,
+  filterCases,
+  hasConcern,
+  type Concern,
+  type QueueFilter,
+} from "@/lib/queue"
 
 export function OperationalQueue({
   cases,
@@ -34,12 +43,16 @@ export function OperationalQueue({
   const { t, f } = useI18n()
   const [query, setQuery] = useState("")
   const [priority, setPriority] = useState<Priority | "all">("all")
+  const [concern, setConcern] = useState<Concern>("any")
 
-  const counts = useMemo(() => countByQueue(cases), [cases])
+  // The tab counts follow "Show only", so they always add up to what is listed.
+  const shown = useMemo(() => cases.filter((c) => hasConcern(c, concern)), [cases, concern])
+  const counts = useMemo(() => countByQueue(shown), [shown])
   const visible = useMemo(
-    () => filterCases(cases, { queue: filter, priority, query }),
-    [cases, filter, priority, query],
+    () => filterCases(cases, { queue: filter, priority, query, concern }),
+    [cases, filter, priority, query, concern],
   )
+  const concernItems = Object.fromEntries(CONCERNS.map((k) => [k, t.queue.concern[k]]))
 
   const priorityItems = {
     all: t.queue.anyPriority,
@@ -49,6 +62,8 @@ export function OperationalQueue({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t.queue.title} description={t.queue.description} />
+
+      <BacklogStrip cases={cases} />
 
       <Tabs value={filter} onValueChange={(v) => onFilterChange(v as QueueFilter)}>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -74,7 +89,7 @@ export function OperationalQueue({
             {t.queue.hint[filter]}
           </p>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Label htmlFor="case-search" className="sr-only">
                 {t.queue.searchLabel}
@@ -108,6 +123,25 @@ export function OperationalQueue({
                 {PRIORITIES.map((p) => (
                   <SelectItem key={p} value={p}>
                     {t.priority[p]} — {t.priority.meaning[p]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              items={concernItems}
+              value={concern}
+              onValueChange={(v) => setConcern((v ?? "any") as Concern)}
+            >
+              <SelectTrigger
+                aria-label={t.queue.concernFilter}
+                className="h-10! w-full bg-card sm:w-52"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONCERNS.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {t.queue.concern[k]}
                   </SelectItem>
                 ))}
               </SelectContent>

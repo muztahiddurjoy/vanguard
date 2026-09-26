@@ -18,10 +18,10 @@ import { SafeContactLine } from "@/components/case/safe-contact-line"
 import { HearingCard } from "@/components/hearings/hearing-card"
 import { SummaryTiles } from "@/components/home/summary-tiles"
 import { PageHeader } from "@/components/layout/page-header"
+import { PatternAlerts } from "@/components/lawyers/pattern-alert"
 import { NextActionButton } from "@/components/queue/next-action-button"
 import { ButtonLink } from "@/components/ui/button-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { HEARINGS } from "@/data/hearings"
 import { nextActionOf, type QueueKey } from "@/data/types"
 import { useNow } from "@/hooks/use-now"
 import { caseReason } from "@/i18n/case-text"
@@ -42,7 +42,7 @@ export function HomePage() {
   const i18n = useI18n()
   const { t, f, pick } = i18n
   const officer = useOfficer()
-  const { cases, openCase, runAction } = useCases()
+  const { cases, openCase, runAction, hearings } = useCases()
   const now = useNow(60_000)
 
   const hour = now.getHours()
@@ -64,10 +64,11 @@ export function HomePage() {
         .slice(0, 3),
     [cases],
   )
-  const upcoming = HEARINGS.filter((h) => {
-    const at = Date.parse(h.at)
-    return at >= now.getTime() - 60 * 60 * 1000 && at <= now.getTime() + TWO_WEEKS
-  })
+  const upcoming = hearings
+    .filter((h) => {
+      const at = Date.parse(h.at)
+      return at >= now.getTime() - 60 * 60 * 1000 && at <= now.getTime() + TWO_WEEKS
+    })
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
     .slice(0, 3)
 
@@ -76,6 +77,8 @@ export function HomePage() {
       <PageHeader title={greet(firstName)} description={t.home.intro(f.longDate(now))} />
 
       <SummaryTiles cases={cases} />
+
+      <PatternAlerts cases={cases} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card className="gap-0 py-0">

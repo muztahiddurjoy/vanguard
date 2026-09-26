@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
-import { fetchCase, fetchCases, saveAction } from "@/api/cases"
+import { fetchCase, fetchCases, fetchHearings, openEvidence, saveAction } from "@/api/cases"
 import { apiEnabled } from "@/api/client"
 import { useAuth } from "@/auth/use-auth"
 import { CaseDetailDialog, type CaseTab } from "@/components/case-detail/case-detail-dialog"
 import { DuplicateReviewDialog } from "@/components/duplicate/duplicate-review-dialog"
 import { INITIAL_CASES } from "@/data/cases"
-import type { LegalCase, NextAction } from "@/data/types"
+import { HEARINGS } from "@/data/hearings"
+import type { Hearing, LegalCase, NextAction } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import { CasesContext, type CasesSync } from "@/state/cases-context"
 import { casesReducer, type CaseAction } from "@/state/cases-reducer"
@@ -35,6 +36,7 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const officerId = useAuth().user?.id
   const [cases, apply] = useReducer(casesReducer, live ? [] : INITIAL_CASES)
   const [sync, setSync] = useState<CasesSync>(live ? "loading" : "ready")
+  const [hearings, setHearings] = useState<Hearing[]>(live ? [] : HEARINGS)
   const [dialog, setDialog] = useState<DialogState | null>(null)
 
   const reload = useCallback(() => {
@@ -45,6 +47,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
       },
       () => setSync("error"),
     )
+    // Lawyers report new dates from their own dashboard.
+    fetchHearings(officerId).then(setHearings, () => {})
   }, [officerId])
 
   useEffect(() => {
@@ -110,6 +114,15 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     [openCase, openDuplicate],
   )
 
+  const revealEvidence = useCallback(
+    async (c: LegalCase) => {
+      const documents = live ? await openEvidence(c.id, officerId) : (c.documents ?? [])
+      apply({ type: "viewEvidence", id: c.id, at: new Date().toISOString() })
+      return documents
+    },
+    [live, officerId],
+  )
+
   // Keep the id while closing so content doesn't vanish mid-animation.
   const close = () => setDialog((d) => d && { ...d, open: false })
 
@@ -117,8 +130,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const duplicateOf = current?.duplicate && cases.find((c) => c.id === current.duplicate!.otherId)
 
   const value = useMemo(
-    () => ({ cases, sync, retry, dispatch, openCase, runAction }),
-    [cases, sync, retry, dispatch, openCase, runAction],
+    () => ({ cases, sync, retry, dispatch, openCase, runAction, hearings, revealEvidence }),
+    [cases, sync, retry, dispatch, openCase, runAction, hearings, revealEvidence],
   )
 
   return (

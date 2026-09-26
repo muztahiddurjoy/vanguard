@@ -32,6 +32,7 @@ from app.models.document import (
     DocumentStatus,
     Signature,
 )
+from app.models.lawyer import CourtStage, LawyerUpdate
 from app.models.party import (
     AccessibilityFlag,
     DuplicateReview,
@@ -51,6 +52,7 @@ __all__ = [
     "CaseStatus",
     "ChecklistItem",
     "ChecklistStatus",
+    "CourtStage",
     "DoNotCallReason",
     "Document",
     "DocumentKind",
@@ -60,6 +62,7 @@ __all__ = [
     "IdCounter",
     "Incident",
     "IntakeChannel",
+    "LawyerUpdate",
     "MediationMode",
     "MediationSession",
     "MediationStatus",

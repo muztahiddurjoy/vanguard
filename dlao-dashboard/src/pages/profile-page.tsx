@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type FormEvent } from "react"
-import { BadgeCheck, Building2, KeyRound, LogOut, Save } from "lucide-react"
+import { BadgeCheck, Building2, KeyRound, LockKeyhole, LogOut, Save } from "lucide-react"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
 
@@ -101,6 +101,12 @@ export function ProfilePage() {
                 <BadgeCheck aria-hidden className="size-4" />
                 {t.profile.since(f.monthYear(officer.joinedAt))}
               </p>
+              {officer.sensitiveAccess && (
+                <p className="flex items-start gap-1.5 text-left text-sm text-muted-foreground">
+                  <LockKeyhole aria-hidden className="mt-0.5 size-4 shrink-0" />
+                  {t.profile.sensitiveAccess}
+                </p>
+              )}
             </CardContent>
             <CardFooter className="w-full flex-col items-stretch gap-3 border-t text-left text-sm">
               <div className="flex flex-col">

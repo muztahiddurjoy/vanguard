@@ -182,6 +182,8 @@ export interface Officer {
   id: string
   name: Localized
   role: Localized
+  /** The authorized receiving DLAO (Role B6): may open a sensitive case's evidence. */
+  sensitiveAccess?: boolean
   district: Localized
   office: Localized
   email: string
@@ -209,8 +211,12 @@ export interface Hearing {
   caseId: string
   at: string
   kind: "court" | "mediation"
-  place: Localized
-  purpose: Localized
+  /** Where it is held; a mediation meeting from the server gives its mode instead. */
+  place?: Localized
+  mode?: "in_person" | "odr_video" | "odr_phone"
+  /** What the hearing is for; hearings a lawyer reported give the stage instead. */
+  purpose?: Localized
+  stage?: CourtStage
   lawyerId?: string
 }
 
@@ -221,6 +227,67 @@ export interface PanelLawyer {
   phone: string
   /** Year they joined the district legal aid panel. */
   since: number
+}
+
+/** Where a case stands in court after the step the lawyer reports. */
+export type CourtStage =
+  | "plaintFiled"
+  | "evidenceRecorded"
+  | "hearingAdjourned"
+  | "bailHeard"
+  | "settlementFiled"
+  | "judgment"
+  | "other"
+
+export const COURT_STAGES: readonly CourtStage[] = [
+  "plaintFiled",
+  "evidenceRecorded",
+  "hearingAdjourned",
+  "bailHeard",
+  "settlementFiled",
+  "judgment",
+  "other",
+]
+
+/** A progress report the panel lawyer sent from their dashboard. */
+export interface LawyerUpdate {
+  id: string
+  at: string
+  lawyerId: string
+  stage: CourtStage
+  /** In the lawyer's own words (the same text in both languages when they wrote one). */
+  summary: Localized
+  court?: Localized
+  /** The hearing this update reports on (a date, no time). */
+  hearingHeldOn?: string
+  /** The next date the court fixed. */
+  nextHearingAt?: string
+  /** The order sheet or certified copy they attached. */
+  attachment?: { name: string }
+}
+
+/** One hop of a case between legal aid offices (T2). */
+export interface ReferralHop {
+  id: string
+  at: string
+  from: Localized
+  to: Localized
+  reason: Localized
+  /** "returned": the other office sent it back — a bounce. */
+  status: "pending" | "accepted" | "returned" | "escalated"
+  respondedAt?: string
+  response?: Localized
+}
+
+export type DocumentType = "image" | "pdf" | "text"
+
+/** A file on the case: evidence from the applicant, or a court order from the lawyer. */
+export interface CaseDocument {
+  id: string
+  /** Absent while a sensitive case's names are withheld. */
+  name?: string
+  type: DocumentType
+  sizeBytes?: number
 }
 
 export interface DuplicateMatch {
@@ -249,7 +316,8 @@ export type ActivityEvent =
   | { type: "duplicateDistinct"; at: string; otherId: string }
   | { type: "lawyerUpdateMissed"; at: string }
   | { type: "lawyerReminder"; at: string }
-  | { type: "escalated"; at: string }
+  /** toChief: after other offices kept returning it (T2). */
+  | { type: "escalated"; at: string; toChief?: boolean }
   | { type: "overdueResolved"; at: string }
   | { type: "lawyerAssigned"; at: string; lawyerId: string }
   | { type: "safeCallScheduled"; at: string; scheduledFor: string }
@@ -264,6 +332,10 @@ export type ActivityEvent =
   | { type: "noticeHeld"; at: string }
   | { type: "noticeReleased"; at: string; justification: string }
   | { type: "identityChecked"; at: string; verified: boolean }
+  | { type: "lawyerUpdate"; at: string; lawyerId: string; stage: CourtStage }
+  | { type: "lawyerReassigned"; at: string; from: string; to: string; justification?: string }
+  | { type: "evidenceViewed"; at: string }
+  | { type: "evidenceAcknowledged"; at: string }
 
 export interface LegalCase {
   id: string
@@ -278,13 +350,34 @@ export interface LegalCase {
   channel: IntakeChannel
   receivedAt: string
   dueAt?: string
-  proxy?: { name: Localized; relation: Localized }
+  proxy?: {
+    name: Localized
+    relation: Localized
+    /** Whether the applicant agreed to someone else filing for them, when known. */
+    consent?: boolean
+  }
   safeContact?: SafeContactWindow
   lawyer?: {
     id: string
     missedUpdates: number
     lastUpdateAt: string
+    /** When the next progress report is due (fortnightly, or after a hearing). */
+    updateDueAt?: string
+    /** The office reminded this lawyer and is waiting for their report. */
+    reminded?: boolean
   }
+  /** The panel lawyer's reports, oldest first (case detail only, with a backend). */
+  lawyerUpdates?: LawyerUpdate[]
+  /** The date the court fixed at the lawyer's last report, until they report on it. */
+  nextHearing?: { at: string; court?: Localized }
+  courtStage?: CourtStage
+  /** Transfers between offices, oldest first. */
+  referrals?: ReferralHop[]
+  /** How often another office sent the case back. */
+  timesReturned?: number
+  documents?: CaseDocument[]
+  /** Sensitive evidence: who sent it here, and whether this office confirmed receipt (A3). */
+  evidence?: { from?: Localized; acknowledged?: { at: string; by: string } }
   jurisdiction?: { reason: Localized; target: Localized }
   overdue?: { task: Localized }
   duplicate?: DuplicateMatch

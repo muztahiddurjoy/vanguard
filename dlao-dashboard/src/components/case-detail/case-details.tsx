@@ -1,4 +1,7 @@
 import { CallNotes } from "@/components/case-detail/call-notes"
+import { EvidencePanel } from "@/components/case-detail/evidence-panel"
+import { ProvenancePanel } from "@/components/case-detail/provenance-panel"
+import { ReferralHistory } from "@/components/case-detail/referral-history"
 import { RespondentPanel } from "@/components/case-detail/respondent-panel"
 import { PANEL_LAWYERS } from "@/data/cases"
 import type { LegalCase } from "@/data/types"
@@ -7,9 +10,13 @@ import { useI18n } from "@/i18n/use-i18n"
 export function CaseDetails({
   legalCase: c,
   onReleaseNotice,
+  onAcknowledgeEvidence,
+  onEscalate,
 }: {
   legalCase: LegalCase
   onReleaseNotice: (justification: string) => void
+  onAcknowledgeEvidence: () => void
+  onEscalate: () => void
 }) {
   const { t, f, pick } = useI18n()
   const sensitive = c.flags.includes("sensitive")
@@ -42,15 +49,6 @@ export function CaseDetails({
             key: "filedHow",
             label: t.detail.filedHow,
             value: t.identity.filedFor[identity.filingFor],
-          },
-        ]
-      : []),
-    ...(c.proxy
-      ? [
-          {
-            key: "proxy",
-            label: t.detail.reportedBy,
-            value: `${pick(c.proxy.name)} (${pick(c.proxy.relation)})`,
           },
         ]
       : []),
@@ -99,6 +97,7 @@ export function CaseDetails({
           {pick(c.summary)}
         </p>
       </section>
+      <ProvenancePanel legalCase={c} />
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold">{t.detail.applicant}</h3>
         <dl className="grid overflow-hidden rounded-lg border sm:grid-cols-2">
@@ -110,6 +109,8 @@ export function CaseDetails({
           ))}
         </dl>
       </section>
+      <EvidencePanel legalCase={c} onAcknowledge={onAcknowledgeEvidence} />
+      <ReferralHistory legalCase={c} onEscalate={onEscalate} />
       <RespondentPanel legalCase={c} onRelease={onReleaseNotice} />
       <CallNotes legalCase={c} />
     </div>

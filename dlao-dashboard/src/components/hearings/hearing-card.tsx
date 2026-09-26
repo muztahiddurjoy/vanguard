@@ -1,6 +1,7 @@
 import { Gavel, Handshake, MapPin } from "lucide-react"
 
 import type { Hearing, LegalCase } from "@/data/types"
+import { hearingPlace } from "@/i18n/case-text"
 import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 
@@ -16,7 +17,8 @@ export function HearingCard({
   className?: string
   children?: React.ReactNode
 }) {
-  const { t, f, pick } = useI18n()
+  const i18n = useI18n()
+  const { t, f, pick } = i18n
   const date = new Date(h.at)
   const Icon = h.kind === "court" ? Gavel : Handshake
 
@@ -44,13 +46,20 @@ export function HearingCard({
         </p>
         <p className="text-base font-semibold">
           {legalCase ? pick(legalCase.applicant.name) : h.caseId}
-          <span className="font-normal text-muted-foreground"> — {pick(h.purpose)}</span>
+          <span className="font-normal text-muted-foreground">
+            {" — "}
+            {h.purpose
+              ? pick(h.purpose)
+              : h.stage
+                ? t.hearings.afterStage(t.courtStage[h.stage])
+                : t.hearings.reported}
+          </span>
         </p>
         <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
           <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />
           <span>
             <span className="sr-only">{t.hearings.where}: </span>
-            {pick(h.place)}
+            {hearingPlace(h, i18n)}
           </span>
         </p>
         {children}

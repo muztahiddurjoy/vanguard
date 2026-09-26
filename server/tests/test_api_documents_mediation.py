@@ -258,3 +258,53 @@ def test_violence_blocks_settlement_unless_acknowledged_with_reason(client):
     drafted = client.get(f"/dlao/cases/{case['id']}").json()["activity"][-1]
     assert drafted["details"]["riskAcknowledged"] is True
     assert drafted["justification"].startswith("Applicant now lives")
+
+
+# --- sensitive evidence (A3) ------------------------------------------------------
+
+BLACKMAIL = {
+    "applicant": {"name": "Nabila", "phone": "01914000207", "district": "Rangpur"},
+    "narrative": (
+        "A man is sharing edited private photos of me on Facebook and says he will post "
+        "more unless I pay him money."
+    ),
+}
+
+
+def test_sensitive_evidence_is_named_only_on_an_audited_request(client):
+    case = new_case(client, BLACKMAIL)
+    ref = case["id"]
+    assert "sensitive" in case["flags"]
+    client.post(
+        f"/intake/cases/{ref}/documents",
+        files={"file": ("nabila-edited-photo.png", b"\x89PNG fake", "image/png")},
+    )
+    [doc] = client.get(f"/dlao/cases/{ref}").json()["documents"]
+    assert doc["filename"] is None and doc["summary"] is None and doc["withheld"] is True
+    assert doc["contentType"] == "image/png" and doc["sizeBytes"] == 9
+
+    officer = {"X-Officer-Id": "DLAO-RGP-0142"}
+    [shown] = client.post(f"/dlao/cases/{ref}/evidence/view", headers=officer).json()["documents"]
+    assert shown["filename"] == "nabila-edited-photo.png"
+    entry = client.get(f"/dlao/cases/{ref}").json()["activity"][-1]
+    assert (entry["action"], entry["actor"]) == ("evidence.viewed", "DLAO-RGP-0142")
+
+
+def test_receiving_officer_acknowledges_receipt_once(client):
+    ref = new_case(client, BLACKMAIL)["id"]
+    assert client.get(f"/dlao/cases/{ref}").json()["evidenceReceipt"] is None
+    officer = {"X-Officer-Id": "DLAO-RGP-0142"}
+    assert client.post(f"/dlao/cases/{ref}/evidence/receipt", headers=officer).status_code == 200
+    receipt = client.get(f"/dlao/cases/{ref}").json()["evidenceReceipt"]
+    assert receipt["by"] == "DLAO-RGP-0142" and receipt["at"]
+    assert client.post(f"/dlao/cases/{ref}/evidence/receipt").status_code == 409
+
+
+def test_other_cases_name_their_documents(client):
+    ref = new_case(client)["id"]
+    client.post(
+        f"/intake/cases/{ref}/documents",
+        files={"file": ("kabin.txt", b"Kabinnama. Nikah registered at Kaunia.", "text/plain")},
+    )
+    [doc] = client.get(f"/dlao/cases/{ref}").json()["documents"]
+    assert doc["filename"] == "kabin.txt" and doc["withheld"] is False

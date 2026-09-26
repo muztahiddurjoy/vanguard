@@ -4,6 +4,7 @@ import type {
   CallerVerifiedBy,
   CaseFlag,
   CaseCategory,
+  CourtStage,
   DoNotCallReason,
   FilingFor,
   IntakeChannel,
@@ -76,7 +77,16 @@ export interface ApiCase {
     relation: string | null
     nidVerified: boolean
   } | null
-  lawyer: { id: string; lastUpdateAt: string | null } | null
+  lawyer: {
+    id: string
+    lastUpdateAt: string | null
+    missedUpdates?: number
+    updateDueAt?: string | null
+    remindedAt?: string | null
+  } | null
+  nextHearing?: { at: string; court: string | null } | null
+  courtStage?: CourtStage | null
+  timesReturned?: number
   triage:
     | ({
         priority: Priority
@@ -106,6 +116,57 @@ export interface ApiCase {
   // Case detail only:
   activity?: ApiActivity[]
   callNotes?: { at: string; topic: string; text: string }[]
+  lawyerUpdates?: ApiLawyerUpdate[]
+  referrals?: ApiReferral[]
+  documents?: ApiDocument[]
+  evidenceReceipt?: { at: string; by: string } | null
+}
+
+export interface ApiLawyerUpdate {
+  id: number
+  at: string
+  lawyerId: string
+  stage: CourtStage
+  summary: string
+  court: string | null
+  hearingHeldOn: string | null
+  nextHearingAt: string | null
+  attachment: { id: number; filename: string | null } | null
+}
+
+export interface ApiReferral {
+  id: number
+  at: string
+  from: string
+  to: string
+  status: "pending" | "accepted" | "returned" | "escalated"
+  reason: string
+  respondedAt: string | null
+  responseNote: string | null
+}
+
+export interface ApiDocument {
+  id: number
+  kind: string
+  /** Withheld (null) in a sensitive case until the evidence is opened. */
+  filename: string | null
+  contentType: string | null
+  sizeBytes: number | null
+  status: string
+  summary: string | null
+  withheld?: boolean
+}
+
+/** GET /dlao/hearings */
+export interface ApiHearing {
+  id: string
+  caseId: string
+  at: string
+  kind: "court" | "mediation"
+  place?: string | null
+  mode?: "in_person" | "odr_video" | "odr_phone"
+  lawyerId: string | null
+  stage?: CourtStage | null
 }
 
 export const KNOWN_FLAGS: readonly CaseFlag[] = [

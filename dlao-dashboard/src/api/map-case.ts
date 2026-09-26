@@ -7,16 +7,30 @@
  * cases spell them out by hand.
  */
 
-import type { ApiActivity, ApiCase, ApiLocalized } from "@/api/types"
+import type {
+  ApiActivity,
+  ApiCase,
+  ApiDocument,
+  ApiHearing,
+  ApiLawyerUpdate,
+  ApiLocalized,
+  ApiReferral,
+} from "@/api/types"
 import { KNOWN_FLAGS } from "@/api/types"
 import {
+  COURT_STAGES,
   PRIORITIES,
   type ActivityEvent,
+  type CaseDocument,
   type CaseFlag,
+  type CourtStage,
+  type Hearing,
+  type LawyerUpdate,
   type LegalCase,
   type Localized,
   type NextAction,
   type Priority,
+  type ReferralHop,
   type ResolutionTrack,
 } from "@/data/types"
 
@@ -60,6 +74,65 @@ function isPriority(value: unknown): value is Priority {
   return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)
 }
 
+function isStage(value: unknown): value is CourtStage {
+  return typeof value === "string" && (COURT_STAGES as readonly string[]).includes(value)
+}
+
+export function toLawyerUpdate(u: ApiLawyerUpdate): LawyerUpdate {
+  return {
+    id: String(u.id),
+    at: u.at,
+    lawyerId: u.lawyerId,
+    stage: isStage(u.stage) ? u.stage : "other",
+    // The lawyer wrote it once, in their language: the same words in both.
+    summary: loc(u.summary),
+    ...(u.court ? { court: loc(u.court) } : {}),
+    ...(u.hearingHeldOn ? { hearingHeldOn: u.hearingHeldOn } : {}),
+    ...(u.nextHearingAt ? { nextHearingAt: u.nextHearingAt } : {}),
+    ...(u.attachment ? { attachment: { name: u.attachment.filename ?? "—" } } : {}),
+  }
+}
+
+function toReferral(r: ApiReferral): ReferralHop {
+  return {
+    id: String(r.id),
+    at: r.at,
+    from: loc(r.from),
+    to: loc(r.to),
+    reason: loc(r.reason),
+    status: r.status,
+    ...(r.respondedAt ? { respondedAt: r.respondedAt } : {}),
+    ...(r.responseNote ? { response: loc(r.responseNote) } : {}),
+  }
+}
+
+export function toDocument(d: ApiDocument): CaseDocument {
+  const type = d.contentType?.startsWith("image/")
+    ? "image"
+    : d.contentType === "text/plain"
+      ? "text"
+      : "pdf"
+  return {
+    id: String(d.id),
+    ...(d.filename ? { name: d.filename } : {}),
+    type,
+    ...(d.sizeBytes != null ? { sizeBytes: d.sizeBytes } : {}),
+  }
+}
+
+export function toHearing(h: ApiHearing): Hearing {
+  return {
+    id: h.id,
+    caseId: h.caseId,
+    at: h.at,
+    kind: h.kind,
+    ...(h.place ? { place: loc(h.place) } : {}),
+    ...(h.mode ? { mode: h.mode } : {}),
+    ...(h.stage && isStage(h.stage) ? { stage: h.stage } : {}),
+    ...(h.lawyerId ? { lawyerId: h.lawyerId } : {}),
+  }
+}
+
 /** Server audit entries that the dashboard's history knows how to tell. */
 export function toActivity(
   entry: ApiActivity,
@@ -85,9 +158,33 @@ export function toActivity(
           }
         : null
     case "lawyer.assigned":
+      if (typeof d.lawyerId !== "string") return null
+      return typeof d.from === "string"
+        ? {
+            type: "lawyerReassigned",
+            at,
+            from: d.from,
+            to: d.lawyerId,
+            ...(entry.justification ? { justification: entry.justification } : {}),
+          }
+        : { type: "lawyerAssigned", at, lawyerId: d.lawyerId }
+    case "lawyer.update":
       return typeof d.lawyerId === "string"
-        ? { type: "lawyerAssigned", at, lawyerId: d.lawyerId }
+        ? {
+            type: "lawyerUpdate",
+            at,
+            lawyerId: d.lawyerId,
+            stage: isStage(d.stage) ? d.stage : "other",
+          }
         : null
+    case "lawyer.reminded":
+      return { type: "lawyerReminder", at }
+    case "case.escalated":
+      return { type: "escalated", at, toChief: Number(d.timesReturned ?? 0) >= 2 }
+    case "evidence.viewed":
+      return { type: "evidenceViewed", at }
+    case "evidence.acknowledged":
+      return { type: "evidenceAcknowledged", at }
     case "track.reviewed":
       return {
         type: "trackReviewed",
@@ -115,8 +212,11 @@ function actionsFor(c: LegalCase, status: string): NextAction[] {
   const actions: NextAction[] = []
   if (c.triage?.status === "pending") actions.push("reviewTriage")
   if (c.flags.includes("overdue")) actions.push("resolveOverdue")
-  if (c.flags.includes("jurisdictionEscalation")) actions.push("escalateJurisdiction")
-  if (c.flags.includes("lawyerInactivity")) actions.push("followUpLawyer")
+  // Sent back twice (T2): escalate, even from a server that does not flag it yet.
+  const bounced = (c.timesReturned ?? 0) >= 2 && !c.flags.includes("escalated")
+  if (c.flags.includes("jurisdictionEscalation") || bounced) actions.push("escalateJurisdiction")
+  // A reminded lawyer has one more period to answer: the office is waiting on them.
+  if (c.flags.includes("lawyerInactivity") && !c.lawyer?.reminded) actions.push("followUpLawyer")
   if (c.safeContact && !c.doNotCall) actions.push("scheduleSafeCall")
   if (status === "active" && !c.lawyer) actions.push("assignLawyer")
   return actions
@@ -195,7 +295,34 @@ export function toLegalCase(api: ApiCase, now = Date.now()): LegalCase {
     c.lawyer = {
       id: api.lawyer.id,
       lastUpdateAt: last,
-      missedUpdates: Math.floor((now - Date.parse(last)) / (LAWYER_UPDATE_DAYS * DAY)),
+      // The server also counts a missed report after a hearing; older servers do not say.
+      missedUpdates:
+        api.lawyer.missedUpdates ??
+        Math.floor((now - Date.parse(last)) / (LAWYER_UPDATE_DAYS * DAY)),
+      ...(api.lawyer.updateDueAt ? { updateDueAt: api.lawyer.updateDueAt } : {}),
+      ...(api.lawyer.remindedAt ? { reminded: true } : {}),
+    }
+  }
+  if (api.nextHearing) {
+    c.nextHearing = {
+      at: api.nextHearing.at,
+      ...(api.nextHearing.court ? { court: loc(api.nextHearing.court) } : {}),
+    }
+  }
+  if (api.courtStage && isStage(api.courtStage)) c.courtStage = api.courtStage
+  if (api.timesReturned) c.timesReturned = api.timesReturned
+  if (api.lawyerUpdates) c.lawyerUpdates = api.lawyerUpdates.map(toLawyerUpdate)
+  if (api.referrals) c.referrals = api.referrals.map(toReferral)
+  if (api.documents) {
+    // Drafts are the mediator's working copy, not a file on the case.
+    c.documents = api.documents.filter((d) => d.kind !== "settlement_draft").map(toDocument)
+  }
+  if (flags.includes("sensitive") || api.evidenceReceipt) {
+    // The office that sent the case (and its evidence) back here, if it came back.
+    const from = api.referrals?.filter((r) => r.status === "returned").at(-1)?.to
+    c.evidence = {
+      ...(from ? { from: loc(from) } : {}),
+      ...(api.evidenceReceipt ? { acknowledged: api.evidenceReceipt } : {}),
     }
   }
   if (flags.includes("jurisdictionEscalation") && district) {

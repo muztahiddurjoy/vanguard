@@ -8,13 +8,16 @@ Referrals (T2), group incidents (T3) and mediation sessions hang off a case.
 import secrets
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.database import Base, utcnow
 from app.models.party import Party
+
+if TYPE_CHECKING:
+    from app.models.lawyer import LawyerUpdate
 
 
 class CaseStatus(StrEnum):
@@ -178,10 +181,18 @@ class Case(Base):
     parties: Mapped[list["CaseParty"]] = relationship(
         back_populates="case", cascade="all, delete-orphan", lazy="selectin"
     )
+    # Loaded with the case: lists show how often it was sent back (T2).
     referrals: Mapped[list["Referral"]] = relationship(
-        back_populates="case", cascade="all, delete-orphan", order_by="Referral.id"
+        back_populates="case", cascade="all, delete-orphan", order_by="Referral.id", lazy="selectin"
     )
     incident: Mapped["Incident | None"] = relationship(back_populates="cases")
+    # Oldest first. Loaded with the case: the dashboards' lists show the next hearing.
+    lawyer_updates: Mapped[list["LawyerUpdate"]] = relationship(
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="LawyerUpdate.id",
+        lazy="selectin",
+    )
 
     @property
     def display_id(self) -> str:

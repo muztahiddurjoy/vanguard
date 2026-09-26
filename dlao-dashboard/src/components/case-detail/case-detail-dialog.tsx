@@ -1,13 +1,15 @@
 import { useState } from "react"
 import { EyeOff } from "lucide-react"
 
+import { useOfficer } from "@/auth/use-auth"
 import { CaseFlags } from "@/components/case/case-flags"
-import { DoNotCallAlert } from "@/components/case/do-not-call"
+import { DoNotCallAlert, PoliceLink } from "@/components/case/do-not-call"
 import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
 import { SafeContactAlert } from "@/components/case/safe-contact"
 import { ActivityLog } from "@/components/case-detail/activity-log"
 import { CaseDetails } from "@/components/case-detail/case-details"
+import { CourtProgress } from "@/components/case-detail/court-progress"
 import { NextStepPanel } from "@/components/case-detail/next-step-panel"
 import { TrackReview } from "@/components/triage/track-review"
 import { TriagePanel } from "@/components/triage/triage-panel"
@@ -23,7 +25,7 @@ import type { LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import type { CaseAction } from "@/state/cases-reducer"
 
-export type CaseTab = "triage" | "details" | "activity"
+export type CaseTab = "triage" | "details" | "court" | "activity"
 
 export function CaseDetailDialog({
   legalCase: c,
@@ -41,15 +43,18 @@ export function CaseDetailDialog({
   onOpenDuplicate: (c: LegalCase) => void
 }) {
   const { t, pick } = useI18n()
+  const officer = useOfficer()
   const [tab, setTab] = useState<CaseTab>(initialTab)
   const at = () => new Date().toISOString()
   const sensitive = c.flags.includes("sensitive")
+  // Court progress once a lawyer has the case (or has had it).
+  const inCourt = !!c.lawyer || !!c.lawyerUpdates?.length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         closeLabel={t.detail.close}
-        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto p-5 sm:max-w-4xl sm:p-7"
+        className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] gap-6 overflow-x-hidden overflow-y-auto p-5 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none max-sm:pt-[max(1.25rem,env(safe-area-inset-top))] max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-4xl sm:p-7"
       >
         <DialogHeader className="gap-2.5 pr-10">
           <p className="text-sm text-muted-foreground">
@@ -83,6 +88,10 @@ export function CaseDetailDialog({
         ) : (
           c.safeContact && <SafeContactAlert window={c.safeContact} />
         )}
+        {/* A threat to life: the police line is one tap away. */}
+        {c.priority === "critical" && !c.doNotCall && (
+          <PoliceLink className="rounded-lg bg-danger-surface px-4 py-3 text-danger-foreground" />
+        )}
 
         <NextStepPanel
           legalCase={c}
@@ -92,23 +101,27 @@ export function CaseDetailDialog({
         />
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as CaseTab)}>
-          <TabsList
-            variant="line"
-            aria-label={t.detail.tabsLabel}
-            className="h-auto w-full justify-start gap-0 border-b"
-          >
-            {(
-              [
-                ["triage", t.detail.tabTriage],
-                ["details", t.detail.tabDetails],
-                ["activity", t.detail.tabActivity],
-              ] as const
-            ).map(([value, label]) => (
-              <TabsTrigger key={value} value={value} className="h-10 flex-none px-4 text-sm">
-                {label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* Phones: the tabs scroll on their own, so the case never slides sideways. */}
+          <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
+            <TabsList
+              variant="line"
+              aria-label={t.detail.tabsLabel}
+              className="h-auto w-full min-w-max justify-start gap-0 border-b"
+            >
+              {(
+                [
+                  ["triage", t.detail.tabTriage],
+                  ["details", t.detail.tabDetails],
+                  ...(inCourt ? [["court", t.detail.tabCourt] as const] : []),
+                  ["activity", t.detail.tabActivity],
+                ] as const
+              ).map(([value, label]) => (
+                <TabsTrigger key={value} value={value} className="h-10 flex-none px-4 text-sm">
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           <TabsContent value="triage" className="flex flex-col gap-8 pt-5">
             <TriagePanel
@@ -131,8 +144,17 @@ export function CaseDetailDialog({
               onReleaseNotice={(justification) =>
                 dispatch({ type: "releaseNotice", id: c.id, justification, at: at() })
               }
+              onAcknowledgeEvidence={() =>
+                dispatch({ type: "acknowledgeEvidence", id: c.id, by: officer.id, at: at() })
+              }
+              onEscalate={() => dispatch({ type: "escalateJurisdiction", id: c.id, at: at() })}
             />
           </TabsContent>
+          {inCourt && (
+            <TabsContent value="court" className="pt-5">
+              <CourtProgress legalCase={c} />
+            </TabsContent>
+          )}
           <TabsContent value="activity" className="pt-5">
             <ActivityLog legalCase={c} />
           </TabsContent>

@@ -9,20 +9,13 @@
       "category": null,
       "priority": "critical",
       "priorityChanged": false,
-      "queues": [
-        "actionToday",
-        "pendingTriage"
-      ],
-      "flags": [
-        "sensitive",
-        "doNotCall",
-        "callDropped"
-      ],
+      "queues": ["actionToday", "pendingTriage"],
+      "flags": ["sensitive", "doNotCall", "callDropped"],
       "channel": "online",
       "summary": "My husband has locked me in the room",
       "summaryBn": null,
-      "receivedAt": "2026-09-25T14:53:19.279896+00:00",
-      "dueAt": "2026-09-25T18:53:19.279896+00:00",
+      "receivedAt": "2026-09-25T21:19:32.737031+00:00",
+      "dueAt": "2026-09-26T01:19:32.737031+00:00",
       "currentOffice": "Rangpur",
       "district": null,
       "applicant": {
@@ -44,7 +37,7 @@
       },
       "proxy": null,
       "respondent": null,
-      "trackingToken": "8207-7444",
+      "trackingToken": "5950-2263",
       "track": {
         "key": "sensitive",
         "status": "suggested",
@@ -68,14 +61,16 @@
         "filer": {
           "status": "blocked",
           "reason": "do_not_contact",
-          "at": "2026-09-25T14:53:19.294237+00:00"
+          "at": "2026-09-25T21:19:32.751603+00:00"
         },
         "respondent": {
           "status": "notFound",
-          "at": "2026-09-25T14:53:19.294252+00:00"
+          "at": "2026-09-25T21:19:32.751618+00:00"
         }
       },
       "lawyer": null,
+      "nextHearing": null,
+      "courtStage": null,
       "triage": {
         "priority": "critical",
         "confidence": 0.53,
@@ -170,13 +165,11 @@
           "bn": "প্রস্তাবিত অগ্রাধিকার জরুরি: জিম্মি থাকার আশঙ্কা।"
         },
         "status": "pending",
-        "generatedAt": "2026-09-25T14:53:19.290243+00:00",
+        "generatedAt": "2026-09-25T21:19:32.747513+00:00",
         "category": null,
         "categoryConfidence": 0.0,
         "categorySource": "rules",
-        "complianceNotes": [
-          "Possibly held hostage: do not call or text the applicant's number."
-        ],
+        "complianceNotes": ["Possibly held hostage: do not call or text the applicant's number."],
         "recommendedSafetyLevel": "standard",
         "track": {
           "key": "sensitive",
@@ -187,6 +180,7 @@
           "source": "rules"
         }
       },
+      "timesReturned": 0,
       "incidentId": null
     },
     {
@@ -198,18 +192,13 @@
       "category": "domesticViolence",
       "priority": "high",
       "priorityChanged": false,
-      "queues": [
-        "actionToday",
-        "pendingTriage"
-      ],
-      "flags": [
-        "sensitive"
-      ],
+      "queues": ["actionToday", "pendingTriage"],
+      "flags": ["sensitive"],
       "channel": "hotline",
       "summary": "My husband beats me every day",
       "summaryBn": null,
-      "receivedAt": "2026-09-25T14:53:19.436074+00:00",
-      "dueAt": "2026-09-26T14:53:19.436074+00:00",
+      "receivedAt": "2026-09-25T21:19:32.918167+00:00",
+      "dueAt": "2026-09-26T21:19:32.918167+00:00",
       "currentOffice": "Rangpur",
       "district": "Rangpur",
       "applicant": {
@@ -237,7 +226,7 @@
         "nidVerified": true,
         "registeredSims": 1
       },
-      "trackingToken": "6505-6556",
+      "trackingToken": "3501-0366",
       "track": {
         "key": "sensitive",
         "status": "suggested",
@@ -260,18 +249,17 @@
           "status": "sent",
           "variant": "full",
           "dryRun": true,
-          "at": "2026-09-25T14:53:19.441858+00:00"
+          "at": "2026-09-25T21:19:32.924273+00:00"
         },
         "respondent": {
           "status": "held",
-          "reasons": [
-            "callerDidNotAgree",
-            "sensitive"
-          ],
-          "at": "2026-09-25T14:53:19.442424+00:00"
+          "reasons": ["callerDidNotAgree", "sensitive"],
+          "at": "2026-09-25T21:19:32.924863+00:00"
         }
       },
       "lawyer": null,
+      "nextHearing": null,
+      "courtStage": null,
       "triage": {
         "priority": "high",
         "confidence": 0.83,
@@ -366,7 +354,7 @@
           "bn": "প্রস্তাবিত অগ্রাধিকার উচ্চ: চলমান সহিংসতা।"
         },
         "status": "pending",
-        "generatedAt": "2026-09-25T14:53:19.439452+00:00",
+        "generatedAt": "2026-09-25T21:19:32.921752+00:00",
         "category": "domesticViolence",
         "categoryConfidence": 1.0,
         "categorySource": "rules",
@@ -383,6 +371,7 @@
           "source": "rules"
         }
       },
+      "timesReturned": 0,
       "incidentId": null
     },
     {
@@ -394,17 +383,13 @@
       "category": "familyMaintenance",
       "priority": "low",
       "priorityChanged": false,
-      "queues": [
-        "pendingTriage"
-      ],
-      "flags": [
-        "proxyReported"
-      ],
+      "queues": ["pendingTriage"],
+      "flags": ["proxyReported"],
       "channel": "proxy",
       "summary": "My mother's former husband Kamal Hossain has not paid her maintenance",
       "summaryBn": null,
-      "receivedAt": "2026-09-25T14:53:19.369265+00:00",
-      "dueAt": "2026-10-02T14:53:19.369265+00:00",
+      "receivedAt": "2026-09-25T21:19:32.839108+00:00",
+      "dueAt": "2026-10-02T21:19:32.839108+00:00",
       "currentOffice": "Rangpur",
       "district": "Rangpur",
       "applicant": {
@@ -437,7 +422,7 @@
         "nidVerified": true,
         "registeredSims": 2
       },
-      "trackingToken": "0795-4817",
+      "trackingToken": "2674-0888",
       "track": {
         "key": "mediation",
         "status": "suggested",
@@ -460,17 +445,26 @@
           "status": "sent",
           "variant": "full",
           "dryRun": true,
-          "at": "2026-09-25T14:53:19.377571+00:00"
+          "at": "2026-09-25T21:19:32.847800+00:00"
         },
         "respondent": {
           "status": "held",
-          "reasons": [
-            "callerDidNotAgree"
-          ],
-          "at": "2026-09-25T14:53:19.378118+00:00"
+          "reasons": ["callerDidNotAgree"],
+          "at": "2026-09-25T21:19:32.848361+00:00"
         }
       },
-      "lawyer": null,
+      "lawyer": {
+        "id": "LAW-12",
+        "lastUpdateAt": "2026-09-25T21:19:32.989783+00:00",
+        "missedUpdates": 0,
+        "updateDueAt": "2026-10-08T21:19:32.986434+00:00",
+        "remindedAt": null
+      },
+      "nextHearing": {
+        "at": "2026-10-05T21:19:32.986434+00:00",
+        "court": "Family Court, Rangpur"
+      },
+      "courtStage": "plaintFiled",
       "triage": {
         "priority": "low",
         "confidence": 0.83,
@@ -565,13 +559,11 @@
           "bn": "প্রস্তাবিত অগ্রাধিকার নিম্ন: অন্য কেউ জানিয়েছেন।"
         },
         "status": "pending",
-        "generatedAt": "2026-09-25T14:53:19.373935+00:00",
+        "generatedAt": "2026-09-25T21:19:32.843881+00:00",
         "category": "familyMaintenance",
         "categoryConfidence": 1.0,
         "categorySource": "rules",
-        "complianceNotes": [
-          "Reported by a proxy: confirm consent with the applicant directly."
-        ],
+        "complianceNotes": ["Reported by a proxy: confirm consent with the applicant directly."],
         "recommendedSafetyLevel": "standard",
         "track": {
           "key": "mediation",
@@ -582,6 +574,7 @@
           "source": "rules"
         }
       },
+      "timesReturned": 1,
       "incidentId": null
     },
     {
@@ -593,15 +586,13 @@
       "category": null,
       "priority": "low",
       "priorityChanged": false,
-      "queues": [
-        "pendingTriage"
-      ],
+      "queues": ["pendingTriage"],
       "flags": [],
       "channel": "online",
       "summary": "My cousins have occupied 22 decimals of my inherited farmland.",
       "summaryBn": null,
-      "receivedAt": "2026-09-25T14:53:19.444586+00:00",
-      "dueAt": "2026-10-02T14:53:19.444586+00:00",
+      "receivedAt": "2026-09-25T21:19:32.927844+00:00",
+      "dueAt": "2026-10-02T21:19:32.927844+00:00",
       "currentOffice": "Rangpur",
       "district": "Rangpur",
       "applicant": {
@@ -629,7 +620,7 @@
         "nidVerified": false,
         "registeredSims": 0
       },
-      "trackingToken": "0499-6004",
+      "trackingToken": "2983-5583",
       "track": {
         "key": "mediation",
         "status": "suggested",
@@ -652,14 +643,16 @@
           "status": "sent",
           "variant": "full",
           "dryRun": true,
-          "at": "2026-09-25T14:53:19.450357+00:00"
+          "at": "2026-09-25T21:19:32.934386+00:00"
         },
         "respondent": {
           "status": "notFound",
-          "at": "2026-09-25T14:53:19.450377+00:00"
+          "at": "2026-09-25T21:19:32.934415+00:00"
         }
       },
       "lawyer": null,
+      "nextHearing": null,
+      "courtStage": null,
       "triage": {
         "priority": "low",
         "confidence": 0.5,
@@ -754,7 +747,7 @@
           "bn": "প্রস্তাবিত অগ্রাধিকার নিম্ন: কোনো সতর্ক সংকেত পাওয়া যায়নি।"
         },
         "status": "pending",
-        "generatedAt": "2026-09-25T14:53:19.447871+00:00",
+        "generatedAt": "2026-09-25T21:19:32.931617+00:00",
         "category": null,
         "categoryConfidence": 0.0,
         "categorySource": "rules",
@@ -769,6 +762,7 @@
           "source": "rules"
         }
       },
+      "timesReturned": 0,
       "incidentId": null
     }
   ],
@@ -781,17 +775,13 @@
     "category": "familyMaintenance",
     "priority": "low",
     "priorityChanged": false,
-    "queues": [
-      "pendingTriage"
-    ],
-    "flags": [
-      "proxyReported"
-    ],
+    "queues": ["pendingTriage"],
+    "flags": ["proxyReported"],
     "channel": "proxy",
     "summary": "My mother's former husband Kamal Hossain has not paid her maintenance",
     "summaryBn": null,
-    "receivedAt": "2026-09-25T14:53:19.369265+00:00",
-    "dueAt": "2026-10-02T14:53:19.369265+00:00",
+    "receivedAt": "2026-09-25T21:19:32.839108+00:00",
+    "dueAt": "2026-10-02T21:19:32.839108+00:00",
     "currentOffice": "Rangpur",
     "district": "Rangpur",
     "applicant": {
@@ -826,7 +816,7 @@
       "nidVerified": true,
       "registeredSims": 2
     },
-    "trackingToken": "0795-4817",
+    "trackingToken": "2674-0888",
     "track": {
       "key": "mediation",
       "status": "suggested",
@@ -849,17 +839,26 @@
         "status": "sent",
         "variant": "full",
         "dryRun": true,
-        "at": "2026-09-25T14:53:19.377571+00:00"
+        "at": "2026-09-25T21:19:32.847800+00:00"
       },
       "respondent": {
         "status": "held",
-        "reasons": [
-          "callerDidNotAgree"
-        ],
-        "at": "2026-09-25T14:53:19.378118+00:00"
+        "reasons": ["callerDidNotAgree"],
+        "at": "2026-09-25T21:19:32.848361+00:00"
       }
     },
-    "lawyer": null,
+    "lawyer": {
+      "id": "LAW-12",
+      "lastUpdateAt": "2026-09-25T21:19:32.989783+00:00",
+      "missedUpdates": 0,
+      "updateDueAt": "2026-10-08T21:19:32.986434+00:00",
+      "remindedAt": null
+    },
+    "nextHearing": {
+      "at": "2026-10-05T21:19:32.986434+00:00",
+      "court": "Family Court, Rangpur"
+    },
+    "courtStage": "plaintFiled",
     "triage": {
       "priority": "low",
       "confidence": 0.83,
@@ -954,13 +953,11 @@
         "bn": "প্রস্তাবিত অগ্রাধিকার নিম্ন: অন্য কেউ জানিয়েছেন।"
       },
       "status": "pending",
-      "generatedAt": "2026-09-25T14:53:19.373935+00:00",
+      "generatedAt": "2026-09-25T21:19:32.843881+00:00",
       "category": "familyMaintenance",
       "categoryConfidence": 1.0,
       "categorySource": "rules",
-      "complianceNotes": [
-        "Reported by a proxy: confirm consent with the applicant directly."
-      ],
+      "complianceNotes": ["Reported by a proxy: confirm consent with the applicant directly."],
       "recommendedSafetyLevel": "standard",
       "track": {
         "key": "mediation",
@@ -971,10 +968,11 @@
         "source": "rules"
       }
     },
+    "timesReturned": 1,
     "incidentId": null,
     "activity": [
       {
-        "at": "2026-09-25T14:53:19.372355+00:00",
+        "at": "2026-09-25T21:19:32.842318+00:00",
         "actor": "agent:t5:anonymous",
         "action": "case.created",
         "details": {
@@ -984,7 +982,7 @@
         "justification": null
       },
       {
-        "at": "2026-09-25T14:53:19.374191+00:00",
+        "at": "2026-09-25T21:19:32.844132+00:00",
         "actor": "agent:t8",
         "action": "triage.generated",
         "details": {
@@ -997,7 +995,7 @@
         "justification": null
       },
       {
-        "at": "2026-09-25T14:53:19.376623+00:00",
+        "at": "2026-09-25T21:19:32.846744+00:00",
         "actor": "agent:t5:anonymous",
         "action": "identity.checked",
         "details": {
@@ -1012,87 +1010,152 @@
         "justification": null
       },
       {
-        "at": "2026-09-25T14:53:19.377765+00:00",
+        "at": "2026-09-25T21:19:32.847998+00:00",
         "actor": "agent:t5:anonymous",
         "action": "notice.held",
         "details": {
           "notice": "respondent",
-          "reasons": [
-            "callerDidNotAgree"
-          ]
+          "reasons": ["callerDidNotAgree"]
+        },
+        "justification": null
+      },
+      {
+        "at": "2026-09-25T21:19:32.972853+00:00",
+        "actor": "DLAO-RGP-0142",
+        "action": "referral.created",
+        "details": {
+          "referralId": 1,
+          "from": "Rangpur",
+          "to": "Gaibandha"
+        },
+        "justification": "The former husband lives in Gaibandha."
+      },
+      {
+        "at": "2026-09-25T21:19:32.980194+00:00",
+        "actor": "anonymous",
+        "action": "referral.responded",
+        "details": {
+          "referralId": 1,
+          "accepted": false
+        },
+        "justification": "The applicant lives in Rangpur, so Rangpur acts."
+      },
+      {
+        "at": "2026-09-25T21:19:32.985116+00:00",
+        "actor": "DLAO-RGP-0142",
+        "action": "lawyer.assigned",
+        "details": {
+          "lawyerId": "LAW-12"
+        },
+        "justification": null
+      },
+      {
+        "at": "2026-09-25T21:19:32.992048+00:00",
+        "actor": "LAW-12",
+        "action": "lawyer.update",
+        "details": {
+          "updateId": 1,
+          "lawyerId": "LAW-12",
+          "stage": "plaintFiled",
+          "nextHearingAt": "2026-10-05T21:19:32.986434+00:00"
         },
         "justification": null
       }
     ],
     "documents": [],
+    "evidenceReceipt": null,
     "checklist": [],
     "callNotes": [
       {
-        "at": "2026-09-25T14:53:19.305231+00:00",
+        "at": "2026-09-25T21:19:32.770048+00:00",
         "topic": "problem",
         "text": "My mother's former husband Kamal Hossain has not paid her maintenance"
       },
       {
-        "at": "2026-09-25T14:53:19.310659+00:00",
+        "at": "2026-09-25T21:19:32.776204+00:00",
         "topic": "filing_for",
         "text": "for my mother"
       },
       {
-        "at": "2026-09-25T14:53:19.315682+00:00",
+        "at": "2026-09-25T21:19:32.782177+00:00",
         "topic": "caller_name",
         "text": "Rafiqul Islam"
       },
       {
-        "at": "2026-09-25T14:53:19.320344+00:00",
+        "at": "2026-09-25T21:19:32.788186+00:00",
         "topic": "father_name",
         "text": "Md Abdul Karim"
       },
       {
-        "at": "2026-09-25T14:53:19.324801+00:00",
+        "at": "2026-09-25T21:19:32.793401+00:00",
         "topic": "permanent_district",
         "text": "Rangpur"
       },
       {
-        "at": "2026-09-25T14:53:19.329880+00:00",
+        "at": "2026-09-25T21:19:32.798959+00:00",
         "topic": "date_of_birth",
         "text": "2 June 1994"
       },
       {
-        "at": "2026-09-25T14:53:19.335286+00:00",
+        "at": "2026-09-25T21:19:32.804550+00:00",
         "topic": "name",
         "text": "Rahima Khatun"
       },
       {
-        "at": "2026-09-25T14:53:19.340526+00:00",
+        "at": "2026-09-25T21:19:32.810171+00:00",
         "topic": "respondent_name",
         "text": "Kamal Hossain"
       },
       {
-        "at": "2026-09-25T14:53:19.345784+00:00",
+        "at": "2026-09-25T21:19:32.815127+00:00",
         "topic": "respondent_father_name",
         "text": "Abdul Hamid"
       },
       {
-        "at": "2026-09-25T14:53:19.350613+00:00",
+        "at": "2026-09-25T21:19:32.820337+00:00",
         "topic": "respondent_district",
         "text": "Gaibandha"
       },
       {
-        "at": "2026-09-25T14:53:19.355707+00:00",
+        "at": "2026-09-25T21:19:32.825974+00:00",
         "topic": "notify_respondent",
         "text": "no, not now"
       },
       {
-        "at": "2026-09-25T14:53:19.360747+00:00",
+        "at": "2026-09-25T21:19:32.830984+00:00",
         "topic": "phone",
         "text": "01811223344"
       },
       {
-        "at": "2026-09-25T14:53:19.366286+00:00",
+        "at": "2026-09-25T21:19:32.836113+00:00",
         "topic": "safe_to_call",
         "text": "any time"
       }
     ],
-    "referrals": []
+    "lawyerUpdates": [
+      {
+        "id": 1,
+        "at": "2026-09-25T21:19:32.989783+00:00",
+        "lawyerId": "LAW-12",
+        "stage": "plaintFiled",
+        "summary": "Maintenance suit filed at the Family Court; summons issued to Kamal Hossain.",
+        "court": "Family Court, Rangpur",
+        "hearingHeldOn": null,
+        "nextHearingAt": "2026-10-05T21:19:32.986434+00:00",
+        "attachment": null
+      }
+    ],
+    "referrals": [
+      {
+        "id": 1,
+        "at": "2026-09-25T21:19:32.972433+00:00",
+        "from": "Rangpur",
+        "to": "Gaibandha",
+        "status": "returned",
+        "reason": "The former husband lives in Gaibandha.",
+        "respondedAt": "2026-09-25T21:19:32.979990+00:00",
+        "responseNote": "The applicant lives in Rangpur, so Rangpur acts."
+      }
+    ]
   }
 }
