@@ -3,14 +3,57 @@
 Legal aid for a district office in Bangladesh, from the first phone call to the officer's
 decision.
 
-| Part | What it is | Port |
-| --- | --- | --- |
-| [`server/`](server/README.md) | The backend: AI hotline intake by phone (live speech-to-text), triage, SMS notices, the AI query helpline, and the officer API | 8000 |
-| [`nid-server/`](nid-server/README.md) | A National ID registry with fictional citizens, parent links and registered SIMs | 8100 |
-| [`dlao-dashboard/`](dlao-dashboard/README.md) | The District Legal Aid Officer's dashboard (English and বাংলা) | 5173 |
-| [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, updates from court, and each case's court record (English and বাংলা) | 5174 |
-| [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, and legal aid applications for people before the court, with e-KYC and e-signature (English and বাংলা) | 5175 |
-| [`prison-dashboard/`](prison-dashboard/README.md) | The jails' dashboard: prisoners and the court cases they are held on, the production list, and legal aid applications for prisoners, with e-KYC and e-signature (English and বাংলা) | 5176 |
+A person calls a hotline and an AI listens, verifies who they are against the National ID
+registry, and files the case. The District Legal Aid Officer (DLAO) confirms the AI's marks,
+both sides hear by SMS, courts and jails can apply on behalf of people before them, a panel
+lawyer takes the case to court and reports back, and every step is audited.
+
+**Contents**
+
+- [Modules at a glance](#modules-at-a-glance)
+- [System architecture](#system-architecture)
+- [Module by module](#module-by-module)
+- [How a case moves](#how-a-case-moves)
+- [Case lifecycle diagrams](#case-lifecycle-diagrams)
+- [Run everything locally](#run-everything-locally)
+- [Testing and quality checks](#testing-and-quality-checks)
+- [Configuration](#configuration)
+- [Repository layout](#repository-layout)
+- [Troubleshooting](#troubleshooting)
+
+## Modules at a glance
+
+| Part | What it is | Stack | Port |
+| --- | --- | --- | --- |
+| [`server/`](server/README.md) | The backend: AI hotline intake by phone (live speech-to-text), triage, SMS notices, the AI query helpline, and the officer API | FastAPI, SQLAlchemy 2, LangGraph, SQLite (Postgres in production) | 8000 |
+| [`nid-server/`](nid-server/README.md) | A National ID registry with fictional citizens, parent links and registered SIMs | FastAPI, rapidfuzz, read-only in-memory data | 8100 |
+| [`dlao-dashboard/`](dlao-dashboard/README.md) | The District Legal Aid Officer's dashboard (English and বাংলা) | React 19, TypeScript, Vite, Tailwind v4, shadcn/ui | 5173 |
+| [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, updates from court, and each case's court record (English and বাংলা) | same as above | 5174 |
+| [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, and legal aid applications for people before the court, with e-KYC and e-signature (English and বাংলা) | same as above | 5175 |
+| [`prison-dashboard/`](prison-dashboard/README.md) | The jails' dashboard: prisoners and the court cases they are held on, the production list, and legal aid applications for prisoners, with e-KYC and e-signature (English and বাংলা) | same as above | 5176 |
+
+External services the backend can use (all optional in development; without them the system
+falls back to rules, dry-run SMS and a spoken fallback message):
+
+| Service | Used for |
+| --- | --- |
+| Twilio | Phone lines: voice webhooks and a media stream carrying the call's audio |
+| OpenAI `gpt-live-transcribe` | Live speech-to-text for callers (Bangla and English) |
+| ElevenLabs (`eleven_v3`) | The line's spoken replies, in Bangla or English |
+| Claude or OpenAI (`LLM_PROVIDER`) | Optional model consulted where rules are weak (triage, intake, documents, settlement drafts, helpline) |
+| ADN SMS | Notices to filers, respondents, mediation parties and Union Digital Centres |
+| ngrok | Public tunnel so Twilio can reach a laptop (local development only) |
+
+Who uses which dashboard, and how each one signs in to the backend:
+
+| Person | Dashboard | API prefix | Identity header |
+| --- | --- | --- | --- |
+| District Legal Aid Officer | `dlao-dashboard` | `/dlao/*`, `/mediation/*`, `/duplicates`, `/referrals`, `/incidents` | `X-Officer-Id` |
+| Panel lawyer | `lawyer-dashboard` | `/lawyer/*` | `X-Lawyer-Id` |
+| Court staff (bench assistant, sheristadar) | `court-dashboard` | `/court/*` | `X-Court-Staff-Id` |
+| Jail staff (legal aid desk, deputy jailer) | `prison-dashboard` | `/prison/*` | `X-Prison-Staff-Id` |
+| Union Digital Centre entrepreneur | none (API only) | `/udc/*` | `X-Udc-Id` |
+| Caller | the phone (or `/intake/*` and `/helpline/*` on the web) | `/telephony/*` | none (Twilio signature) |
 
 ## How a case moves
 
