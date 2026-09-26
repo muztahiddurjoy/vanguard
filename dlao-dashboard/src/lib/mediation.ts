@@ -40,9 +40,12 @@ export function sessionPlace(mode: MediationMode): Localized {
         bn: "জেলা লিগ্যাল এইড অফিস, রংপুর (জেলা জজ আদালত ভবন)",
       }
     case "odr_phone":
-      return { en: "By phone", bn: "ফোনে" }
+      return { en: "By phone (the office will call)", bn: "ফোনে (অফিস থেকে ফোন করা হবে)" }
     case "odr_video":
-      return { en: "Online (video call)", bn: "অনলাইনে (ভিডিও কল)" }
+      return {
+        en: "Online by video call (the office will send the link)",
+        bn: "অনলাইনে ভিডিও কলে (অফিস লিংক পাঠাবে)",
+      }
   }
 }
 
@@ -291,4 +294,21 @@ export function mediationHearings(cases: readonly LegalCase[]): Hearing[] {
         ...(s.notes ? { purpose: s.notes } : {}),
       })),
   )
+}
+
+const pad = (n: number) => String(n).padStart(2, "0")
+
+/** The UTC offset of this computer's clock on a day, e.g. "+06:00" in Bangladesh. */
+export function utcOffset(d: Date): string {
+  const minutes = -d.getTimezoneOffset()
+  const abs = Math.abs(minutes)
+  return `${minutes >= 0 ? "+" : "-"}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+}
+
+/**
+ * A date and time as the officer picked them, in the time the dashboard shows
+ * ("2026-09-30", "10:30"), as the server takes it: "2026-09-30T10:30:00+06:00".
+ */
+export function withOffset(date: string, time: string): string {
+  return `${date}T${time}:00${utcOffset(new Date(`${date}T${time}:00`))}`
 }

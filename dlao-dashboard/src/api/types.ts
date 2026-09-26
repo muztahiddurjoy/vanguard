@@ -1,6 +1,7 @@
 /** The server's case view (server/app/routers/dlao.py: case_view and get_case). */
 
 import type {
+  Attendance,
   CallerVerifiedBy,
   CaseFlag,
   CaseCategory,
@@ -10,6 +11,9 @@ import type {
   CourtStage,
   EkycStatus,
   HelpNeeded,
+  MediationMode,
+  MediationNotice,
+  MediationRole,
   PrisonerStatus,
   ProceedingKind,
   DoNotCallReason,
@@ -21,8 +25,10 @@ import type {
   Priority,
   QueueKey,
   ResolutionTrack,
+  SessionStatus,
   TriageFactor,
   TriageStatus,
+  UdcNoticeStatus,
 } from "@/data/types"
 
 export interface ApiLocalized {
@@ -333,4 +339,68 @@ export interface ApiCaseRecords {
 export interface ApiRecordSearch {
   courtCases: ApiCourtCaseSummary[]
   prisoners: ApiPrisonerSummary[]
+}
+
+// --- Mediation (GET /mediation/cases/{ref}, POST /mediation/sessions…) ------------
+
+export interface ApiMediationNotice {
+  role: MediationRole
+  status: MediationNotice["status"]
+  code: string | null
+  reasons: string[]
+  dryRun: boolean | null
+  sentTo: number
+  at: string
+}
+
+export interface ApiSession {
+  id: number
+  caseId: number
+  scheduledFor: string
+  durationMinutes: number
+  mode: MediationMode
+  status: SessionStatus
+  meetingUrl: string | null
+  notes: string | null
+  settlementDocumentId: number | null
+  place: string
+  placeBn: string
+  attendance: Record<MediationRole, Attendance | null>
+  notices: ApiMediationNotice[]
+}
+
+export interface ApiUdcNotice {
+  id: number
+  caseRef: string
+  role: MediationRole
+  party: {
+    name: string
+    nameBn: string | null
+    fatherName: string | null
+    village: string | null
+    upazila: string | null
+  }
+  udc: {
+    id: string
+    name: string
+    nameBn: string
+    upazila: string
+    upazilaBn: string
+    entrepreneur: string
+    entrepreneurBn: string
+  } | null
+  session: { id: number; scheduledFor: string; place: string; placeBn: string }
+  missedInARow: number
+  status: UdcNoticeStatus
+  reasons: string[]
+  createdAt: string
+  informedAt: string | null
+  informedNote: string | null
+}
+
+export interface ApiCaseMediation {
+  sessions: ApiSession[]
+  udcNotices: ApiUdcNotice[]
+  missedInARow: Record<MediationRole, number>
+  noShowLimit: number
 }

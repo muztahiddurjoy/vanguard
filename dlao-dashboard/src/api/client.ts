@@ -14,11 +14,14 @@ export function apiEnabled(): boolean {
 
 export class ApiError extends Error {
   readonly status: number
+  /** The server's `detail` when it is more than a message, e.g. the safe windows of a 409. */
+  readonly detail: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: unknown) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.detail = detail
   }
 }
 
@@ -43,14 +46,16 @@ export async function apiFetch<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!res.ok) {
-    let detail = res.statusText
+    let message = res.statusText
+    let detail: unknown
     try {
       const data = (await res.json()) as { detail?: unknown }
-      if (typeof data.detail === "string") detail = data.detail
+      detail = data.detail
+      if (typeof data.detail === "string") message = data.detail
     } catch {
       // Not JSON: keep the status text.
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, message, detail)
   }
   return (await res.json()) as T
 }

@@ -256,7 +256,7 @@ describe("mediation on the built-in cases", () => {
       id: 306,
       durationMinutes: 45,
       mode: "odr_phone",
-      place: { en: "By phone", bn: "ফোনে" },
+      place: { en: "By phone (the office will call)", bn: "ফোনে (অফিস থেকে ফোন করা হবে)" },
       status: "scheduled",
     })
     // No other side on record: only the applicant is sent a notice.

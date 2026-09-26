@@ -8,6 +8,7 @@ import {
   missedInARow,
   recordAttendance,
   scheduleSession,
+  withOffset,
   type ScheduleInput,
 } from "@/lib/mediation"
 
@@ -185,5 +186,14 @@ describe("mediationHearings", () => {
       mode: "in_person",
       purpose: { en: "Mediation between the two families on guardianship" },
     })
+  })
+})
+
+describe("withOffset", () => {
+  it("keeps the time the officer picked and says which zone it is in", () => {
+    const iso = withOffset("2026-09-30", "10:30")
+    expect(iso).toMatch(/^2026-09-30T10:30:00[+-]\d{2}:\d{2}$/)
+    // The same moment as that wall time on this computer.
+    expect(Date.parse(iso)).toBe(new Date(2026, 8, 30, 10, 30).getTime())
   })
 })
