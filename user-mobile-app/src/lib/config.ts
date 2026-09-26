@@ -13,8 +13,9 @@ export const EMERGENCY = extra.emergency ?? '999';
 
 /**
  * Where the DLAS backend is, unless the person set another address in Settings.
- * EXPO_PUBLIC_API_URL is read when the app is bundled; without it, an Android
- * emulator reaches the backend on the computer it runs on at 10.0.2.2.
+ * EXPO_PUBLIC_API_URL is read when the app is bundled (a release build's is the
+ * deployed backend, from .env.production); without it, an Android emulator reaches
+ * the backend on the computer it runs on at 10.0.2.2.
  */
 export const DEFAULT_API_URL = (
   process.env.EXPO_PUBLIC_API_URL ??

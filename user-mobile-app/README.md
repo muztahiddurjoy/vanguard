@@ -39,9 +39,10 @@ app, and the person can change it in **Settings**.
 
 | Where the app runs | Backend address |
 | --- | --- |
-| Android emulator, backend on this computer | `http://10.0.2.2:8000` (the default) |
+| Android emulator, backend on this computer | `http://10.0.2.2:8000` (the development default) |
 | A phone on the same Wi-Fi | `http://<this computer's LAN IP>:8000`, with the backend started with `--host 0.0.0.0` |
 | Anywhere | the ngrok address `start.sh` prints |
+| A release build | `https://dlas-api.appbaksho.com`, the deployed backend (the default, from `.env.production`) |
 
 ```bash
 EXPO_PUBLIC_API_URL=http://192.168.1.20:8000 npm start   # a different default
@@ -49,6 +50,9 @@ EXPO_PUBLIC_API_TOKEN=...                                  # if the backend has 
 ```
 
 A debug build allows plain `http://`. A release build needs the backend on `https://`.
+The deployed backend has an API token, which is kept out of git. For a release build that
+has it built in, put `EXPO_PUBLIC_API_TOKEN=<API_TOKEN from the VPS's server/.env>` in
+`.env.production.local`, which git ignores. Otherwise, enter the token in **Settings**.
 
 ## SOS
 
