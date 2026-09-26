@@ -945,6 +945,7 @@ cd nid-server && uv venv --python 3.12 .venv && uv pip install -r requirements-d
 cd ../server && uv venv --python 3.12 .venv && uv pip install -r requirements-dev.txt --python .venv/bin/python
 cp .env.example .env    # NID_SERVER_URL=http://localhost:8100 is already set
 .venv/bin/python -m scripts.seed_records    # demo court cases, cause lists and prisoners
+.venv/bin/python -m scripts.seed_cases      # and the DLAO dashboard's demo cases
 .venv/bin/uvicorn app.main:app --port 8000 &
 
 # 3. Dashboard, showing the backend's cases
@@ -1073,7 +1074,7 @@ vanguard/
   server/                  FastAPI backend
     app/                   main.py, config.py, database.py
       models/  agents/  routers/  services/
-    scripts/               seed_records, simulate_call, dashboard_fixture
+    scripts/               seed_records, seed_cases, simulate_call, dashboard_fixture
     tests/
   nid-server/              National ID registry
     app/                   main.py, registry.py, schemas.py, data/citizens.json
