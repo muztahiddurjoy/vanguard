@@ -101,6 +101,11 @@
         stroke-linejoin: round;
       }
 
+      /* Class rules that set display would otherwise show hidden elements. */
+      [hidden] {
+        display: none !important;
+      }
+
       .sr-only {
         position: absolute;
         width: 1px;
