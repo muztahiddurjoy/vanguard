@@ -51,8 +51,8 @@ from the environment.
 
 Options:
   --no-build     Keep the published web builds (update the services and nginx)
-  --seed-demo    Add the demo court and jail records (idempotent; the dashboards'
-                 demo staff accounts use them)
+  --seed-demo    Add the demo data the dashboards' demo accounts use: the court and
+                 jail records, and the DLAO dashboard's cases (only what is missing)
   -h, --help     Show this help
 EOF
 }
@@ -226,6 +226,15 @@ wait_for() {
 }
 wait_for vanguard-nid "http://127.0.0.1:$NID_PORT/health"
 wait_for vanguard-api "http://127.0.0.1:$API_PORT/health"
+
+if ((SEED_DEMO)); then
+	# After the services: the court's application is checked with the NID registry.
+	# Idempotent; nothing is sent and no model is asked (scripts/seed_cases.py).
+	say "Adding the DLAO dashboard's demo cases"
+	(cd "$ROOT/server" && env -u PYTHONPATH DATABASE_URL="sqlite:///$DATA_DIR/dlas.db" \
+		UPLOAD_DIR="$DATA_DIR/uploads" NID_SERVER_URL="http://127.0.0.1:$NID_PORT" \
+		LOG_LEVEL=WARNING .venv/bin/python -m scripts.seed_cases --force)
+fi
 
 # --- Web apps ----------------------------------------------------------------------
 
