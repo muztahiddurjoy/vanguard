@@ -214,3 +214,31 @@
   --font-sans: "Anek Bangla Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --lang-scale: 1.0625;
 }
+
+/* The production list on paper: no menus or buttons, black on white, tables that fit. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  body,
+  [data-slot="sidebar-wrapper"],
+  [data-slot="sidebar-inset"] {
+    background: #fff !important;
+    color: #000;
+  }
+  [data-slot="table-container"] {
+    overflow: visible !important;
+  }
+  [data-slot="table-head"],
+  [data-slot="table-cell"] {
+    height: auto;
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #888;
+    color: #000;
+  }
+}
