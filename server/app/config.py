@@ -14,8 +14,10 @@ class Settings(BaseSettings):
     app_name: str = "DLAS Backend"
     environment: str = "development"
     database_url: str = "sqlite:///./dlas.db"
-    # The DLAO dashboard and the panel lawyers' dashboard.
-    cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    # The DLAO, panel lawyers', court and prison dashboards.
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176"
+    )
     # Shared bearer token for the dashboard and UDC clients. Empty disables the check.
     api_token: str = ""
     # The app's own log lines. DEBUG also shows what callers said and the replies:
@@ -102,6 +104,12 @@ class Settings(BaseSettings):
     # T2: a case referred this many times (or bounced back to an office it
     # already left) is escalated instead of being passed on again.
     referral_escalation_hops: int = 2
+
+    # Mediation: a party who misses this many sessions in a row is looked for
+    # through their Union Digital Centre, which is sent the next date.
+    mediation_no_show_limit: int = Field(default=2, ge=1, le=10)
+    # How long a court's or jail's e-KYC check can be used for an application.
+    ekyc_check_valid_minutes: int = Field(default=120, ge=5, le=24 * 60)
 
     @property
     def cors_origin_list(self) -> list[str]:
