@@ -124,3 +124,50 @@ export function parseCauseListPaste(text: string): PasteResult {
 
   return { rows, errors }
 }
+
+/** A cause list row as typed in the editor. */
+export interface RowInput {
+  serial: string
+  time: string
+  caseNumber: string
+  purpose: string
+}
+
+export type RowProblem =
+  "serial" | "serialTaken" | "time" | "caseNumber" | "purpose" | "purposeLong"
+export type RowProblems = Partial<Record<keyof RowInput, RowProblem>>
+
+/**
+ * Checks the editor's rows by the server's rules. Returns what is wrong with each
+ * row, and the rows ready to send when nothing is.
+ */
+export function checkRows(rows: RowInput[]): {
+  problems: RowProblems[]
+  drafts: CauseListRowDraft[] | null
+} {
+  const seen = new Set<number>()
+  const drafts: CauseListRowDraft[] = []
+  const problems = rows.map((row) => {
+    const p: RowProblems = {}
+    const serial = parseSerial(row.serial)
+    if (serial === null) p.serial = "serial"
+    else if (seen.has(serial)) p.serial = "serialTaken"
+    else seen.add(serial)
+    const time = normalizeTime(row.time)
+    if (time === null) p.time = "time"
+    if (!isCaseNumber(row.caseNumber)) p.caseNumber = "caseNumber"
+    const purpose = row.purpose.trim()
+    if (!purpose) p.purpose = "purpose"
+    else if (purpose.length > MAX_PURPOSE_LENGTH) p.purpose = "purposeLong"
+    if (Object.keys(p).length === 0)
+      drafts.push({
+        serial: serial!,
+        ...(time ? { time } : {}),
+        caseNumber: tidyCaseNumber(row.caseNumber),
+        purpose,
+      })
+    return p
+  })
+  const ok = problems.every((p) => Object.keys(p).length === 0) && rows.length <= MAX_ENTRIES
+  return { problems, drafts: ok ? drafts : null }
+}
