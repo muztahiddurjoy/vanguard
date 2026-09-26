@@ -604,6 +604,14 @@ export const bn: Messages = {
     noActions: "এই মামলায় এখন কিছু করার নেই।",
     close: "বন্ধ করুন",
   },
+  lawyerCard: {
+    title: "প্যানেল আইনজীবী",
+    none: "এই মামলায় এখনো কোনো আইনজীবী নেই।",
+    choose: "প্যানেল আইনজীবী বেছে নিন",
+    assign: "আইনজীবী নিয়োগ দিন",
+    change: "আইনজীবী বদলান",
+    changedToast: (name, id) => `${id} এখন ${name}-এর কাছে`,
+  },
   triage: {
     title: "এআই ট্রায়াজ সুপারিশ",
     explain:
