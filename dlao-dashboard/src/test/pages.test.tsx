@@ -50,11 +50,11 @@ describe("All cases", () => {
 
   it("lists open cases by default and closed cases with their outcome", async () => {
     const { user } = renderApp({ path: "/cases" })
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 11 of 16 cases")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 13 of 18 cases")
     expect(rowFor("APP-2026-001")).toHaveTextContent("Moyuri Akter")
 
     await user.click(screen.getByRole("button", { name: "Closed" }))
-    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 16 cases")
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 5 of 18 cases")
     expect(rowFor("DLAS-2026-008")).toHaveTextContent("Settled by mediation")
   })
 
@@ -208,8 +208,8 @@ describe("Help", () => {
 describe("Notifications", () => {
   it("lists what needs attention, marks items read and opens the case", async () => {
     const { user } = renderApp({ path: "/" })
-    // 9 cases waiting on a step + 1 hearing today
-    await user.click(screen.getByRole("button", { name: "Notifications: 10 unread" }))
+    // 11 cases waiting on a step + 1 hearing today
+    await user.click(screen.getByRole("button", { name: "Notifications: 12 unread" }))
     const panel = await screen.findByRole("dialog", { name: "Notifications" })
     await user.click(within(panel).getByRole("button", { name: /Abdul Malek/ }))
 
@@ -217,7 +217,7 @@ describe("Notifications", () => {
     expect(within(caseDialog).getByText("The lawyer has stopped reporting")).toBeInTheDocument()
     await user.keyboard("{Escape}")
     expect(
-      await screen.findByRole("button", { name: "Notifications: 9 unread" }),
+      await screen.findByRole("button", { name: "Notifications: 11 unread" }),
     ).toBeInTheDocument()
   })
 })

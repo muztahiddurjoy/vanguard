@@ -234,6 +234,143 @@ export const INITIAL_CASES: LegalCase[] = [
     ],
   },
   {
+    // Sent by Rangpur Central Jail's legal aid desk for a prisoner with no lawyer.
+    id: "APP-2026-036",
+    applicant: {
+      name: { en: "Sohel Rana", bn: "সোহেল রানা" },
+      phone: "—",
+      village: { en: "Kamarpara", bn: "কামারপাড়া" },
+      upazila: { en: "Rangpur Sadar", bn: "রংপুর সদর" },
+      guardian: { en: "Abdul Hamid (father)", bn: "আব্দুল হামিদ (পিতা)" },
+      nidMasked: "—",
+      age: 26,
+    },
+    category: "criminalDefence",
+    priority: "high",
+    queues: ["actionToday", "pendingTriage"],
+    flags: ["inCustody"],
+    actions: ["reviewTriage"],
+    summary: {
+      en: "Undertrial prisoner since May 2026 with no lawyer. His family cannot afford one. He asks for legal aid for his bail petition, listed for hearing tomorrow.",
+      bn: "২০২৬ সালের মে থেকে বিচারাধীন বন্দি, কোনো আইনজীবী নেই। তাঁর পরিবারের আইনজীবী রাখার সামর্থ্য নেই। আগামীকাল শুনানির জন্য তালিকাভুক্ত জামিন আবেদনে তিনি আইনি সহায়তা চান।",
+    },
+    channel: "prison",
+    receivedAt: hoursAgo(3),
+    dueAt: hoursAgo(-20),
+    triage: {
+      priority: "high",
+      confidence: 0.9,
+      status: "pending",
+      generatedAt: hoursAgo(3),
+      factors: [
+        { key: "hearingImminent", detected: true, agent: "jurisdiction", weight: "high" },
+        { key: "priorLegalAction", detected: true, agent: "intake", weight: "low" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Recommended HIGH: the applicant is in custody and his bail petition is heard tomorrow.",
+        bn: "প্রস্তাবিত অগ্রাধিকার উচ্চ: আবেদনকারী হেফাজতে আছেন এবং আগামীকাল তাঁর জামিন আবেদনের শুনানি।",
+      },
+    },
+    activity: [
+      { type: "received", at: hoursAgo(3), channel: "prison" },
+      { type: "aiTriage", at: hoursAgo(3), priority: "high" },
+    ],
+    identity: {
+      filingFor: "self",
+      applicantVerified: false,
+      callerVerified: false,
+      callerSimRegistered: false,
+    },
+    trackingToken: "4410-2873",
+    filerReceipt: { status: "handedOver" },
+    submittedBy: {
+      kind: "prison",
+      officeId: "RNG-CJ",
+      office: { en: "Rangpur Central Jail", bn: "রংপুর কেন্দ্রীয় কারাগার" },
+      staff: { en: "Nasima Khatun", bn: "নাসিমা খাতুন" },
+    },
+    linkedRecords: { courtCaseIds: [103], prisonerId: 202 },
+  },
+  {
+    // The magistrate's bench assistant applied after checking his NID by e-KYC.
+    id: "APP-2026-037",
+    applicant: {
+      name: { en: "Jalal Uddin", bn: "জালাল উদ্দিন" },
+      phone: "—",
+      village: { en: "Tambulpur", bn: "তাম্বুলপুর" },
+      upazila: { en: "Pirgachha", bn: "পীরগাছা" },
+      guardian: { en: "Abdus Sattar (father)", bn: "আব্দুস সাত্তার (পিতা)" },
+      nidMasked: "•••• •••• 6397",
+      age: 36,
+      nidVerified: true,
+    },
+    category: "criminalDefence",
+    priority: "high",
+    queues: ["actionToday"],
+    flags: ["inCustody"],
+    actions: ["assignLawyer"],
+    summary: {
+      en: "Accused of theft and in jail since June. His lawyer withdrew in August, and he had no lawyer when the charge was framed. The court asks for a legal aid lawyer before the evidence hearing in three days.",
+      bn: "চুরির অভিযোগে জুন থেকে কারাগারে আছেন। আগস্টে তাঁর আইনজীবী সরে যান; অভিযোগ গঠনের দিন তাঁর কোনো আইনজীবী ছিলেন না। তিন দিন পর সাক্ষ্যগ্রহণের আগে আদালত একজন লিগ্যাল এইড আইনজীবী চেয়েছে।",
+    },
+    channel: "court",
+    receivedAt: hoursAgo(26),
+    triage: {
+      priority: "high",
+      confidence: 0.88,
+      status: "accepted",
+      generatedAt: hoursAgo(26),
+      factors: [
+        { key: "hearingImminent", detected: true, agent: "jurisdiction", weight: "high" },
+        { key: "priorLegalAction", detected: true, agent: "intake", weight: "low" },
+        { key: "activeViolence", detected: false, agent: "risk", weight: "high" },
+      ],
+      rationale: {
+        en: "Recommended HIGH: the applicant is in custody with no defence lawyer and a hearing in three days.",
+        bn: "প্রস্তাবিত অগ্রাধিকার উচ্চ: আবেদনকারী হেফাজতে, আসামিপক্ষের আইনজীবী নেই, তিন দিন পর শুনানি।",
+      },
+    },
+    activity: [
+      { type: "received", at: hoursAgo(26), channel: "court" },
+      { type: "aiTriage", at: hoursAgo(26), priority: "high" },
+      { type: "identityChecked", at: hoursAgo(26), verified: true },
+      { type: "triageAccepted", at: hoursAgo(20), priority: "high" },
+    ],
+    identity: {
+      filingFor: "self",
+      applicantVerified: true,
+      callerVerified: true,
+      callerVerifiedBy: "ekyc",
+      callerSimRegistered: false,
+    },
+    trackingToken: "5162-0934",
+    filerReceipt: { status: "handedOver" },
+    documents: [
+      {
+        id: "DOC-3701",
+        name: "applicant-signature.png",
+        type: "image",
+        sizeBytes: 18_400,
+        signature: {
+          uploadedAt: hoursAgo(26.5),
+          sha256: "3f8a91c2d07be45a6c19e0f27d4b8a5163ce92f0a1d7b6e4c85f3a2091de6b7c",
+        },
+      },
+    ],
+    submittedBy: {
+      kind: "court",
+      officeId: "RNG-CJM",
+      office: {
+        en: "Chief Judicial Magistrate Court, Rangpur",
+        bn: "চিফ জুডিশিয়াল ম্যাজিস্ট্রেট আদালত, রংপুর",
+      },
+      staff: { en: "Md. Abdul Hakim", bn: "মো. আব্দুল হাকিম" },
+    },
+    // The court linked its own case; the jail's record of him is not linked yet.
+    linkedRecords: { courtCaseIds: [101] },
+  },
+  {
     id: "DLAS-2026-045",
     applicant: {
       name: { en: "Abdul Malek", bn: "আব্দুল মালেক" },

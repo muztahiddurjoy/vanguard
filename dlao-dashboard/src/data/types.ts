@@ -185,6 +185,9 @@ export interface Identity {
 
 export type NoticeStatus = "sent" | "held" | "notFound" | "blocked" | "failed"
 
+/** The tracking number's SMS; a court or jail hands it to the applicant instead. */
+export type FilerReceiptStatus = NoticeStatus | "handedOver"
+
 export type NoticeHoldReason =
   "callerDidNotAgree" | "doNotCall" | "sensitive" | "emergency" | "identityNotVerified"
 
@@ -370,6 +373,166 @@ export type ActivityEvent =
   | { type: "evidenceViewed"; at: string }
   | { type: "evidenceAcknowledged"; at: string }
 
+// --- Court and jail records (the server's records database) -----------------
+
+export interface CourtRef {
+  id: string
+  name: Localized
+  /** "sessions", "magistrate", "tribunal", "family" or "labour". */
+  kind: string
+}
+
+export interface PrisonRef {
+  id: string
+  name: Localized
+}
+
+export type CourtCaseType = "criminal" | "civil" | "family" | "womenChildren" | "labour" | "other"
+
+export type CourtPartyRole =
+  "accused" | "complainant" | "petitioner" | "respondent" | "plaintiff" | "defendant" | "witness"
+
+export interface CourtParty {
+  name: Localized
+  role: CourtPartyRole
+  fatherName?: Localized
+  age?: number
+}
+
+export interface CourtCaseSummary {
+  id: number
+  court: CourtRef
+  caseNumber: string
+  caseType: CourtCaseType
+  title: Localized
+  sections?: Localized
+  filedOn?: string
+  status: "pending" | "disposed"
+  /** Restricted by the court (e.g. to protect a child); never among previous records. */
+  restricted: boolean
+  /** The soonest upcoming cause-list date, else the last date the court fixed. */
+  nextDate?: string
+  nextPurpose?: Localized
+  parties: CourtParty[]
+}
+
+export type ProceedingKind =
+  "hearing" | "chargeFraming" | "evidence" | "bail" | "argument" | "order" | "judgment" | "other"
+
+/** One day in court, as the bench assistant recorded it. */
+export interface Proceeding {
+  id: number
+  heldOn: string
+  kind: ProceedingKind
+  summary: Localized
+  nextDate?: string
+  nextPurpose?: Localized
+}
+
+export type CourtLawyerSide =
+  "defence" | "prosecution" | "plaintiff" | "defendant" | "petitioner" | "respondent"
+
+export interface CourtLawyer {
+  id: number
+  name: Localized
+  side: CourtLawyerSide
+  enrolment?: string
+  panelLawyerId?: string
+  from?: string
+  until?: string
+  current: boolean
+}
+
+/** The case's place on a day's cause list (the court's list of cases for that day). */
+export interface CauseListSlot {
+  date: string
+  serial: number
+  time?: string
+  purpose: Localized
+  judge?: string
+}
+
+export type PrisonerStatus = "undertrial" | "convicted" | "released" | "transferred"
+
+export interface Custody {
+  prison: PrisonRef
+  prisonerNo: string
+  status: PrisonerStatus
+}
+
+export interface CourtCaseDetail extends CourtCaseSummary {
+  /** Oldest first. */
+  proceedings: Proceeding[]
+  /** Oldest first; a lawyer with no end date is still on the case. */
+  lawyers: CourtLawyer[]
+  /** Upcoming only, soonest first. */
+  causeList: CauseListSlot[]
+  custody: Custody[]
+}
+
+export interface PrisonerSummary {
+  id: number
+  prison: PrisonRef
+  prisonerNo: string
+  name: Localized
+  fatherName?: Localized
+  age?: number
+  /** Never more than the last four digits. */
+  nidLast4?: string
+  nidVerified: boolean
+  village?: Localized
+  upazila?: Localized
+  admittedOn: string
+  status: PrisonerStatus
+  ward?: string
+  releasedOn?: string
+  nextCourtDate?: string
+}
+
+/** A case a prisoner is held on, as the jail recorded it. */
+export interface PrisonCase {
+  court: CourtRef
+  caseNumber: string
+  /** The court has registered it; if not, only the jail's note of it exists. */
+  found: boolean
+  status?: "pending" | "disposed"
+  nextDate?: string
+  nextPurpose?: Localized
+}
+
+export interface PrisonerDetail extends PrisonerSummary {
+  cases: PrisonCase[]
+}
+
+export type HelpNeeded = "defence" | "bail" | "appeal" | "family" | "civil" | "other"
+
+export type EkycStatus = "verified" | "notMatched" | "unavailable"
+
+/** Everything the courts and jails hold on a legal aid case's applicant. */
+export interface CaseRecords {
+  submittedBy?: {
+    kind: "court" | "prison"
+    office: Localized
+    staff: Localized
+    submittedAt: string
+    helpNeeded: HelpNeeded
+    inCustody: boolean
+  }
+  identity: {
+    ekyc?: { status: EkycStatus; at: string; by: string; nidLast4?: string }
+    signature?: { uploadedAt: string; by: string; sha256: string }
+  }
+  courtCases: CourtCaseDetail[]
+  prisoner?: PrisonerDetail
+  /** The same person's other court cases; restricted ones are never included. */
+  previousRecords: CourtCaseSummary[]
+}
+
+export interface RecordSearchResult {
+  courtCases: CourtCaseSummary[]
+  prisoners: PrisonerSummary[]
+}
+
 export interface LegalCase {
   id: string
   applicant: Applicant
@@ -423,10 +586,12 @@ export interface LegalCase {
   trackingToken?: string
   respondent?: Respondent
   /** The SMS with the tracking number to whoever filed the case. */
-  filerReceipt?: { status: NoticeStatus }
+  filerReceipt?: { status: FilerReceiptStatus }
   callNotes?: CallNote[]
   /** A court or jail sent the application for the applicant. */
   submittedBy?: SubmittedBy
+  /** Built-in cases only: the linked court and jail records (the server keeps its own). */
+  linkedRecords?: { courtCaseIds: number[]; prisonerId?: number }
 }
 
 export function nextActionOf(c: LegalCase): NextAction {

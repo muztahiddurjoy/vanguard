@@ -859,6 +859,7 @@ export const en = {
     notFound: "Not sent: no phone number",
     blocked: "Not sent: contact is blocked",
     failed: "The SMS could not be delivered",
+    handedOver: "Given to the court or jail staff to hand to the applicant",
   },
   notes: {
     title: "What the caller said",

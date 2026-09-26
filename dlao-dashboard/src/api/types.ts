@@ -6,6 +6,7 @@ import type {
   CaseCategory,
   CourtStage,
   DoNotCallReason,
+  FilerReceiptStatus,
   FilingFor,
   IntakeChannel,
   NoticeHoldReason,
@@ -112,7 +113,7 @@ export interface ApiCase {
     callerVerifiedBy: CallerVerifiedBy | null
     callerSimRegistered: boolean
   }
-  notices: { filer?: ApiNotice; respondent?: ApiNotice }
+  notices: { filer?: { status: FilerReceiptStatus }; respondent?: ApiNotice }
   /** The court or jail that sent the application (older servers leave it out). */
   submittedBy?: {
     kind: "court" | "prison"
