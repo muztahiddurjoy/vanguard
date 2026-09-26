@@ -14,6 +14,7 @@ from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, Unique
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.database import Base, utcnow
+from app.models.mediation import MediationNotice
 from app.models.party import Party
 
 if TYPE_CHECKING:
@@ -115,10 +116,16 @@ def next_reference(db: Session, prefix: str, year: int, width: int = 3) -> str:
 
 
 def new_tracking_token(db: Session) -> str:
-    """Eight random digits: easy to say on the phone and to type on any handset."""
+    """Eight random digits: easy to say on the phone and to type on any handset.
+
+    Never a mediation notice's number either: the helpline looks a spoken
+    number up as both, so one number must never mean two things.
+    """
     while True:
         token = f"{secrets.randbelow(10**8):08d}"
-        if db.scalars(select(Case.id).where(Case.tracking_token == token)).first() is None:
+        taken = db.scalars(select(Case.id).where(Case.tracking_token == token)).first()
+        notice = db.scalars(select(MediationNotice.id).where(MediationNotice.code == token)).first()
+        if taken is None and notice is None:
             return token
 
 
