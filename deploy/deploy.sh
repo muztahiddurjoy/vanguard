@@ -199,13 +199,17 @@ if ((SEED_DEMO)); then
 		.venv/bin/python -m scripts.seed_records --force)
 fi
 
+# The dashboards' origins, the only ones the backend (and nginx's own errors) answer.
 origins=()
 for app in "${DASHBOARDS[@]}"; do origins+=("https://${HOST[$app]}"); done
+CORS_ORIGINS=$(
+	IFS=,
+	echo "${origins[*]}"
+)
 say "Starting the backend and the NID registry"
 (
-	IFS=,
 	export VANGUARD_API_PORT=$API_PORT VANGUARD_NID_PORT=$NID_PORT VANGUARD_DATA_DIR=$DATA_DIR \
-		VANGUARD_PUBLIC_BASE_URL=https://$API_HOST VANGUARD_CORS_ORIGINS="${origins[*]}"
+		VANGUARD_PUBLIC_BASE_URL=https://$API_HOST VANGUARD_CORS_ORIGINS=$CORS_ORIGINS
 	env -u PYTHONPATH pm2 startOrReload "$DEPLOY/ecosystem.config.cjs" --update-env >/dev/null
 )
 pm2 save >/dev/null
@@ -260,7 +264,8 @@ done
 install_nginx_sites() {
 	local sites=() app
 	for app in "${APPS[@]}"; do sites+=("${HOST[$app]}=$WEB_ROOT/$app"); done
-	"$DEPLOY/nginx-sites.sh" "$API_HOST" "$API_PORT" "${sites[@]}" >"$NGINX_SITE.next"
+	CORS_ORIGINS=$CORS_ORIGINS "$DEPLOY/nginx-sites.sh" "$API_HOST" "$API_PORT" "${sites[@]}" \
+		>"$NGINX_SITE.next"
 	[[ ! -f $NGINX_SITE ]] || cp "$NGINX_SITE" "$NGINX_SITE.previous"
 	mv "$NGINX_SITE.next" "$NGINX_SITE"
 	ln -sfn "$NGINX_SITE" /etc/nginx/sites-enabled/vanguard

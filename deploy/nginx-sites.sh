@@ -4,7 +4,10 @@
 # Let's Encrypt certificate exists, and over plain HTTP until then, so nginx never
 # refers to a certificate it does not have. deploy/deploy.sh installs the result.
 #
-# Usage: nginx-sites.sh API_HOST API_PORT HOST=WEB_DIR...
+# Usage: [CORS_ORIGINS=https://a,https://b] nginx-sites.sh API_HOST API_PORT HOST=WEB_DIR...
+#
+# CORS_ORIGINS are the dashboards allowed to call the backend (its own CORS_ORIGINS):
+# the errors nginx answers itself carry the CORS headers for them.
 
 set -euo pipefail
 
@@ -86,12 +89,42 @@ map $http_upgrade $vanguard_connection_upgrade {
 
 EOF
 
+cat <<'EOF'
+# The dashboards the backend answers (its CORS_ORIGINS); any other origin gets none.
+map $http_origin $vanguard_cors_origin {
+    default "";
+EOF
+IFS=, read -ra origins <<<"${CORS_ORIGINS:-}"
+for origin in "${origins[@]}"; do
+	[[ -z $origin ]] || echo "    \"$origin\" \$http_origin;"
+done
+printf '}\n\n'
+
+# An error nginx answers itself, as JSON with the CORS headers, so a dashboard can
+# read it: the backend's own answers have them, but nginx's error pages did not.
+nginx_error() {
+	cat <<EOF
+    location $1 {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin \$vanguard_cors_origin always;
+        add_header Access-Control-Allow-Credentials true always;
+        add_header Vary Origin always;
+        return $2 '{"detail":"$3"}';
+    }
+EOF
+}
+
 printf '# The backend: its API, and the phone lines Twilio calls.\n'
 server_start "$API_HOST"
 cat <<EOF
 
     # Documents are up to 10 MB (server/app/services/uploads.py).
     client_max_body_size 12m;
+
+    error_page 413 @too_large;
+    error_page 502 503 504 @unavailable;
+$(nginx_error @too_large 413 "Files must be 10 MB or smaller")
+$(nginx_error @unavailable 503 "The server is not answering just now. Try again in a minute.")
 
     location / {
         # An agent's model may take up to a minute to answer.
