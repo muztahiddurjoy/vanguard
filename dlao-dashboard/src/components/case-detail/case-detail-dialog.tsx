@@ -3,6 +3,7 @@ import { EyeOff } from "lucide-react"
 
 import { useOfficer } from "@/auth/use-auth"
 import { CaseFlags } from "@/components/case/case-flags"
+import { ChannelIcon } from "@/components/case/channel-icon"
 import { DoNotCallAlert, PoliceLink } from "@/components/case/do-not-call"
 import { TrackBadge } from "@/components/case/track-badge"
 import { PriorityBadge } from "@/components/case/priority-badge"
@@ -69,9 +70,20 @@ export function CaseDetailDialog({
             withMeaning
             overridden={c.triage?.status === "overridden"}
           />
-          <DialogDescription className="text-sm">
-            {pick(c.applicant.village)}, {pick(c.applicant.upazila)} · {t.channel[c.channel]}
+          <DialogDescription className="flex flex-wrap items-center gap-x-1.5 text-sm">
+            <span>
+              {pick(c.applicant.village)}, {pick(c.applicant.upazila)} ·
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <ChannelIcon channel={c.channel} className="size-3.5" />
+              {t.channel[c.channel]}
+            </span>
           </DialogDescription>
+          {c.submittedBy && (
+            <p className="text-sm font-medium">
+              {t.submitted.by(pick(c.submittedBy.office), pick(c.submittedBy.staff))}
+            </p>
+          )}
           {c.track && <TrackBadge track={c.track} />}
           <CaseFlags legalCase={c} hide={c.doNotCall ? ["doNotCall"] : []} />
           {sensitive && (

@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { ChannelIcon } from "@/components/case/channel-icon"
 import type { LegalCase } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import { cn } from "@/lib/utils"
@@ -19,6 +20,7 @@ function Person({
   name,
   detail,
   confirmed,
+  confirmedText,
   className,
 }: {
   Icon: LucideIcon
@@ -27,6 +29,8 @@ function Person({
   detail?: string
   /** undefined: the case does not record it. */
   confirmed?: boolean
+  /** Says how it was confirmed, e.g. by e-KYC at a court. */
+  confirmedText?: string
   className?: string
 }) {
   const { t } = useI18n()
@@ -51,7 +55,7 @@ function Person({
             ) : (
               <CircleHelp aria-hidden className="size-4" />
             )}
-            {confirmed ? t.provenance.confirmed : t.provenance.notConfirmed}
+            {confirmed ? (confirmedText ?? t.provenance.confirmed) : t.provenance.notConfirmed}
           </p>
         )}
       </div>
@@ -73,6 +77,9 @@ export function ProvenancePanel({ legalCase: c }: { legalCase: LegalCase }) {
     .filter(Boolean)
     .join(" · ")
   const subjectConfirmed = c.identity?.applicantVerified ?? a.nidVerified
+  const submitted = c.submittedBy
+  const office = submitted && pick(submitted.office)
+  const byEkyc = c.identity?.callerVerifiedBy === "ekyc" && c.identity.callerVerified
 
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-2">
@@ -81,7 +88,17 @@ export function ProvenancePanel({ legalCase: c }: { legalCase: LegalCase }) {
           {t.provenance.title}
         </h3>
         {c.proxy && <p className="text-xs text-muted-foreground">{t.provenance.hint}</p>}
+        {submitted && <p className="text-xs text-muted-foreground">{t.submitted.hint}</p>}
       </div>
+      {submitted && (
+        <p className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-[0.9375rem] font-medium">
+          <ChannelIcon
+            channel={submitted.kind}
+            className="size-4.5 shrink-0 text-muted-foreground"
+          />
+          {t.submitted.by(office!, pick(submitted.staff))}
+        </p>
+      )}
       <div className={cn("grid gap-2", c.proxy && "sm:grid-cols-2")}>
         {c.proxy && (
           <Person
@@ -97,10 +114,15 @@ export function ProvenancePanel({ legalCase: c }: { legalCase: LegalCase }) {
           label={t.provenance.subject}
           name={pick(a.name)}
           detail={subjectDetail || undefined}
-          confirmed={subjectConfirmed}
+          confirmed={byEkyc || subjectConfirmed}
+          confirmedText={
+            byEkyc ? (office ? t.identity.ekycAt(office) : t.identity.ekyc) : undefined
+          }
         />
       </div>
-      {!c.proxy && <p className="text-sm text-muted-foreground">{t.provenance.self}</p>}
+      {!c.proxy && !submitted && (
+        <p className="text-sm text-muted-foreground">{t.provenance.self}</p>
+      )}
       {c.proxy?.consent !== undefined && (
         <p
           data-consent={c.proxy.consent}

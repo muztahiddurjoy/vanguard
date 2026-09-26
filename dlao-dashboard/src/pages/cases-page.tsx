@@ -61,6 +61,7 @@ const CATEGORIES: CaseCategory[] = [
   "dowryHarassment",
   "labourDispute",
   "childCustody",
+  "criminalDefence",
 ]
 
 export function CasesPage() {

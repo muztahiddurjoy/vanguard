@@ -32,6 +32,7 @@ import {
   type Priority,
   type ReferralHop,
   type ResolutionTrack,
+  type SafetyLevel,
 } from "@/data/types"
 
 const LAWYER_UPDATE_DAYS = 14
@@ -72,6 +73,12 @@ function relation(word: string | null | undefined): Localized | undefined {
 
 function isPriority(value: unknown): value is Priority {
   return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)
+}
+
+const SAFETY_LEVELS: readonly SafetyLevel[] = ["standard", "caution", "restricted", "no_contact"]
+
+function isSafetyLevel(value: unknown): value is SafetyLevel {
+  return typeof value === "string" && (SAFETY_LEVELS as readonly string[]).includes(value)
 }
 
 function isStage(value: unknown): value is CourtStage {
@@ -117,6 +124,14 @@ export function toDocument(d: ApiDocument): CaseDocument {
     ...(d.filename ? { name: d.filename } : {}),
     type,
     ...(d.sizeBytes != null ? { sizeBytes: d.sizeBytes } : {}),
+    ...(d.kind === "applicant_signature"
+      ? {
+          signature: {
+            ...(d.createdAt ? { uploadedAt: d.createdAt } : {}),
+            ...(d.sha256 ? { sha256: d.sha256 } : {}),
+          },
+        }
+      : {}),
   }
 }
 
@@ -241,6 +256,7 @@ export function toLegalCase(api: ApiCase, now = Date.now()): LegalCase {
       nidMasked: a?.nidMasked ?? "—",
       ...(a?.age != null ? { age: a.age } : {}),
       nidVerified: a?.nidVerified ?? false,
+      ...(a && isSafetyLevel(a.safetyLevel) ? { safetyLevel: a.safetyLevel } : {}),
     },
     category: api.category ?? "other",
     priority: api.priority ?? api.triage?.priority ?? "low",
@@ -264,6 +280,16 @@ export function toLegalCase(api: ApiCase, now = Date.now()): LegalCase {
     ...(api.doNotCall ? { doNotCall: api.doNotCall } : {}),
     ...(window
       ? { safeContact: { day: window.day, startHour: window.start_hour, endHour: window.end_hour } }
+      : {}),
+    ...(api.submittedBy
+      ? {
+          submittedBy: {
+            kind: api.submittedBy.kind,
+            officeId: api.submittedBy.officeId,
+            office: loc(api.submittedBy.officeName, api.submittedBy.officeNameBn),
+            staff: loc(api.submittedBy.staffName, api.submittedBy.staffNameBn),
+          },
+        }
       : {}),
   }
 

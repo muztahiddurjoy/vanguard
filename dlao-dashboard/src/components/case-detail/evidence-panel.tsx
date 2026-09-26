@@ -8,6 +8,7 @@ import {
   FileImage,
   FileText,
   Lock,
+  Signature,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -135,8 +136,12 @@ export function EvidencePanel({
 
       <ul className="grid gap-2 sm:grid-cols-3">
         {shown.map((d, i) => {
-          const Icon = TYPE_ICON[d.type]
-          const name = locked || !d.name ? t.evidence.file(f.num(i + 1)) : d.name
+          const Icon = d.signature && !locked ? Signature : TYPE_ICON[d.type]
+          const name = locked
+            ? t.evidence.file(f.num(i + 1))
+            : d.signature
+              ? t.evidence.signature
+              : (d.name ?? t.evidence.file(f.num(i + 1)))
           return (
             <li
               key={d.id}
@@ -169,6 +174,18 @@ export function EvidencePanel({
                   {t.evidence.type[d.type]}
                   {d.sizeBytes !== undefined && ` · ${f.size(d.sizeBytes)}`}
                 </p>
+                {d.signature && !locked && (d.signature.uploadedAt || d.signature.sha256) && (
+                  <p className="text-xs text-muted-foreground">
+                    {d.signature.uploadedAt &&
+                      t.evidence.uploaded(f.dateTime(d.signature.uploadedAt))}
+                    {d.signature.uploadedAt && d.signature.sha256 && " · "}
+                    {d.signature.sha256 && (
+                      <span className="font-mono">
+                        {t.evidence.fingerprint(d.signature.sha256.slice(0, 12))}
+                      </span>
+                    )}
+                  </p>
+                )}
               </div>
             </li>
           )

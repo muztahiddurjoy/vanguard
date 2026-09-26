@@ -1,6 +1,8 @@
 import {
   AlarmClock,
+  CalendarX2,
   Copy,
+  DoorClosedLocked,
   EyeOff,
   Landmark,
   PhoneMissed,
@@ -38,6 +40,8 @@ const FLAG: Record<CaseFlag, { tone: keyof typeof ICON_TONE; Icon: LucideIcon }>
   escalated: { tone: "success", Icon: Send },
   doNotCall: { tone: "danger", Icon: ShieldAlert },
   callDropped: { tone: "warning", Icon: PhoneMissed },
+  inCustody: { tone: "warning", Icon: DoorClosedLocked },
+  mediationNoShow: { tone: "warning", Icon: CalendarX2 },
 }
 
 export function FlagBadge({

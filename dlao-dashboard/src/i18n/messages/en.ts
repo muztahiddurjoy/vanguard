@@ -497,6 +497,7 @@ export const en = {
     dowryHarassment: "Dowry Harassment",
     labourDispute: "Labour / Wages",
     childCustody: "Child Custody",
+    criminalDefence: "Criminal defence",
     other: "Not sorted yet",
   },
   flag: {
@@ -510,6 +511,8 @@ export const en = {
     escalated: "Transferred",
     doNotCall: "Do not call this number",
     callDropped: "Call was cut",
+    inCustody: "In custody",
+    mediationNoShow: "Missed mediation",
     proxyBy: (name: string) => `Proxy Reported by ${name}`,
     lawyerMissed: (n: string) => `Lawyer Inactivity: missed ${count(n, "update", "updates")}`,
   },
@@ -544,6 +547,8 @@ export const en = {
     online: "Online form",
     proxy: "Reported by someone else (proxy)",
     udc: "Union Digital Centre",
+    court: "Court",
+    prison: "Jail",
   },
   safety: {
     doNotCall: "DO NOT CALL NOW",
@@ -820,6 +825,9 @@ export const en = {
     callerVerifiedBySimFamily:
       "Confirmed as a relative of the SIM's owner, not by the security questions",
     simRegistered: "Called from a SIM registered to their own NID",
+    ekyc: "Identity verified by e-KYC",
+    ekycAt: (office: string) => `Identity verified by e-KYC at ${office}`,
+    ekycPending: "Not verified yet. The court or jail can check the NID by e-KYC.",
   },
   respondent: {
     title: "Complaint against",
@@ -916,6 +924,11 @@ export const en = {
     consentNo:
       "The applicant's agreement is not recorded yet. Confirm it with them, safely, before acting.",
   },
+  submitted: {
+    by: (office: string, staff: string) => `Submitted by ${office} · ${staff}`,
+    forApplicant: (office: string) => `By ${office}, for the applicant`,
+    hint: "Court and jail staff apply for someone in front of them, who may have no phone. Reach the applicant through that office.",
+  },
   referral: {
     title: "Transfers between offices",
     hint: "Each time the case was sent to another office, and what that office did.",
@@ -943,6 +956,9 @@ export const en = {
     hide: "Hide the files",
     file: (n: string) => `File ${n}`,
     type: { image: "Image", pdf: "PDF document", text: "Text" },
+    signature: "Applicant's e-signature",
+    uploaded: (when: string) => `Uploaded ${when}`,
+    fingerprint: (hash: string) => `SHA-256 fingerprint ${hash}…`,
     waiting: "Waiting for the receiving officer to acknowledge receipt.",
     sentBy: (office: string) => `Sent by ${office}.`,
     acknowledged: (name: string, when: string) =>

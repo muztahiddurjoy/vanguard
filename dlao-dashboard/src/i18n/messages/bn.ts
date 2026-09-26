@@ -489,6 +489,7 @@ export const bn: Messages = {
     dowryHarassment: "যৌতুকের জন্য নির্যাতন",
     labourDispute: "শ্রম ও মজুরি",
     childCustody: "সন্তানের অভিভাবকত্ব",
+    criminalDefence: "ফৌজদারি মামলায় আইনি সহায়তা",
     other: "এখনো শ্রেণিভুক্ত হয়নি",
   },
   flag: {
@@ -502,6 +503,8 @@ export const bn: Messages = {
     escalated: "স্থানান্তরিত",
     doNotCall: "এই নম্বরে ফোন করবেন না",
     callDropped: "কল কেটে গেছে",
+    inCustody: "হেফাজতে আছেন",
+    mediationNoShow: "মধ্যস্থতায় অনুপস্থিত",
     proxyBy: (name) => `${name}-এর মাধ্যমে জানানো (প্রক্সি)`,
     lawyerMissed: (n) => `আইনজীবী নিষ্ক্রিয়: ${n}টি হালনাগাদ বাকি`,
   },
@@ -533,6 +536,8 @@ export const bn: Messages = {
     online: "অনলাইন ফর্ম",
     proxy: "অন্য কেউ জানিয়েছেন (প্রক্সি)",
     udc: "ইউনিয়ন ডিজিটাল সেন্টার",
+    court: "আদালত",
+    prison: "কারাগার",
   },
   safety: {
     doNotCall: "এখন কল করবেন না",
@@ -807,6 +812,9 @@ export const bn: Messages = {
     callerVerifiedBySim: "নিরাপত্তা প্রশ্নে নয়, যে সিম থেকে ফোন করেছেন তা দিয়ে নিশ্চিত হয়েছে",
     callerVerifiedBySimFamily: "নিরাপত্তা প্রশ্নে নয়, সিমের মালিকের আত্মীয় হিসেবে নিশ্চিত হয়েছে",
     simRegistered: "নিজের এনআইডিতে নিবন্ধিত সিম থেকে ফোন করেছেন",
+    ekyc: "ই-কেওয়াইসির মাধ্যমে পরিচয় যাচাই হয়েছে",
+    ekycAt: (office) => `${office}-এ ই-কেওয়াইসির মাধ্যমে পরিচয় যাচাই হয়েছে`,
+    ekycPending: "এখনো যাচাই হয়নি। আদালত বা কারাগার ই-কেওয়াইসির মাধ্যমে এনআইডি যাচাই করতে পারে।",
   },
   respondent: {
     title: "যার বিরুদ্ধে অভিযোগ",
@@ -902,6 +910,11 @@ export const bn: Messages = {
     consentNo:
       "আবেদনকারীর সম্মতি এখনো লেখা হয়নি। পদক্ষেপ নেওয়ার আগে নিরাপদে তাঁর কাছ থেকে নিশ্চিত হয়ে নিন।",
   },
+  submitted: {
+    by: (office, staff) => `পাঠিয়েছে ${office} · ${staff}`,
+    forApplicant: (office) => `আবেদনকারীর হয়ে ${office}`,
+    hint: "আদালত ও কারাগারের কর্মীরা সামনে থাকা মানুষের হয়ে আবেদন করেন; তাঁর হয়তো নিজের ফোন নেই। আবেদনকারীর সঙ্গে সেই অফিসের মাধ্যমে যোগাযোগ করুন।",
+  },
   referral: {
     title: "অফিস থেকে অফিসে স্থানান্তর",
     hint: "মামলাটি প্রতিবার কোন অফিসে পাঠানো হয়েছে, আর সেই অফিস কী করেছে।",
@@ -929,6 +942,9 @@ export const bn: Messages = {
     hide: "ফাইলগুলো লুকান",
     file: (n) => `ফাইল ${n}`,
     type: { image: "ছবি", pdf: "পিডিএফ নথি", text: "লেখা" },
+    signature: "আবেদনকারীর ই-স্বাক্ষর",
+    uploaded: (when) => `আপলোড হয়েছে ${when}`,
+    fingerprint: (hash) => `SHA-256 ফিঙ্গারপ্রিন্ট ${hash}…`,
     waiting: "গ্রহণকারী অফিসার প্রাপ্তি স্বীকার করেননি এখনো।",
     sentBy: (office) => `পাঠিয়েছে ${office}।`,
     acknowledged: (name, when) =>

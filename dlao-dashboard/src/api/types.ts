@@ -113,6 +113,15 @@ export interface ApiCase {
     callerSimRegistered: boolean
   }
   notices: { filer?: ApiNotice; respondent?: ApiNotice }
+  /** The court or jail that sent the application (older servers leave it out). */
+  submittedBy?: {
+    kind: "court" | "prison"
+    officeId: string
+    officeName: string
+    officeNameBn: string | null
+    staffName: string
+    staffNameBn: string | null
+  } | null
   // Case detail only:
   activity?: ApiActivity[]
   callNotes?: { at: string; topic: string; text: string }[]
@@ -155,6 +164,9 @@ export interface ApiDocument {
   status: string
   summary: string | null
   withheld?: boolean
+  /** An applicant's e-signature carries its fingerprint, when the server gives it. */
+  sha256?: string | null
+  createdAt?: string | null
 }
 
 /** GET /dlao/hearings */
@@ -180,4 +192,6 @@ export const KNOWN_FLAGS: readonly CaseFlag[] = [
   "escalated",
   "doNotCall",
   "callDropped",
+  "inCustody",
+  "mediationNoShow",
 ]

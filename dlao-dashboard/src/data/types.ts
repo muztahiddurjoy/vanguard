@@ -33,6 +33,8 @@ export type CaseCategory =
   | "dowryHarassment"
   | "labourDispute"
   | "childCustody"
+  /** Defence, bail or an appeal for someone accused (applications from courts and jails). */
+  | "criminalDefence"
   /** Not sorted yet (the AI could not tell). */
   | "other"
 
@@ -49,6 +51,10 @@ export type CaseFlag =
   | "doNotCall"
   /** The phone call was cut before the AI finished its questions. */
   | "callDropped"
+  /** The applicant is in jail or police custody. */
+  | "inCustody"
+  /** A party missed mediation too many times in a row. */
+  | "mediationNoShow"
 
 export type NextAction =
   | "reviewTriage"
@@ -60,7 +66,23 @@ export type NextAction =
   | "scheduleSafeCall"
   | "viewCase"
 
-export type IntakeChannel = "hotline" | "walkIn" | "online" | "proxy" | "udc"
+export type IntakeChannel =
+  | "hotline"
+  | "walkIn"
+  | "online"
+  | "proxy"
+  | "udc"
+  /** Sent by a court's staff, or a jail's, for someone in front of them. */
+  | "court"
+  | "prison"
+
+/** The court or jail that sent an application for the applicant. */
+export interface SubmittedBy {
+  kind: "court" | "prison"
+  officeId: string
+  office: Localized
+  staff: Localized
+}
 
 /** A weekly window in which the applicant can be contacted safely (local time). */
 export interface SafeContactWindow {
@@ -105,6 +127,9 @@ export interface TriageRecommendation {
   generatedAt: string
 }
 
+/** How carefully the applicant must be contacted (the server's safety level). */
+export type SafetyLevel = "standard" | "caution" | "restricted" | "no_contact"
+
 export interface Applicant {
   name: Localized
   phone: string
@@ -115,6 +140,8 @@ export interface Applicant {
   age?: number
   /** Details matched to the National ID register. */
   nidVerified?: boolean
+  /** Not given: worked out from the safe window or do-not-call. */
+  safetyLevel?: SafetyLevel
 }
 
 /** How the case could be resolved. The AI marks it; the officer decides. */
@@ -140,9 +167,10 @@ export type FilingFor = "self" | "father" | "mother" | "sibling" | "other"
 /**
  * How a caller was confirmed: by the NID security questions, or, when they could
  * not answer them, by the SIM they called from being registered to them ("sim")
- * or to a relative on their NID record ("simFamily").
+ * or to a relative on their NID record ("simFamily"). At a court or a jail, staff
+ * check the applicant's NID and date of birth against the register ("ekyc").
  */
-export type CallerVerifiedBy = "answers" | "sim" | "simFamily"
+export type CallerVerifiedBy = "answers" | "sim" | "simFamily" | "ekyc"
 
 export interface Identity {
   filingFor: FilingFor
@@ -163,6 +191,9 @@ export type NoticeHoldReason =
 export interface Respondent {
   name: Localized
   relation?: Localized
+  /** Where they live, when known: a Union Digital Centre there can reach them. */
+  village?: Localized
+  upazila?: Localized
   /** Found in the National ID register, so their registered SIMs are known. */
   nidVerified: boolean
   /** The SMS asking them to visit the office. */
@@ -288,6 +319,8 @@ export interface CaseDocument {
   name?: string
   type: DocumentType
   sizeBytes?: number
+  /** The applicant's e-signature, taken by the court or jail after their e-KYC check. */
+  signature?: { uploadedAt?: string; sha256?: string }
 }
 
 export interface DuplicateMatch {
@@ -392,6 +425,8 @@ export interface LegalCase {
   /** The SMS with the tracking number to whoever filed the case. */
   filerReceipt?: { status: NoticeStatus }
   callNotes?: CallNote[]
+  /** A court or jail sent the application for the applicant. */
+  submittedBy?: SubmittedBy
 }
 
 export function nextActionOf(c: LegalCase): NextAction {

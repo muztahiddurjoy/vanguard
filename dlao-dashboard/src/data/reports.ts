@@ -14,6 +14,7 @@ export const CASES_BY_TYPE: Record<Exclude<CaseCategory, "other">, number> = {
   labourDispute: 18,
   childCustody: 14,
   cyberHarassment: 9,
+  criminalDefence: 6,
 }
 
 export const OUTCOMES_THIS_YEAR: Record<CaseOutcome, number> = {

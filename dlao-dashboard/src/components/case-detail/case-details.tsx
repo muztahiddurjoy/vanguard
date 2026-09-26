@@ -24,15 +24,19 @@ export function CaseDetails({
   const identity = c.identity
   // Confirming a caller by their SIM is weaker than by the security questions: say so.
   const verifiedBy = identity?.callerVerified ? (identity.callerVerifiedBy ?? "answers") : undefined
+  const office = c.submittedBy && pick(c.submittedBy.office)
   const callerText = {
     answers: identity?.filingFor !== "self" ? t.identity.callerVerified : "",
     sim: t.identity.callerVerifiedBySim,
     simFamily: t.identity.callerVerifiedBySimFamily,
+    ekyc: office ? t.identity.ekycAt(office) : t.identity.ekyc,
   }
+  // A court or jail checks the NID with the applicant in front of them (e-KYC).
+  const unverified = office ? t.identity.ekycPending : t.identity.notVerified
   const identityText =
     identity &&
     [
-      identity.applicantVerified ? t.identity.verified : t.identity.notVerified,
+      verifiedBy === "ekyc" ? "" : identity.applicantVerified ? t.identity.verified : unverified,
       verifiedBy ? callerText[verifiedBy] : "",
       identity.callerSimRegistered && verifiedBy !== "sim" ? t.identity.simRegistered : "",
     ]
@@ -48,7 +52,9 @@ export function CaseDetails({
           {
             key: "filedHow",
             label: t.detail.filedHow,
-            value: t.identity.filedFor[identity.filingFor],
+            value: office
+              ? t.submitted.forApplicant(office)
+              : t.identity.filedFor[identity.filingFor],
           },
         ]
       : []),
