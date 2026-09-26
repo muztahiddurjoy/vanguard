@@ -164,6 +164,338 @@ flowchart LR
   Cases -->|progress by tracking number| Helpline["AI helpline"]
 ```
 
+## Module by module
+
+### `server/`: the backend
+
+Requests pass through three layers. Routers check who is asking and shape the response,
+services hold the rules, and models are the tables. Agents are LangGraph graphs that run
+without any model and consult one only where rules are weak.
+
+```mermaid
+flowchart TB
+  Client["Dashboards, Twilio, UDC tablets, /docs"] --> Auth
+
+  subgraph API["routers/"]
+    Auth["Auth: bearer API_TOKEN<br/>+ X-Officer-Id, X-Lawyer-Id,<br/>X-Court-Staff-Id, X-Prison-Staff-Id, X-Udc-Id"]
+    Auth --> R1["intake, helpline, telephony<br/>(caller-facing)"]
+    Auth --> R2["dlao, records, duplicates,<br/>referrals, incidents, mediation<br/>(officer)"]
+    Auth --> R3["lawyer, court, prison, udc<br/>(each scoped to its own records)"]
+    Auth --> R4["sync<br/>(offline batches)"]
+  end
+
+  subgraph AG["agents/"]
+    T5["T5 intake"]
+    T6["T6 documents"]
+    T7["T7 settlement"]
+    T8["T8 triage"]
+    HL["helpline + hotline_menu"]
+    LLMC["llm.py<br/>optional Claude / OpenAI"]
+  end
+
+  subgraph SV["services/"]
+    SC["safe_contact"]
+    NT["notices, mediation"]
+    EK["ekyc, institution"]
+    RC["records, courts, prisons,<br/>court_progress, case_status"]
+    NR["nid_registry"]
+    SMS["adnsms"]
+    CR["crypto (HMAC, Ed25519)"]
+    VP["stream_manager, audio,<br/>speech_to_text, elevenlabs"]
+  end
+
+  subgraph MD["models/"]
+    M1["case, party"]
+    M2["records"]
+    M3["mediation, lawyer, document"]
+    M4["audit"]
+  end
+
+  R1 --> T5
+  R1 --> HL
+  R1 --> VP
+  R2 --> T6
+  R2 --> T7
+  R2 --> T8
+  T5 --> T8
+  R3 --> EK
+  R3 --> RC
+  R2 --> NT
+  R4 --> T5
+  T5 -.-> LLMC
+  T6 -.-> LLMC
+  T7 -.-> LLMC
+  T8 -.-> LLMC
+  HL -.-> LLMC
+  T5 --> NR
+  EK --> NR
+  NT --> SC
+  T5 --> SC
+  SC --> SMS
+  SV --> MD
+  SC --> M4
+```
+
+| Layer | Contents |
+| --- | --- |
+| `routers/` | `intake`, `dlao`, `records` (the officer's view of court and jail records), `lawyer`, `court`, `prison`, `duplicates`, `referrals`, `incidents`, `mediation`, `udc`, `sync`, `helpline`, `telephony` |
+| `agents/` | `t5_intake`, `t6_document`, `t7_settlement`, `t8_triage`, `helpline`, `hotline_menu`, plus `llm` (optional model access), `spoken` (reading callers' answers) and `state` |
+| `services/` | `safe_contact`, `notices`, `mediation`, `adnsms`, `nid_registry`, `ekyc`, `institution`, `records`, `courts`, `prisons`, `panel`, `udc`, `case_status`, `court_progress`, `uploads`, `crypto`, and the voice services |
+| `models/` | `case`, `party`, `document`, `lawyer`, `records`, `mediation`, `audit` |
+
+#### Features by module
+
+| | Feature | Where |
+| --- | --- | --- |
+| T1 | Alerts: overdue, lawyer inactivity, jurisdiction escalation, untriaged critical cases | `GET /dlao/alerts` |
+| T2 | Referrals between district offices; ping-pong is escalated, not forwarded | `/referrals` |
+| T3 | Group incidents linking cases from one event, with suggestions | `/incidents` |
+| T4 | Fuzzy duplicate detection on every intake; merge blocked when NIDs differ | `/duplicates` |
+| T5 | Conversational intake for the hotline, UDC and web | `/intake/conversations`, telephony |
+| T6 | Document reading (OCR), summaries and a missing-documents checklist | `POST /intake/cases/{ref}/documents` |
+| T7 | Settlement drafting under Section 21C, LASA 2000 | `POST /mediation/cases/{ref}/settlement-draft` |
+| T8 | Triage: categorization, compliance, urgency, track | runs on every intake; `/dlao/cases/{ref}/triage/*` |
+| T9 | Idempotent offline batch sync for the PWA | `POST /sync/batch` |
+| T11 | Ed25519 e-signatures on approved settlements | `POST /mediation/signatures` |
+
+The full endpoint list, each rule and every known limitation are in
+[`server/README.md`](server/README.md).
+
+#### The AI agents
+
+Each agent is a LangGraph graph. Any model failure (network, rate limit, refusal, invalid
+output) falls back to rules, and requests use structured outputs.
+
+```mermaid
+flowchart TB
+  subgraph T5g["T5 intake: one turn of a conversation"]
+    direction LR
+    e1["extract<br/>read the caller's answer"] --> e2["check_danger<br/>999 / hostage / violence"]
+    e2 --> e3["listen<br/>does it sound like a case?"]
+    e3 -->|"nothing to act on"| eEnd(["end call"])
+    e3 -->|"a case"| e4["resolve<br/>who, NID questions, relative,<br/>respondent, contact"]
+    e4 --> e5["respond<br/>next question or file it"]
+  end
+
+  subgraph T8g["T8 triage: runs on every application"]
+    direction LR
+    t1["categorize<br/>keyword rules, model for<br/>unclear narratives"] --> t2["compliance<br/>eligibility and jurisdiction"]
+    t2 --> t3["urgency<br/>rule-based priority"]
+    t3 --> t4["track<br/>advice, mediation or sensitive"]
+  end
+
+  subgraph T6g["T6 documents"]
+    direction LR
+    d1["read<br/>OCR scans and PDFs"] --> d2["checklist<br/>missing documents"]
+  end
+
+  subgraph T7g["T7 settlement draft"]
+    direction LR
+    s1["screen<br/>refuse if violence on record"] -->|"ok"| s2["draft<br/>Section 21C, LASA 2000"]
+    s1 -->|"stop"| sEnd(["stop"])
+    s2 --> s3["review<br/>a draft that drops a term,<br/>party or statute is replaced<br/>by the template"]
+  end
+
+  subgraph HLg["Helpline"]
+    direction LR
+    h0["hotline_menu<br/>new case or status?"] --> h1["answer<br/>tracking number, notice number,<br/>office, documents, mediation"]
+  end
+```
+
+| Agent | Rules only | With a model configured |
+| --- | --- | --- |
+| T5 intake | Keyword and pattern rules for problems, danger, names, phone numbers, dates | Reads every turn alongside the rules for free speech; can add a "this is a case" or "not a legal matter" verdict, never turn away a problem the rules know |
+| T6 documents | Checklist by document kind | Reads scans and PDFs (image and PDF blocks) |
+| T7 settlement | Template draft | Drafts, then review rejects a draft that drops a term, a party or the statutory reference |
+| T8 triage | Keyword categorization, transparent priority rules | Categorizes narratives the rules cannot; may choose between advice and mediation but never lowers a sensitive mark; priority stays rule-based |
+| Helpline | Fixed facts about the office, documents, fees and mediation | Answers other questions from the same facts |
+
+#### The phone line
+
+One call is one Twilio media stream. The backend listens, thinks and speaks on the same
+socket, and the caller can talk over the line at any time.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor C as Caller
+  participant TW as Twilio
+  participant TP as telephony router
+  participant SM as stream_manager
+  participant AU as audio.py
+  participant ST as gpt-live-transcribe
+  participant AG as Agent (menu, T5 or helpline)
+  participant EL as ElevenLabs
+
+  C->>TW: dials the hotline or helpline number
+  TW->>TP: POST /telephony/voice (signature checked)
+  TP-->>TW: TwiML: open a media stream
+  TW->>SM: WebSocket, μ-law 8 kHz audio
+  SM->>EL: greeting text
+  EL-->>SM: speech (streamed over HTTP)
+  SM-->>TW: audio (first 0.6 s held back, sped up 1.2x)
+  TW-->>C: hears the greeting
+  loop each turn
+    C->>TW: speaks
+    TW->>SM: audio frames
+    SM->>AU: decode, upsample to 24 kHz, detect voice
+    Note over AU: turn starts after 200 ms of speech,<br/>ends after 700 ms of quiet<br/>(1200 ms while the caller tells what happened)
+    AU->>ST: the turn's audio only
+    ST-->>SM: transcript
+    SM->>AG: transcript
+    AG-->>SM: reply text, or file the case
+    SM->>EL: reply text
+    EL-->>SM: speech
+    SM-->>TW: audio
+    TW-->>C: hears the reply
+    C-->>SM: talks over the line (barge-in stops playback)
+  end
+  TW->>TP: POST /telephony/status (call ended or cut)
+  TP->>AG: a cut call is filed, do-not-call if violence was described
+```
+
+Failure paths: a lost speech-to-text session is reopened up to three times (after 0.3, 1 and
+2 s); with no `OPENAI_API_KEY` the caller hears a short message (call 999 if in danger, apply
+at a UDC) and the call ends; a voice that is definitely broken gets Twilio's own spoken
+"cannot take applications by phone" message rather than silence.
+
+#### Filing an application
+
+```mermaid
+flowchart TB
+  In1["Hotline / UDC / web<br/>T5 intake"] --> New
+  In2["court-dashboard<br/>POST /court/applications"] --> Inst
+  In3["prison-dashboard<br/>POST /prison/applications"] --> Inst
+  In4["UDC tablet<br/>POST /sync/batch"] --> New
+
+  Inst["institution service<br/>verified e-KYC used once,<br/>registry's details win,<br/>client_ref makes a retry safe"] --> New
+  New["Create application<br/>APP-year-number + 8-digit tracking number"] --> Dup["T4 duplicate check<br/>(merge blocked if NIDs differ)"]
+  Dup --> Tri["T8 triage<br/>priority + advice / mediation / sensitive"]
+  Tri --> Link["Link court case or prisoner<br/>by normalised case number"]
+  Link --> Q["DLAO queue and alerts"]
+  Tri --> Notice{"Channel"}
+  Notice -->|"hotline, UDC, web"| SMS["SMS notices through safe_contact:<br/>tracking number to the filer,<br/>visit-the-office to the respondent<br/>(held for an officer if risky)"]
+  Notice -->|"court or jail"| Hand["No SMS: staff hand the<br/>tracking number over"]
+  Tri --> Aud[("Audit ledger")]
+```
+
+#### Sending a message safely
+
+Nothing reaches a phone except through `safe_contact`. Every decision, sent or blocked, is
+audited without the message body.
+
+```mermaid
+flowchart TB
+  Msg["Any outbound SMS or call"] --> DNC{"Do-not-call?<br/>safety level no_contact"}
+  DNC -->|"yes"| Block["Blocked and audited"]
+  DNC -->|"no"| Hold{"Notice held?<br/>caller did not agree, sensitive,<br/>emergency, or identity unverified"}
+  Hold -->|"yes"| Wait["Held for an officer<br/>(release needs a written reason)"]
+  Hold -->|"no"| Lvl{"Party's safety level"}
+  Lvl -->|"standard"| Send["Send the full text"]
+  Lvl -->|"restricted, caution<br/>or shared phone"| Win{"Inside the weekly<br/>safe window?"}
+  Win -->|"no"| Block
+  Win -->|"yes"| Neutral["Send a neutral text only"]
+  Send --> Gate{"SMS_DRY_RUN or<br/>SMS_ALLOWLIST"}
+  Neutral --> Gate
+  Gate -->|"dry run, or not on the list"| Log["Logged, not sent"]
+  Gate -->|"live"| ADN["ADN SMS"]
+  Send --> Aud[("Audit ledger")]
+  Neutral --> Aud
+  Block --> Aud
+  Wait --> Aud
+```
+
+#### Mediation
+
+```mermaid
+flowchart TB
+  Sch["Officer schedules a session<br/>POST /mediation/sessions"] --> N["Notice to each party by SMS<br/>date, place, 8-digit notice number,<br/>helpline number (through safe_contact)"]
+  N --> Held{"Do-not-call or<br/>sensitive case?"}
+  Held -->|"yes"| HN["Notices held"]
+  Held -->|"no"| Sent["Sent"]
+  Sent --> Call["Party calls the helpline and says<br/>the notice number"]
+  Call --> Exp["Helpline explains the notice:<br/>when, where, what to bring"]
+  Sent --> Att["Officer records who came<br/>POST /mediation/sessions/id/attendance"]
+  Att --> Miss{"Anyone absent?"}
+  Miss -->|"yes"| Ms["Session is missed"]
+  Ms --> Lim{"Missed 2 in a row?<br/>MEDIATION_NO_SHOW_LIMIT"}
+  Lim -->|"yes"| Flag["Case flagged mediationNoShow"]
+  Flag --> Risk{"Applicant at risk,<br/>sensitive or do-not-call?"}
+  Risk -->|"yes"| UH["UDC notice held<br/>(officer can release with a reason)"]
+  Risk -->|"no"| UN["UDC of the party's upazila gets the<br/>next date and place by SMS"]
+  UN --> UI["UDC tells the person in person<br/>POST /udc/notices/id/informed"]
+  Miss -->|"no"| Ok["Session held"]
+  Ok --> Draft["Optional: T7 settlement draft,<br/>officer approves, parties sign (Ed25519)"]
+```
+
+### `nid-server/`: the National ID registry
+
+A read-only stand-in for the Election Commission's verification service, holding 40
+fictional citizens. The backend uses it to verify callers, find relatives and find a
+respondent's SIMs.
+
+```mermaid
+flowchart LR
+  subgraph Callers["Called by server/ only"]
+    A["T5 intake<br/>verify the caller"]
+    B["T5 intake<br/>relative or respondent"]
+    C["T5 intake<br/>SIM fallback, respondent SIMs"]
+    D["e-KYC from the<br/>court and jail dashboards"]
+  end
+
+  subgraph NIDS["nid-server :8100"]
+    K["X-API-Key check<br/>(open if NID_API_KEY is empty)"]
+    K --> E1["POST /v1/citizens/match"]
+    K --> E2["GET /v1/citizens/nid"]
+    K --> E3["GET /v1/citizens/nid/family"]
+    K --> E4["GET /v1/sims/msisdn"]
+    E1 --> REG["registry.py<br/>normalise, fuzzy match"]
+    E2 --> REG
+    E3 --> REG
+    E4 --> REG
+    REG --> DATA[("citizens.json<br/>loaded once at startup,<br/>integrity-checked")]
+  end
+
+  A --> E1
+  B --> E3
+  C --> E4
+  D --> E2
+```
+
+Matching rules in short: a request needs a name plus at least two other details; every given
+field must agree; names are compared fuzzily (rapidfuzz `token_sort_ratio`, threshold 85,
+honorifics removed, English or Bangla spelling); date of birth must be exact; districts
+ignore old spellings (Chittagong, Comilla, Bogra and so on). `unique` is true only when
+exactly one citizen matched. The service refuses to start if the data file breaks its
+integrity rules. See [`nid-server/README.md`](nid-server/README.md).
+
+The registry is also used for the e-KYC check that courts and jails run before a
+signature is accepted:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor S as Court or jail staff
+  participant D as Dashboard
+  participant API as server (/court or /prison)
+  participant N as nid-server
+
+  S->>D: NID, date of birth, name (optional)
+  D->>API: POST /court/ekyc (or /prison/ekyc)
+  API->>N: GET /v1/citizens/{nid}
+  N-->>API: the citizen, or 404
+  alt matches
+    API-->>D: verified, the registry's details, check id
+    Note over API: kept for one use, by this office,<br/>within EKYC_CHECK_VALID_MINUTES
+  else does not match
+    API-->>D: did not match (never says which detail)
+    Note over D: after two misses, staff may send without e-KYC<br/>and verify later from the application page
+  end
+  S->>D: applicant signs on screen or a scan is uploaded
+  D->>API: POST /applications with the check id and signature
+  API-->>D: tracking number
+```
+
 ## How a case moves
 
 1. **Someone calls the hotline.** The AI asks whether they want to file a new case or hear the
