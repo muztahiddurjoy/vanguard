@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 
 export type Resource<T> =
-  | { status: "loading" }
+  /** `stale`: what the previous load returned, to keep on screen while a search reloads. */
+  | { status: "loading"; stale?: T }
   | { status: "error"; error: unknown; retry: () => void }
   | { status: "ready"; data: T; retry: () => void; replace: (data: T) => void }
 
@@ -36,7 +37,8 @@ export function useResource<T>(load: () => Promise<T>): Resource<T> {
   )
 
   // An answer to an earlier request (another day, another case) is not this one's.
-  if (!settled || settled.load !== load || settled.attempt !== attempt) return { status: "loading" }
+  if (!settled || settled.load !== load || settled.attempt !== attempt)
+    return settled?.ok ? { status: "loading", stale: settled.data } : { status: "loading" }
   return settled.ok
     ? { status: "ready", data: settled.data, retry, replace }
     : { status: "error", error: settled.error, retry }
