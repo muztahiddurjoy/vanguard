@@ -118,6 +118,24 @@ def test_naive_datetimes_are_rejected(client):
     assert r.status_code == 422
 
 
+def test_a_session_comes_back_in_full_at_the_time_it_was_set(client):
+    case = new_case(client)
+    at = datetime(2026, 10, 6, 11, 0, tzinfo=DHAKA)
+    made = client.post(
+        "/mediation/sessions",
+        json={"case_ref": case["id"], "mode": "in_person", "scheduled_for": at.isoformat()},
+    ).json()
+    assert made["scheduledFor"] == "2026-10-06T05:00:00+00:00"
+    assert made["place"] == "District Legal Aid Office, Rangpur (District Judge Court building)"
+    assert made["attendance"] == {"applicant": None, "respondent": None}
+    assert [n["role"] for n in made["notices"]] == ["applicant", "respondent"]
+    # Read back from the database (SQLite drops the offset): the same moment.
+    [listed] = client.get("/mediation/sessions", params={"case_ref": case["id"]}).json()
+    assert listed == made
+    url = f"/mediation/sessions/{made['id']}/status"
+    assert client.post(url, json={"status": "cancelled"}).json() == {**made, "status": "cancelled"}
+
+
 # --- settlement + T11 -------------------------------------------------------------------
 
 
