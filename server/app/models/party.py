@@ -58,6 +58,8 @@ class Provenance(StrEnum):
     HOTLINE_16699 = "hotline_16699"
     UDC_OPERATOR = "udc_operator"
     WEB_FORM = "web_form"
+    COURT_REFERRAL = "court_referral"
+    PRISON_REFERRAL = "prison_referral"
     DOCUMENT_VERIFIED = "document_verified"
 
 

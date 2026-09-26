@@ -51,6 +51,9 @@ class IntakeChannel(StrEnum):
     ONLINE = "online"
     PROXY = "proxy"
     UDC = "udc"
+    # Submitted by a court or a jail on the applicant's behalf (court-/prison-dashboard).
+    COURT = "court"
+    PRISON = "prison"
 
 
 class TriageStatus(StrEnum):
@@ -283,6 +286,8 @@ class MediationMode(StrEnum):
 class MediationStatus(StrEnum):
     SCHEDULED = "scheduled"
     HELD = "held"
+    # It did not take place: at least one party did not come.
+    MISSED = "missed"
     CANCELLED = "cancelled"
 
 
