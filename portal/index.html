@@ -355,6 +355,122 @@
         padding-block: 2rem 3rem;
       }
 
+      .section-head {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.25;
+      }
+
+      .section-sub {
+        color: var(--muted-foreground);
+      }
+
+      .apps {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      @media (min-width: 640px) {
+        .apps {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1.25rem;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .apps {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      /* The dashboards' card: white, a hairline ring and a faint shadow. */
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.5rem;
+        border-radius: calc(var(--radius) * 1.4);
+        background: var(--card);
+        box-shadow:
+          0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent),
+          0 1px 2px rgb(0 0 0 / 0.05);
+      }
+
+      .app-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: var(--radius);
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .app-icon .icon {
+        width: 1.375rem;
+        height: 1.375rem;
+      }
+
+      .card-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      /* Takes the spare height, so every button in a row lines up. */
+      .card-desc {
+        flex: 1;
+        color: var(--muted-foreground);
+        font-size: 0.9375rem;
+      }
+
+      .card-action {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+      }
+
+      .card-action .btn {
+        width: 100%;
+      }
+
+      .card-url {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        color: var(--muted-foreground);
+        text-align: center;
+        overflow-wrap: anywhere;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .btn-primary:hover {
+        background: color-mix(in oklch, var(--primary) 80%, transparent);
+      }
+
+      .btn-primary:focus-visible {
+        outline: none;
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+      }
+
       .site-footer {
         padding-block: 1.5rem;
         border-top: 1px solid var(--border);
@@ -393,6 +509,47 @@
       </symbol>
       <symbol id="i-check" viewBox="0 0 24 24">
         <path d="M20 6 9 17l-5-5" />
+      </symbol>
+      <!-- The lawyer dashboard's mark (lawyer-dashboard/public/favicon.svg) -->
+      <symbol id="i-briefcase" viewBox="0 0 24 24">
+        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M2 13h20" />
+        <path d="M11 13h2" />
+      </symbol>
+      <symbol id="i-landmark" viewBox="0 0 24 24">
+        <path d="M10 18v-7" />
+        <path
+          d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"
+        />
+        <path d="M14 18v-7" />
+        <path d="M18 18v-7" />
+        <path d="M3 22h18" />
+        <path d="M6 18v-7" />
+      </symbol>
+      <!-- The jail dashboard's own mark (prison-dashboard/public/favicon.svg) -->
+      <symbol id="i-jail" viewBox="0 0 24 24">
+        <path d="M3 22h18" />
+        <path d="M6 18v-7" />
+        <path d="M10 18v-7" />
+        <path d="M14 18v-7" />
+        <path d="M18 18v-7" />
+        <path d="M12 2l8 5H4z" />
+      </symbol>
+      <symbol id="i-users" viewBox="0 0 24 24">
+        <path d="M18 21a8 8 0 0 0-16 0" />
+        <circle cx="10" cy="8" r="5" />
+        <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
+      </symbol>
+      <symbol id="i-server" viewBox="0 0 24 24">
+        <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+        <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+        <path d="M6 6h.01" />
+        <path d="M6 18h.01" />
+      </symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24">
+        <path d="M5 12h14" />
+        <path d="m12 5 7 7-7 7" />
       </symbol>
     </svg>
 
@@ -443,7 +600,142 @@
       </div>
     </header>
 
-    <main id="main" class="container" tabindex="-1"></main>
+    <main id="main" class="container" tabindex="-1">
+      <section aria-labelledby="apps-title">
+        <div class="section-head">
+          <h2 id="apps-title" class="section-title" data-i18n="apps.title">Apps</h2>
+          <p class="section-sub" data-i18n="apps.sub">Choose the one for your work.</p>
+        </div>
+        <ul class="apps">
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-scale" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="dlao.name">District Legal Aid Office</h3>
+            <p class="card-desc" data-i18n="dlao.desc">
+              One place for district legal aid officers to see every case that needs them and act on it.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://dlao.appbaksho.com/"
+                aria-label="Open District Legal Aid Office"
+                data-i18n-label="dlao.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">dlao.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-briefcase" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="lawyer.name">Panel lawyer</h3>
+            <p class="card-desc" data-i18n="lawyer.desc">
+              For panel lawyers: the legal aid cases the district office gave them, their hearings, and one form to report what happened in court.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://lawyer.appbaksho.com/"
+                aria-label="Open Panel lawyer"
+                data-i18n-label="lawyer.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">lawyer.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-landmark" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="court.name">Court portal</h3>
+            <p class="card-desc" data-i18n="court.desc">
+              For court staff: the court's register and daily cause list, and legal aid applications for anyone before the court who needs a lawyer.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://court.appbaksho.com/"
+                aria-label="Open Court portal"
+                data-i18n-label="court.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">court.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-jail" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="prison.name">Jail dashboard</h3>
+            <p class="card-desc" data-i18n="prison.desc">
+              For jail staff: prisoners and the cases they are held on, the days to produce them in court, and legal aid applications.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://prison.appbaksho.com/"
+                aria-label="Open Jail dashboard"
+                data-i18n-label="prison.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">prison.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-users" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="legalaid.name">Digital Legal Aid</h3>
+            <p class="card-desc" data-i18n="legalaid.desc">
+              For citizens, Union Digital Centres and mediators: apply for legal aid, follow a case, and settle a dispute by mediation. Works offline.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://legalaid.appbaksho.com/"
+                aria-label="Open Digital Legal Aid"
+                data-i18n-label="legalaid.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">legalaid.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-server" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="api.name">Backend API</h3>
+            <p class="card-desc" data-i18n="api.desc">
+              For developers: the API behind the dashboards and the phone lines, with a reference you can try out.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://dlas-api.appbaksho.com/docs"
+                aria-label="Open the Backend API reference"
+                data-i18n-label="api.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">dlas-api.appbaksho.com/docs</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </main>
 
     <footer class="site-footer">
       <div class="container">
