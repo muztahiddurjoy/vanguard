@@ -26,6 +26,19 @@ describe("createFormatters", () => {
     expect(createFormatters("bn").dayLabel("2026-09-24T10:00:00", now)).toBe("আগামীকাল")
   })
 
+  it("reads a court's calendar day as that day, with its weekday", () => {
+    const en = createFormatters("en")
+    expect(en.day("2026-06-15")).toBe("15 Jun 2026")
+    expect(en.weekDay("2026-09-29")).toMatch(/^Tue, 29 Sept? 2026$/)
+    expect(en.clock("10:30")).toBe("10:30")
+    const bn = createFormatters("bn")
+    expect(bn.day("2026-06-15")).toContain("১৫")
+    expect(bn.clock("10:30")).toBe("১০:৩০")
+    // Anything else is shown as it came.
+    expect(en.day("soon")).toBe("soon")
+    expect(en.clock("morning")).toBe("morning")
+  })
+
   it("picks a sensible relative unit", () => {
     const now = new Date("2026-09-23T12:00:00Z").getTime()
     const f = createFormatters("en")

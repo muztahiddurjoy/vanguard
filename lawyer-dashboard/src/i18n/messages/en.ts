@@ -3,6 +3,11 @@
 //
 // Writing style: plain words, short sentences. A lawyer reads this on a phone
 // in a court corridor.
+
+/** "For evidence" reads "for evidence" mid-sentence; an abbreviation keeps its capitals. */
+const midSentence = (text: string) =>
+  /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text
+
 export const en = {
   app: {
     title: "Panel lawyer",
@@ -128,6 +133,123 @@ export const en = {
     heldOn: (date: string) => `Hearing held ${date}`,
     nextFixed: (when: string) => `Next date fixed: ${when}`,
     attachment: (name: string) => `Attached: ${name}`,
+  },
+  records: {
+    title: "Court record",
+    description:
+      "What the court and the jail hold on this case. The legal aid office records each time you open it.",
+    loading: "Loading the court record…",
+    error: "Could not load the court record.",
+    retry: "Try again",
+    empty: "No court or jail records are linked to this case yet. The office links them.",
+    noCourtCase: "No court case is linked yet. The office links them.",
+    application: {
+      title: "The application",
+      sentBy: "Sent to legal aid by",
+      sender: (office: string, staff: string) => `${office} (${staff})`,
+      help: "Help asked for",
+      inCustody: "In custody when they applied",
+      identity: "Identity",
+      verified: (date: string) => `Verified by e-KYC (NID) on ${date}`,
+      notMatched: "Not verified: the e-KYC details did not match",
+      unavailable: "Not verified: e-KYC could not be checked",
+      notVerified: "Not verified by e-KYC",
+      signature: "Signature",
+      signed: (date: string) => `Signed the application on ${date}`,
+      notSigned: "Not signed yet",
+    },
+    help: {
+      defence: "Defence in court",
+      bail: "Bail",
+      appeal: "Appeal",
+      family: "Family matter",
+      civil: "Civil matter",
+      other: "Other help",
+    },
+    courtCase: {
+      filed: (date: string) => `Filed ${date}`,
+      listed: (date: string, serial: string, time: string, purpose: string) =>
+        `Listed on ${date}, serial ${serial}, ${time}, ${midSentence(purpose)}`,
+      listedAnyTime: (date: string, serial: string, purpose: string) =>
+        `Listed on ${date}, serial ${serial}, ${midSentence(purpose)}`,
+      judge: (name: string) => `Before ${name}`,
+      next: (date: string, purpose: string) => `Next date: ${date}, ${midSentence(purpose)}`,
+      nextDateOnly: (date: string) => `Next date: ${date}`,
+      noNextDate: "No next date fixed",
+      parties: "Parties",
+      father: (name: string) => `father ${name}`,
+      age: (n: string) => `age ${n}`,
+      proceedings: "Proceedings",
+      noProceedings: "The court has not recorded any proceedings yet.",
+      lawyers: "Lawyers who appeared",
+      noLawyers: "No lawyer has appeared in this case yet.",
+      previousLawyer: "Previous lawyer",
+      appearingNow: "Appearing now",
+      you: "You",
+      period: (from: string, until: string) => `${from} to ${until}`,
+      since: (from: string) => `Since ${from}`,
+      until: (until: string) => `Until ${until}`,
+      custodyOnCase: "In custody on this case",
+    },
+    caseType: {
+      criminal: "Criminal",
+      civil: "Civil",
+      family: "Family",
+      womenChildren: "Women and children",
+      labour: "Labour",
+      other: "Other",
+    },
+    status: { pending: "Pending", disposed: "Disposed" },
+    role: {
+      accused: "Accused",
+      complainant: "Complainant",
+      petitioner: "Petitioner",
+      respondent: "Respondent",
+      plaintiff: "Plaintiff",
+      defendant: "Defendant",
+      witness: "Witness",
+    },
+    proceeding: {
+      hearing: "Hearing",
+      chargeFraming: "Charge framed",
+      evidence: "Evidence",
+      bail: "Bail",
+      argument: "Arguments",
+      order: "Order",
+      judgment: "Judgment",
+      other: "Other",
+    },
+    side: {
+      defence: "Defence",
+      prosecution: "Prosecution",
+      plaintiff: "For the plaintiff",
+      defendant: "For the defendant",
+      petitioner: "For the petitioner",
+      respondent: "For the respondent",
+    },
+    custody: {
+      title: "Custody",
+      jail: "Jail",
+      prisonerNo: "Prisoner number",
+      ward: "Ward",
+      status: "Status",
+      admitted: (date: string) => `Admitted ${date}`,
+      released: (date: string) => `Released ${date}`,
+      nextCourtDate: "Next court date",
+      heldOn: "Held on",
+      notRegistered: "not on the court's register yet",
+    },
+    prisonerStatus: {
+      undertrial: "Undertrial",
+      convicted: "Convicted",
+      released: "Released",
+      transferred: "Transferred",
+    },
+    previous: {
+      title: "Previous records",
+      note: "Your client's other cases in the district's courts. Restricted records are never shown.",
+      none: "No other court cases found for your client.",
+    },
   },
   update: {
     title: "Send an update from court",
