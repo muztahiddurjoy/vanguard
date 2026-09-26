@@ -91,3 +91,20 @@ def test_family_and_sim_lookups():
     owner = reg.citizen("4613300001")
     assert owner is not None and owner.name.en == "Rafiqul Islam"
     assert reg.citizen("999") is None
+
+
+def test_lookup_tells_an_nid_the_registry_does_not_hold_from_one_it_cannot_reach(caplog):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/4613300001"):
+            return httpx.Response(200, json=citizen("4613300001", "Rafiqul Islam"))
+        if request.url.path.endswith("/9999999999"):
+            return httpx.Response(404, json={"detail": "not found"})
+        return httpx.Response(503)
+
+    reg = registry(handler)
+    found = reg.lookup("4613300001")
+    assert isinstance(found, Citizen) and found.name.en == "Rafiqul Islam"
+    assert reg.lookup("9999999999") == "notHeld"
+    assert reg.lookup("1111111111") is None
+    # Someone typed a wrong NID: not an error in the registry.
+    assert "does not hold" not in caplog.text

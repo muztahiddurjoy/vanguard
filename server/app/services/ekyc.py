@@ -33,8 +33,6 @@ from app.services.nid_registry import Citizen, NidRegistry, default_registry
 NAME_MATCH = 80
 NID_LENGTHS = (10, 13, 17)
 _BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
-# Never a registered SIM: looking it up only tells whether the registry answers.
-_PROBE_MSISDN = "01000000000"
 
 UNUSABLE = "This e-KYC check has expired or was already used"
 
@@ -84,15 +82,11 @@ def registry() -> NidRegistry | None:
 
 
 def _look_up(reg: NidRegistry, nid: str) -> tuple[bool, Citizen | None]:
-    """(the registry answered, the record).
-
-    ``citizen`` is None both for an NID the registry does not hold and when it cannot
-    be reached; a SIM lookup tells them apart ("" when not registered, None when down).
-    """
-    citizen = reg.citizen(nid)
-    if citizen is not None:
-        return True, citizen
-    return reg.sim_owner(_PROBE_MSISDN) is not None, None
+    """(the registry answered, the record, if it holds the NID)."""
+    found = reg.lookup(nid)
+    if found is None:
+        return False, None
+    return True, None if found == "notHeld" else found
 
 
 def matches(citizen: Citizen, body: EkycIn) -> bool:

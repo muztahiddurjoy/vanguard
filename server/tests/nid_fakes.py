@@ -1,6 +1,7 @@
 """A small in-memory NID registry for tests: the Karim family, two respondents, a couple."""
 
 from datetime import date
+from typing import Literal
 
 from app.agents.spoken import name_similarity
 from app.services.nid_registry import Citizen, Family, Localized
@@ -128,6 +129,10 @@ class FakeRegistry:
     def citizen(self, nid: str) -> Citizen | None:
         self.calls.append("citizen")
         return None if self.down else self.citizens.get(nid)
+
+    def lookup(self, nid: str) -> Citizen | Literal["notHeld"] | None:
+        self.calls.append("lookup")
+        return None if self.down else self.citizens.get(nid, "notHeld")
 
     def family(self, nid: str) -> Family | None:
         self.calls.append("family")
