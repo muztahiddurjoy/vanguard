@@ -29,7 +29,15 @@ export type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export function Icon({ name, size = 22, color }: { name: IconName; size?: number; color?: string }) {
   const theme = useTheme();
-  return <MaterialCommunityIcons name={name} size={size} color={color ?? theme.text} />;
+  return (
+    <MaterialCommunityIcons
+      name={name}
+      size={size}
+      color={color ?? theme.text}
+      accessible={false}
+      importantForAccessibility="no"
+    />
+  );
 }
 
 type Tone = 'default' | 'secondary' | 'muted' | 'primary' | 'danger' | 'warning' | 'inverse';
@@ -53,6 +61,15 @@ function toneColor(tone: Tone, theme: Theme): string {
   }
 }
 
+/**
+ * Android's default "highQuality" line breaking measures Bangla text narrower
+ * than it lays it out, so a label sized to fit its words drops the last one
+ * ("আবেদন গৃহীত" shows as "আবেদন"). "simple" measures and lays out alike.
+ */
+function AppText(props: TextProps) {
+  return <Text textBreakStrategy="simple" {...props} />;
+}
+
 export function Txt({
   variant = 'body',
   tone = 'default',
@@ -60,7 +77,7 @@ export function Txt({
   ...rest
 }: TextProps & { variant?: keyof typeof Type; tone?: Tone }) {
   const theme = useTheme();
-  return <Text style={[Type[variant] as TextStyle, { color: toneColor(tone, theme) }, style]} {...rest} />;
+  return <AppText style={[Type[variant] as TextStyle, { color: toneColor(tone, theme) }, style]} {...rest} />;
 }
 
 /** A scrolling screen with the app's background and padding. */
@@ -176,11 +193,11 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={c.fg} />
       ) : (
-        icon && <MaterialCommunityIcons name={icon} size={big ? 26 : 20} color={c.fg} />
+        icon && <MaterialCommunityIcons name={icon} size={big ? 26 : 20} color={c.fg} importantForAccessibility="no" />
       )}
-      <Text style={[big ? Type.heading : Type.bodyStrong, { color: c.fg, textAlign: 'center' }]}>
+      <AppText style={[big ? Type.heading : Type.bodyStrong, { color: c.fg, textAlign: 'center' }]}>
         {title}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -253,13 +270,13 @@ export function Chip({
         pressed && { opacity: 0.8 },
       ]}>
       {selected ? (
-        <MaterialCommunityIcons name="check" size={16} color={theme.primaryText} />
+        <MaterialCommunityIcons name="check" size={16} color={theme.primaryText} importantForAccessibility="no" />
       ) : icon ? (
-        <MaterialCommunityIcons name={icon} size={16} color={theme.textSecondary} />
+        <MaterialCommunityIcons name={icon} size={16} color={theme.textSecondary} importantForAccessibility="no" />
       ) : null}
-      <Text style={[Type.small as TextStyle, { color: selected ? theme.primaryText : theme.text }]}>
+      <AppText style={[Type.small as TextStyle, { color: selected ? theme.primaryText : theme.text }]}>
         {label}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
@@ -285,7 +302,7 @@ export function Badge({
   }[tone];
   return (
     <View style={[styles.badge, { backgroundColor: palette[0] }]}>
-      <Text style={[Type.smallStrong as TextStyle, { color: palette[1] }]}>{label}</Text>
+      <AppText style={[Type.smallStrong as TextStyle, { color: palette[1] }]}>{label}</AppText>
     </View>
   );
 }
@@ -308,8 +325,8 @@ export function Notice({
   }[tone] as [string, string, IconName];
   return (
     <View style={[styles.notice, { backgroundColor: palette[0] }]} accessibilityRole="alert">
-      <MaterialCommunityIcons name={icon ?? palette[2]} size={20} color={palette[1]} />
-      <Text style={[Type.small as TextStyle, { color: palette[1], flex: 1 }]}>{children}</Text>
+      <MaterialCommunityIcons name={icon ?? palette[2]} size={20} color={palette[1]} importantForAccessibility="no" />
+      <AppText style={[Type.small as TextStyle, { color: palette[1], flex: 1 }]}>{children}</AppText>
     </View>
   );
 }
@@ -369,7 +386,7 @@ export function ListRow({
     <>
       {icon && (
         <View style={[styles.rowIcon, { backgroundColor: theme.cardAlt }]}>
-          <MaterialCommunityIcons name={icon} size={22} color={iconColor ?? theme.primary} />
+          <MaterialCommunityIcons name={icon} size={22} color={iconColor ?? theme.primary} importantForAccessibility="no" />
         </View>
       )}
       <View style={{ flex: 1, gap: 2 }}>
@@ -382,7 +399,7 @@ export function ListRow({
       </View>
       {right ??
         (onPress ? (
-          <MaterialCommunityIcons name="chevron-right" size={24} color={theme.textMuted} />
+          <MaterialCommunityIcons name="chevron-right" size={24} color={theme.textMuted} importantForAccessibility="no" />
         ) : null)}
     </>
   );

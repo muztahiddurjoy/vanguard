@@ -72,15 +72,26 @@ export const Radius = {
   pill: 999,
 } as const;
 
+/**
+ * Hind Siliguri, bundled: Bangla and Latin in one family, with a real file per
+ * weight. Android's system Bengali font is drawn bolder than it is measured, so
+ * bold Bangla labels wrapped or lost their last word.
+ */
+export const Fonts = {
+  regular: 'HindSiliguri_400Regular',
+  semibold: 'HindSiliguri_600SemiBold',
+  bold: 'HindSiliguri_700Bold',
+} as const;
+
 /** Big enough for people who find small print and small buttons hard. */
 export const Type = {
-  title: { fontSize: 26, lineHeight: 34, fontWeight: '800' },
-  heading: { fontSize: 19, lineHeight: 26, fontWeight: '700' },
-  body: { fontSize: 16, lineHeight: 24, fontWeight: '400' },
-  bodyStrong: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
-  small: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
-  smallStrong: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  number: { fontSize: 32, lineHeight: 40, fontWeight: '800', letterSpacing: 2 },
+  title: { fontSize: 26, lineHeight: 36, fontFamily: Fonts.bold },
+  heading: { fontSize: 19, lineHeight: 28, fontFamily: Fonts.bold },
+  body: { fontSize: 16, lineHeight: 24, fontFamily: Fonts.regular },
+  bodyStrong: { fontSize: 16, lineHeight: 24, fontFamily: Fonts.semibold },
+  small: { fontSize: 14, lineHeight: 21, fontFamily: Fonts.regular },
+  smallStrong: { fontSize: 14, lineHeight: 21, fontFamily: Fonts.semibold },
+  number: { fontSize: 32, lineHeight: 42, fontFamily: Fonts.bold, letterSpacing: 2 },
 } as const;
 
 /** Tap targets are at least this tall. */

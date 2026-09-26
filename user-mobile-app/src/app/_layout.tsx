@@ -1,3 +1,6 @@
+import { HindSiliguri_400Regular } from '@expo-google-fonts/hind-siliguri/400Regular';
+import { HindSiliguri_600SemiBold } from '@expo-google-fonts/hind-siliguri/600SemiBold';
+import { HindSiliguri_700Bold } from '@expo-google-fonts/hind-siliguri/700Bold';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
@@ -6,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/i18n';
 import { CasesProvider, useCases } from '@/state/cases';
@@ -26,7 +30,12 @@ export default function RootLayout() {
 function AppStack() {
   const settings = useSettings();
   const cases = useCases();
-  const [fontsLoaded] = useFonts(MaterialCommunityIcons.font);
+  const [fontsLoaded] = useFonts({
+    ...MaterialCommunityIcons.font,
+    HindSiliguri_400Regular,
+    HindSiliguri_600SemiBold,
+    HindSiliguri_700Bold,
+  });
   const scheme = useColorScheme();
   const theme = useTheme();
   const { t } = useI18n();
@@ -58,7 +67,7 @@ function AppStack() {
         screenOptions={{
           headerStyle: { backgroundColor: theme.tabBar },
           headerTintColor: theme.text,
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: { fontFamily: Fonts.bold },
           contentStyle: { backgroundColor: theme.background },
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
