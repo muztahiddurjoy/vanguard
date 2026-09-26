@@ -205,6 +205,76 @@
         }
       }
 
+      .lang,
+      .lang-group,
+      .lang-group > div {
+        display: flex;
+        align-items: center;
+      }
+
+      .lang-group {
+        display: none;
+        gap: 0.5rem;
+      }
+
+      .lang-group > .icon {
+        color: color-mix(in oklch, var(--sidebar-foreground) 75%, transparent);
+      }
+
+      .lang-switch {
+        height: 2.25rem;
+        font-weight: 600;
+      }
+
+      .lang-item {
+        min-width: 3rem;
+        height: 2rem;
+        padding-inline: 0.75rem;
+        border: 1px solid color-mix(in oklch, var(--sidebar-foreground) 35%, transparent);
+        background: transparent;
+        color: var(--sidebar-foreground);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .lang-item:first-child {
+        border-radius: calc(var(--radius) * 0.8) 0 0 calc(var(--radius) * 0.8);
+      }
+
+      .lang-item:last-child {
+        border-left: 0;
+        border-radius: 0 calc(var(--radius) * 0.8) calc(var(--radius) * 0.8) 0;
+      }
+
+      .lang-item:hover {
+        background: var(--sidebar-accent);
+      }
+
+      .lang-item[aria-pressed="true"] {
+        border-color: var(--sidebar-primary);
+        background: var(--sidebar-primary);
+        color: var(--sidebar-primary-foreground);
+      }
+
+      .lang-item:focus-visible {
+        position: relative;
+        outline: 3px solid var(--sidebar-ring);
+        outline-offset: 2px;
+      }
+
+      @media (min-width: 640px) {
+        /* Beats .btn, which comes later */
+        .lang .lang-switch {
+          display: none;
+        }
+
+        .lang-group {
+          display: flex;
+        }
+      }
+
       .hotline-block {
         display: flex;
         flex-direction: column;
@@ -503,6 +573,14 @@
         <path d="M12 3v18" />
         <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
       </symbol>
+      <symbol id="i-languages" viewBox="0 0 24 24">
+        <path d="m5 8 6 6" />
+        <path d="m4 14 6-6 2-3" />
+        <path d="M2 5h12" />
+        <path d="M7 2h1" />
+        <path d="m22 22-5-10-5 10" />
+        <path d="M14 18h6" />
+      </symbol>
       <symbol id="i-phone" viewBox="0 0 24 24">
         <path
           d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"
@@ -572,6 +650,23 @@
               <p class="brand-sub">DLAS</p>
             </div>
           </div>
+
+          <!-- The dashboards' language toggle; shown by the script -->
+          <div class="lang" id="lang" hidden>
+            <!-- Phones: one button that names the other language -->
+            <button class="btn btn-on-dark lang-switch" type="button" id="lang-switch"></button>
+            <div class="lang-group">
+              <svg class="icon" aria-hidden="true"><use href="#i-languages" /></svg>
+              <div role="group" aria-label="Language" data-i18n-label="language">
+                <button class="lang-item" type="button" data-lang="en" lang="en" aria-label="English">
+                  EN
+                </button>
+                <button class="lang-item" type="button" data-lang="bn" lang="bn" aria-label="বাংলা">
+                  বাংলা
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <section class="hotline-block" aria-labelledby="hotline-title">
@@ -588,7 +683,7 @@
               <span class="hotline-icon">
                 <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
               </span>
-              <span class="hotline-number" data-digits>+1 978 845 8907</span>
+              <span class="hotline-number" id="hotline-number">+1 978 845 8907</span>
             </a>
             <!-- Shown by the script when the browser lets the page copy -->
             <button class="btn btn-lg btn-on-dark" type="button" id="copy-number" hidden>
@@ -624,7 +719,7 @@
               <a
                 class="btn btn-lg btn-primary"
                 href="https://dlao.appbaksho.com/"
-                aria-label="Open District Legal Aid Office"
+                aria-label="Open the District Legal Aid Office dashboard"
                 data-i18n-label="dlao.open"
               >
                 <span data-i18n="open">Open</span>
@@ -645,7 +740,7 @@
               <a
                 class="btn btn-lg btn-primary"
                 href="https://lawyer.appbaksho.com/"
-                aria-label="Open Panel lawyer"
+                aria-label="Open the panel lawyers' dashboard"
                 data-i18n-label="lawyer.open"
               >
                 <span data-i18n="open">Open</span>
@@ -666,7 +761,7 @@
               <a
                 class="btn btn-lg btn-primary"
                 href="https://court.appbaksho.com/"
-                aria-label="Open Court portal"
+                aria-label="Open the court portal"
                 data-i18n-label="court.open"
               >
                 <span data-i18n="open">Open</span>
@@ -687,7 +782,7 @@
               <a
                 class="btn btn-lg btn-primary"
                 href="https://prison.appbaksho.com/"
-                aria-label="Open Jail dashboard"
+                aria-label="Open the jail dashboard"
                 data-i18n-label="prison.open"
               >
                 <span data-i18n="open">Open</span>
@@ -708,7 +803,7 @@
               <a
                 class="btn btn-lg btn-primary"
                 href="https://legalaid.appbaksho.com/"
-                aria-label="Open Digital Legal Aid"
+                aria-label="Open the Digital Legal Aid app"
                 data-i18n-label="legalaid.open"
               >
                 <span data-i18n="open">Open</span>
@@ -729,7 +824,7 @@
               <a
                 class="btn btn-lg btn-primary"
                 href="https://dlas-api.appbaksho.com/docs"
-                aria-label="Open the Backend API reference"
+                aria-label="Open the backend API reference"
                 data-i18n-label="api.open"
               >
                 <span data-i18n="open">Open</span>
@@ -750,17 +845,159 @@
 
     <script>
       const HOTLINE = "+19788458907"
+      const HOTLINE_SHOWN = "+1 978 845 8907"
+      // The dashboards keep the reader's language under this key too.
+      const STORAGE_KEY = "dlas.lang"
 
+      // English is also the page's own text, for anyone without the script.
       const MESSAGES = {
         en: {
+          "meta.title": "Digital Legal Aid System · DLAS",
+          "meta.description":
+            "The Digital Legal Aid System (DLAS): its hotline number and a link to each of its apps.",
+          skip: "Skip to main content",
+          language: "Language",
+          "brand.title": "Digital Legal Aid System",
+          "hotline.title": "Legal aid hotline",
+          "hotline.call": "Call +1 978 845 8907",
           "hotline.copy": "Copy number",
           "hotline.copied": "Copied",
           "hotline.copyFailed": "Could not copy",
+          "hotline.hint": "Call to ask for legal aid, or to hear how your case is going.",
+          "apps.title": "Apps",
+          "apps.sub": "Choose the one for your work.",
+          open: "Open",
+          "dlao.name": "District Legal Aid Office",
+          "dlao.desc":
+            "One place for district legal aid officers to see every case that needs them and act on it.",
+          "dlao.open": "Open the District Legal Aid Office dashboard",
+          "lawyer.name": "Panel lawyer",
+          "lawyer.desc":
+            "For panel lawyers: the legal aid cases the district office gave them, their hearings, and one form to report what happened in court.",
+          "lawyer.open": "Open the panel lawyers' dashboard",
+          "court.name": "Court portal",
+          "court.desc":
+            "For court staff: the court's register and daily cause list, and legal aid applications for anyone before the court who needs a lawyer.",
+          "court.open": "Open the court portal",
+          "prison.name": "Jail dashboard",
+          "prison.desc":
+            "For jail staff: prisoners and the cases they are held on, the days to produce them in court, and legal aid applications.",
+          "prison.open": "Open the jail dashboard",
+          "legalaid.name": "Digital Legal Aid",
+          "legalaid.desc":
+            "For citizens, Union Digital Centres and mediators: apply for legal aid, follow a case, and settle a dispute by mediation. Works offline.",
+          "legalaid.open": "Open the Digital Legal Aid app",
+          "api.name": "Backend API",
+          "api.desc":
+            "For developers: the API behind the dashboards and the phone lines, with a reference you can try out.",
+          "api.open": "Open the backend API reference",
+          footer: "Digital Legal Aid System (DLAS)",
+        },
+        bn: {
+          "meta.title": "ডিজিটাল লিগ্যাল এইড সিস্টেম · DLAS",
+          "meta.description":
+            "ডিজিটাল লিগ্যাল এইড সিস্টেম (DLAS): এর হটলাইন নম্বর আর প্রতিটি অ্যাপের লিংক।",
+          skip: "মূল অংশে যান",
+          language: "ভাষা",
+          "brand.title": "ডিজিটাল লিগ্যাল এইড সিস্টেম",
+          "hotline.title": "লিগ্যাল এইড হটলাইন",
+          "hotline.call": "+১ ৯৭৮ ৮৪৫ ৮৯০৭ নম্বরে কল করুন",
+          "hotline.copy": "নম্বর কপি করুন",
+          "hotline.copied": "কপি হয়েছে",
+          "hotline.copyFailed": "কপি করা যায়নি",
+          "hotline.hint": "আইনি সহায়তা চাইতে, বা আপনার মামলার অগ্রগতি জানতে কল করুন।",
+          "apps.title": "অ্যাপ",
+          "apps.sub": "আপনার কাজের অ্যাপটি বেছে নিন।",
+          open: "খুলুন",
+          "dlao.name": "জেলা লিগ্যাল এইড অফিস",
+          "dlao.desc":
+            "জেলা লিগ্যাল এইড অফিসারদের জন্য এক জায়গা — যেখানে সব মামলা দেখা যায় এবং সহজে ব্যবস্থা নেওয়া যায়।",
+          "dlao.open": "জেলা লিগ্যাল এইড অফিসের ড্যাশবোর্ড খুলুন",
+          "lawyer.name": "প্যানেল আইনজীবী",
+          "lawyer.desc":
+            "প্যানেল আইনজীবীদের জন্য: জেলা অফিস তাঁদের যেসব আইনি সহায়তার মামলা দিয়েছে, তাঁদের শুনানি, আর আদালতে কী হলো তা জানানোর একটি ফর্ম।",
+          "lawyer.open": "প্যানেল আইনজীবীদের ড্যাশবোর্ড খুলুন",
+          "court.name": "আদালত পোর্টাল",
+          "court.desc":
+            "আদালতের কর্মচারীদের জন্য: মামলার রেজিস্টার ও প্রতিদিনের কার্যতালিকা, আর আদালতে আসা যাঁর আইনজীবী দরকার তাঁর আইনি সহায়তার আবেদন।",
+          "court.open": "আদালত পোর্টাল খুলুন",
+          "prison.name": "কারাগারের ড্যাশবোর্ড",
+          "prison.desc":
+            "কারা কর্মকর্তাদের জন্য: বন্দিরা আর যে মামলায় তাঁরা আটক, কবে কাকে আদালতে হাজির করতে হবে, আর আইনি সহায়তার আবেদন।",
+          "prison.open": "কারাগারের ড্যাশবোর্ড খুলুন",
+          "legalaid.name": "ডিজিটাল লিগ্যাল এইড",
+          "legalaid.desc":
+            "নাগরিক, ইউনিয়ন ডিজিটাল সেন্টার ও মধ্যস্থতাকারীদের জন্য: আইনি সহায়তার আবেদন, মামলার খোঁজ, আর মধ্যস্থতায় বিরোধ মেটানো। ইন্টারনেট ছাড়াও চলে।",
+          "legalaid.open": "ডিজিটাল লিগ্যাল এইড অ্যাপ খুলুন",
+          "api.name": "ব্যাকএন্ড API",
+          "api.desc":
+            "ডেভেলপারদের জন্য: ড্যাশবোর্ড ও ফোন লাইনের পেছনের API, আর চালিয়ে দেখার মতো এর রেফারেন্স।",
+          "api.open": "ব্যাকএন্ড API-র রেফারেন্স খুলুন",
+          footer: "ডিজিটাল লিগ্যাল এইড সিস্টেম (DLAS)",
         },
       }
 
-      let lang = "en"
+      const LANGUAGES = {
+        en: { label: "EN", name: "English" },
+        bn: { label: "বাংলা", name: "বাংলা" },
+      }
+
+      function readStoredLang() {
+        try {
+          return localStorage.getItem(STORAGE_KEY) === "bn" ? "bn" : "en"
+        } catch {
+          return "en"
+        }
+      }
+
+      let lang = readStoredLang()
       const t = (key) => MESSAGES[lang][key]
+
+      // Bangla reads numbers in Bangla digits, as the dashboards and the Android app show them.
+      const BN_DIGITS = "০১২৩৪৫৬৭৮৯"
+      const digits = (text) => (lang === "bn" ? text.replace(/[0-9]/g, (d) => BN_DIGITS[d]) : text)
+
+      const langSwitch = document.getElementById("lang-switch")
+      const langItems = document.querySelectorAll(".lang-item")
+
+      function render() {
+        // Screen readers pick pronunciation from <html lang>.
+        document.documentElement.lang = lang
+        document.title = t("meta.title")
+        document.querySelector('meta[name="description"]').content = t("meta.description")
+        for (const el of document.querySelectorAll("[data-i18n]")) {
+          el.textContent = t(el.dataset.i18n)
+        }
+        for (const el of document.querySelectorAll("[data-i18n-label]")) {
+          el.setAttribute("aria-label", t(el.dataset.i18nLabel))
+        }
+        document.getElementById("hotline-number").textContent = digits(HOTLINE_SHOWN)
+
+        for (const item of langItems) {
+          item.setAttribute("aria-pressed", String(item.dataset.lang === lang))
+        }
+        const other = lang === "en" ? "bn" : "en"
+        langSwitch.dataset.lang = other
+        langSwitch.lang = other
+        langSwitch.textContent = LANGUAGES[other].label
+        langSwitch.setAttribute("aria-label", `${t("language")}: ${LANGUAGES[other].name}`)
+      }
+
+      function setLang(next) {
+        lang = next
+        try {
+          localStorage.setItem(STORAGE_KEY, next)
+        } catch {
+          // Private mode or blocked storage: the choice just won't persist.
+        }
+        render()
+      }
+
+      for (const button of [langSwitch, ...langItems]) {
+        button.addEventListener("click", () => setLang(button.dataset.lang))
+      }
+      document.getElementById("lang").hidden = false
+      render()
 
       const copyButton = document.getElementById("copy-number")
       const copyLabel = document.getElementById("copy-label")
