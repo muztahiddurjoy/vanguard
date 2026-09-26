@@ -1,7 +1,9 @@
 """Twilio voice webhook and media-stream WebSocket for the legal aid phone lines.
 
-Two lines share these endpoints: the application hotline (T5 intake, the
-default) and the query helpline printed in SMS (``?line=helpline``).
+Two lines share these endpoints: the application hotline (the default), which
+asks whether the caller wants to file a new case (T5 intake) or hear the
+progress of one (the helpline agent), and the query helpline printed in SMS
+(``?line=helpline``).
 
 Twilio cannot send our bearer token, so these endpoints are authenticated by
 Twilio's request signature instead (``X-Twilio-Signature``), which is always

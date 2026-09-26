@@ -12,8 +12,11 @@ decision.
 
 ## How a case moves
 
-1. **Someone calls the hotline.** The AI greets them and listens: it asks nothing until the
-   caller has said what happened. Danger in those first words gets the 999 line at once. Once
+1. **Someone calls the hotline.** The AI asks whether they want to file a new case or hear the
+   progress of one they filed. For progress it asks for the tracking number and reads out where
+   the case stands. For a new case it listens: it asks nothing until the caller has said what
+   happened, and a caller who starts telling it straight away, or who is in danger, is heard at
+   once. Danger in those first words gets the 999 line at once. Once
    it sounds like a case, the AI asks only what it still needs: who the application is for,
    the caller's name and three NID security questions (father's name, permanent district,
    date of birth). If the caller cannot answer, it searches the NID registry itself, through

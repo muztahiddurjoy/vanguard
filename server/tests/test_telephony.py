@@ -9,7 +9,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app.agents import t5_intake
+from app.agents import helpline, hotline_menu, t5_intake
+from app.agents.helpline import HelplineConversation
+from app.agents.hotline_menu import HotlineMenu
 from app.agents.t5_intake import IntakeConversation
 from app.config import get_settings
 from app.models import Case
@@ -132,6 +134,20 @@ async def until(predicate, timeout=5.0):
     await asyncio.wait_for(poll(), timeout)
 
 
+# A neighbour applying for a woman her husband beats, from the story to the last answer.
+NEIGHBOUR_CALL = (
+    "My neighbour's husband beats her and she has visible injuries",
+    "I am calling for my neighbour",
+    "My name is Ripon",
+    "Moyuri Akter",
+    "01712345318 in Rangpur",
+    "Her husband Jalal Uddin",
+    "I don't know",
+    "Rangpur",
+    "Tuesday 2 to 4 pm, he checks her phone",
+)
+
+
 # --- stream manager -----------------------------------------------------------------
 
 
@@ -156,23 +172,14 @@ def test_call_collects_intake_and_creates_application(db_engine):
                 "media": {"track": "inbound", "payload": base64.b64encode(b"\x7f" * 160).decode()},
             }
         )
-        for utterance in (
-            "My neighbour's husband beats her and she has visible injuries",
-            "I am calling for my neighbour",
-            "My name is Ripon",
-            "Moyuri Akter",
-            "01712345318 in Rangpur",
-            "Her husband Jalal Uddin",
-            "I don't know",
-            "Rangpur",
-            "Tuesday 2 to 4 pm, he checks her phone",
-        ):
+        for utterance in NEIGHBOUR_CALL:
             stt.say(utterance)
         await asyncio.wait_for(runner, 5)
         return ws, tts, stt, manager
 
     ws, tts, stt, manager = asyncio.run(scenario())
-    assert tts.spoken[0] == "Legal aid. I'm listening, tell me what happened."
+    # The hotline asks first; the story, told as the answer, goes straight to intake.
+    assert tts.spoken[0] == hotline_menu.MENU["en"]
     # The story gets the longer pause; the questions after it, the usual one.
     assert stt.end_of_turn[:2] == [1200, 700] and set(stt.end_of_turn[2:]) == {700}
     assert tts.spoken[-1].startswith("Thank you. Your application is recorded.")
@@ -202,7 +209,7 @@ def test_barge_in_clears_a_reply_that_was_fully_sent_but_is_still_playing(db_eng
         )
         runner = asyncio.create_task(manager.run())
         ws.push(START)
-        # ElevenLabs is done with the greeting: all its audio and the mark are sent.
+        # ElevenLabs is done with the opening question: all its audio and the mark are sent.
         await until(lambda: len(ws.events("mark")) == 1)
         await asyncio.sleep(0.05)  # an echoed mark reaches the manager
         stt.queue.put_nowait(TranscriptEvent("speech_started"))
@@ -282,7 +289,7 @@ def test_call_cut_mid_intake_is_recorded_and_marked_do_not_call(db_engine):
         stt.say("He hits me with a stick and says he will kill me")
         for utterance in ("for myself", "Moyuri Akter", "Rangpur"):
             stt.say(utterance)
-        await until(lambda: len(tts.spoken) == 5)  # greeting + one reply per utterance
+        await until(lambda: len(tts.spoken) == 5)  # the menu + one reply per utterance
         ws.push({"event": "stop"})  # the line goes dead
         await asyncio.wait_for(runner, 5)
         return manager
@@ -318,7 +325,7 @@ def test_caller_barge_in_clears_playback(db_engine):
 
     ws = asyncio.run(scenario())
     assert ws.events("clear") == [{"event": "clear", "streamSid": "MZ123"}]
-    assert len(ws.events("media")) < 3  # the greeting was cut short
+    assert len(ws.events("media")) < 3  # the opening question was cut short
 
 
 def test_without_speech_to_text_caller_hears_fallback_and_call_ends():
@@ -379,7 +386,7 @@ def test_a_turn_lost_by_speech_to_text_is_asked_for_again(db_engine):
         )
         runner = asyncio.create_task(manager.run())
         ws.push(START)
-        await until(lambda: len(ws.events("mark")) == 1)  # the greeting
+        await until(lambda: len(ws.events("mark")) == 1)  # the opening question
         stt.queue.put_nowait(TranscriptEvent("repeat"))
         stt.say("My landlord took my land and will not give it back")
         await until(lambda: len(tts.spoken) == 3)
@@ -390,6 +397,214 @@ def test_a_turn_lost_by_speech_to_text_is_asked_for_again(db_engine):
     tts = asyncio.run(scenario())
     assert tts.spoken[1] == SAY_AGAIN["en"]
     assert tts.spoken[2].startswith("Thank you for telling me.")  # the call carries on
+
+
+# --- the hotline's opening question -------------------------------------------------
+
+
+def hotline_call(factory, intake: IntakeConversation | None = None):
+    """Fakes and a manager for a hotline call whose agents all run on rules alone."""
+    ws, tts, stt = FakeTwilio(), FakeTTS(), ScriptedTranscriber()
+    manager = StreamManager(
+        ws,
+        tts=tts,
+        transcriber_factory=lambda lang: stt,
+        intake=intake or IntakeConversation(use_default_llm=False, use_default_registry=False),
+        helpline_agent=HelplineConversation(use_default_llm=False),
+        menu=HotlineMenu(use_default_llm=False),
+        session_factory=factory,
+    )
+    return ws, tts, stt, manager
+
+
+def seed_case(factory) -> None:
+    """An application filed earlier, with tracking number 4821 0937."""
+    with factory() as db:
+        db.add(
+            Case(application_id="APP-2026-777", tracking_token="48210937", channel="hotline",
+                 current_office="Rangpur", summary="x")
+        )  # fmt: skip
+        db.commit()
+
+
+def test_hotline_caller_hears_the_progress_of_a_case_and_nothing_is_filed(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    seed_case(factory)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        for utterance in ("I want to know the status of my case", "4821 0937", "no, thank you"):
+            stt.say(utterance)
+        await asyncio.wait_for(runner, 5)
+        return ws, tts, manager
+
+    ws, tts, manager = asyncio.run(scenario())
+    assert tts.spoken[0] == hotline_menu.MENU["en"]
+    assert tts.spoken[1] == helpline.ASK_TOKEN["en"]
+    assert tts.spoken[2].startswith("Your application APP-2026-777 has been received")
+    assert tts.spoken[3:] == [helpline.GOODBYE["en"]]
+    assert ws.closed
+    assert manager.case_ref is None
+    with factory() as db:
+        assert len(db.scalars(select(Case)).all()) == 1
+
+
+def test_a_tracking_number_said_with_the_answer_is_read_at_once(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    seed_case(factory)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        stt.say("my tracking number is 4821 0937")
+        stt.say("that's all, thank you")
+        await asyncio.wait_for(runner, 5)
+        return tts
+
+    tts = asyncio.run(scenario())
+    assert tts.spoken[1].startswith("Your application APP-2026-777 has been received")
+    assert tts.spoken[2:] == [helpline.GOODBYE["en"]]
+
+
+def test_a_new_case_is_asked_for_then_taken_by_intake(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory, IntakeConversation(use_default_llm=False))
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        for utterance in ("new case", *NEIGHBOUR_CALL):
+            stt.say(utterance)
+        await asyncio.wait_for(runner, 5)
+        return tts, manager
+
+    tts, manager = asyncio.run(scenario())
+    assert tts.spoken[1] == hotline_menu.TELL_ME["en"]  # not T5's own greeting
+    assert tts.spoken[2].startswith("Thank you for telling me.")
+    assert tts.spoken[-1].startswith("Thank you. Your application is recorded.")
+    with factory() as db:
+        case = db.scalars(select(Case)).one()
+    assert manager.case_ref == case.application_id
+    assert case.category == "domesticViolence" and case.channel == "proxy"
+
+
+def test_an_unclear_answer_is_asked_again_then_intake_takes_the_call(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        for utterance in ("hello?", "hello?", "My landlord took my land and will not give it back"):
+            stt.say(utterance)
+        await until(lambda: len(tts.spoken) == 4)
+        ws.push({"event": "stop"})  # the line goes dead
+        await asyncio.wait_for(runner, 5)
+        return tts, manager
+
+    tts, manager = asyncio.run(scenario())
+    assert tts.spoken[1:3] == [hotline_menu.MENU_AGAIN["en"], hotline_menu.TELL_ME["en"]]
+    assert tts.spoken[3].startswith("Thank you for telling me.")
+    # It was an intake call by then: cut short, what was said is filed.
+    with factory() as db:
+        case = db.scalars(select(Case)).one()
+    assert manager.case_ref == case.application_id and "callDropped" in case.flags
+
+
+def test_a_caller_asking_about_a_case_can_still_file_a_new_one(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        for utterance in (
+            "status",
+            "I want to file a new case",
+            "My landlord took my land and will not give it back",
+        ):
+            stt.say(utterance)
+        await until(lambda: len(tts.spoken) == 4)
+        ws.push({"event": "stop"})
+        await asyncio.wait_for(runner, 5)
+        return tts
+
+    tts = asyncio.run(scenario())
+    assert tts.spoken[1:3] == [helpline.ASK_TOKEN["en"], hotline_menu.TELL_ME["en"]]
+    assert tts.spoken[3].startswith("Thank you for telling me.")
+
+
+def test_danger_while_asking_about_a_case_gets_the_intake_emergency_line(db_engine):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        stt.say("status")
+        stt.say("He is beating me right now, help me now")
+        await asyncio.wait_for(runner, 5)
+        return ws, tts, manager
+
+    ws, tts, manager = asyncio.run(scenario())
+    assert tts.spoken[1] == helpline.ASK_TOKEN["en"]
+    # T5's 999 line (with the promised callback), then the new application's number.
+    assert tts.spoken[2] == t5_intake.EMERGENCY["en"]
+    assert tts.spoken[3].startswith("Your tracking number is")
+    assert ws.closed
+    with factory() as db:
+        case = db.scalars(select(Case)).one()
+    assert manager.case_ref == case.application_id
+    assert "escalated" in case.flags and case.priority == "critical"
+
+
+@pytest.mark.parametrize("said", [(), ("hello?",), ("status",)])
+def test_hanging_up_before_intake_files_nothing(db_engine, said):
+    factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(factory)
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        for utterance in said:
+            stt.say(utterance)
+        await until(lambda: len(tts.spoken) == 1 + len(said))
+        ws.push({"event": "stop"})  # the caller hangs up
+        await asyncio.wait_for(runner, 5)
+        return manager
+
+    manager = asyncio.run(scenario())
+    assert manager.case_ref is None
+    with factory() as db:
+        assert db.scalars(select(Case)).all() == []
+
+
+def test_the_menu_waits_as_for_a_story_and_the_status_questions_do_not(db_engine):
+    async def scenario():
+        ws, tts, stt, manager = hotline_call(sessionmaker(bind=db_engine))
+        runner = asyncio.create_task(manager.run())
+        ws.push(START)
+        await until(lambda: len(tts.spoken) == 1)
+        at_menu = list(stt.end_of_turn)
+        stt.say("status")
+        await until(lambda: len(tts.spoken) == 2)
+        ws.push({"event": "stop"})
+        await asyncio.wait_for(runner, 5)
+        return at_menu, stt.end_of_turn
+
+    at_menu, after = asyncio.run(scenario())
+    assert at_menu == [1200]  # many callers begin with what happened
+    assert after == [1200, 700]
 
 
 def test_transcriber_is_openai_when_a_key_is_set(monkeypatch):
@@ -553,7 +768,7 @@ def test_a_reply_that_cannot_be_spoken_is_logged_and_the_call_goes_on(db_engine,
 
     ws, tts = asyncio.run(scenario())
     assert "could not speak on call CA123" in caplog.text and "no audio" in caplog.text
-    assert tts.spoken[1] == t5_intake.KEEP_LISTENING["en"] and len(ws.events("media")) == 1
+    assert tts.spoken[1] == hotline_menu.MENU_AGAIN["en"] and len(ws.events("media")) == 1
 
 
 def test_elevenlabs_errors_raise_tts_error():
