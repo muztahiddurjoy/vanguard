@@ -321,6 +321,14 @@ export const en = {
         q: "Why must some cases be transferred?",
         a: "A district office can only act on cases inside its area. If the accused lives elsewhere, or the case needs a special court, it is sent to the right office through the national legal aid organisation. You keep supporting the applicant.",
       },
+      {
+        q: "Where do applications from courts and jails come from?",
+        a: "Court and jail staff can apply for someone in front of them, such as a prisoner with no lawyer. They check the person's National ID by e-KYC and take their e-signature. The case says who submitted it, and its Court and jail records tab shows the court case, the prisoner record and any earlier cases.",
+      },
+      {
+        q: "What happens when someone keeps missing mediation?",
+        a: "Each party gets an SMS notice with a notice number for every session; the helpline 16430 explains it to anyone who says that number. After two missed sessions in a row, the case is tagged Missed mediation and the person's Union Digital Centre is asked to tell them the next date in person. For an applicant who may be at risk, that request waits until you send it.",
+      },
     ],
     priorityTitle: "What the priority levels mean",
     priorityExample: {
@@ -375,6 +383,20 @@ export const en = {
         term: "Pattern alert",
         meaning:
           "A warning that one lawyer has missed several reports across their cases, not just one.",
+      },
+      {
+        term: "e-KYC",
+        meaning:
+          "An identity check at a court or jail: the person's National ID number and date of birth are matched with the National ID register.",
+      },
+      {
+        term: "Cause list",
+        meaning: "A court's list of the cases it will hear on a day, each with a serial number.",
+      },
+      {
+        term: "Union Digital Centre (UDC)",
+        meaning:
+          "The union's service centre. It can be asked to tell someone about a mediation date in person.",
       },
     ],
     contactTitle: "Need more help?",
