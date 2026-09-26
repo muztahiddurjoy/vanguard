@@ -32,6 +32,7 @@ lawyer takes the case to court and reports back, and every step is audited.
 | [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, and legal aid applications for people before the court, with e-KYC and e-signature (English and বাংলা) | same as above | 5175 |
 | [`prison-dashboard/`](prison-dashboard/README.md) | The jails' dashboard: prisoners and the court cases they are held on, the production list, and legal aid applications for prisoners, with e-KYC and e-signature (English and বাংলা) | same as above | 5176 |
 | [`portal/`](portal/README.md) | The front page: the hotline number, and a button for each app with the address it opens (English and বাংলা) | one static HTML file | any static server |
+| [`user-mobile-app/`](user-mobile-app/README.md) | The citizen's Android app: SOS (both volume buttons call for help, from any screen), filing a case, their cases and each one's progress, documents, the helpline and mediation notices (English and বাংলা) | Expo SDK 57, React Native 0.86, a Kotlin module for SOS | Metro 8081 |
 
 External services the backend can use (all optional in development; without them the system
 falls back to rules, dry-run SMS and a spoken fallback message):
@@ -55,6 +56,7 @@ Who uses which dashboard, and how each one signs in to the backend:
 | Jail staff (legal aid desk, deputy jailer) | `prison-dashboard` | `/prison/*` | `X-Prison-Staff-Id` |
 | Union Digital Centre entrepreneur | none (API only) | `/udc/*` | `X-Udc-Id` |
 | Caller | the phone (or `/intake/*` and `/helpline/*` on the web) | `/telephony/*` | none (Twilio signature) |
+| Citizen (or someone applying for them) | `user-mobile-app` (Android) | `/intake/web`, `/intake/cases/{ref}/documents`, `/helpline/*` | none: a case is theirs by its tracking number |
 
 ## System architecture
 
@@ -619,6 +621,27 @@ flowchart TB
   CD -.->|"cause lists saved by the court"| CourtSide["court-dashboard"]
 ```
 
+### `user-mobile-app/`: the citizen's app
+
+An Android app for the people the office serves, in Bangla or English. It has no account: a
+case is the person's because they hold its tracking number, which the backend answers with
+the stage and the next dates only. What the app keeps stays on the phone. Details, and how
+to test SOS on an emulator, are in [`user-mobile-app/README.md`](user-mobile-app/README.md).
+
+| Screen | What it does | Backend |
+| --- | --- | --- |
+| File a case | Five steps (who, about them, what happened, safety, check); waits on the phone when offline | `POST /intake/web` |
+| My cases, progress | Cases filed here or added by tracking number; the steps, next hearing or mediation, read aloud | `GET /helpline/track/{token}` |
+| Documents | Photos or PDFs, and the office's checklist of missing papers | `POST /intake/cases/{ref}/documents` |
+| Help | 16430 and 999, the AI helpline chat, mediation notice numbers | `/helpline/*` |
+| SOS | Volume up + volume down together calls +19788458907 | none (the phone) |
+
+SOS is native code (a local Expo module, `modules/sos-gesture`). An accessibility service
+hears the two volume keys over any app and on the lock screen. A foreground service keeps SOS
+armed after the app is closed or the phone restarts, and places the call through Android's
+Telecom. With the screen off, Android 13 and newer give the volume keys to no app, so there
+the power button is pressed once first.
+
 ## How a case moves
 
 1. **Someone calls the hotline.** The AI asks whether they want to file a new case or hear the
@@ -938,6 +961,10 @@ npm run dev &
 for app in court-dashboard prison-dashboard; do
   (cd ../$app && npm install && echo "VITE_API_URL=http://localhost:8000" > .env.local && npm run dev &)
 done
+
+# 6. The citizen's app, as a development build on an Android emulator or phone
+#    (the emulator reaches this computer's backend at 10.0.2.2:8000)
+cd ../user-mobile-app && npm install && npx expo run:android
 ```
 
 To follow an application from a jail: on the jail dashboard, sign in as Nasima Khatun
@@ -968,6 +995,15 @@ the agents to use `gpt-6-luna`), then call a line from recorded answers with
 > subscribers. Keep `SMS_DRY_RUN=true`, or list only your own numbers in `SMS_ALLOWLIST`,
 > while it is connected.
 
+## Deploy on the VPS
+
+`deploy/deploy.sh` runs everything on the VPS. The backend and the NID registry run under
+pm2 on localhost ports. The dashboards and the legal aid app are static builds that nginx
+serves, each on its own `appbaksho.com` subdomain over HTTPS. For example, the DLAO
+dashboard is at `https://dlao.appbaksho.com` and the backend at
+`https://dlas-api.appbaksho.com`. [`deploy/README.md`](deploy/README.md) covers the hosts
+and ports, the DNS records, redeploying, the settings and the Twilio webhooks.
+
 ## Testing and quality checks
 
 Run each module's checks from its own folder. Every command below is also listed in that
@@ -978,6 +1014,7 @@ module's README.
 | `server/` | `.venv/bin/pytest` (unit, API and a simulated phone call) | `.venv/bin/ruff check . && .venv/bin/ruff format --check .` | `.venv/bin/mypy` | `docker build -t dlas-backend .` |
 | `nid-server/` | `.venv/bin/pytest` (API, matching, registry integrity) | same as the server | `.venv/bin/mypy` | `docker build -t nid-registry .` |
 | each dashboard | `npm test` (Vitest, jsdom) | `npm run lint` (ESLint, including React Compiler rules) | `npm run typecheck` | `npm run build` (type-check, then production build) |
+| `user-mobile-app/` | `npm test` (Jest, jest-expo) and `cd android && ./gradlew :sos-gesture:testDebugUnitTest` (JUnit, after a prebuild) | `npm run lint` | `npm run typecheck` | `npx expo run:android` (development build) |
 
 If your shell exports a `PYTHONPATH` (ROS, for example), run the Python tools with
 `env -u PYTHONPATH …` so foreign pytest plugins are not loaded.
@@ -1032,6 +1069,7 @@ per-user sign-in yet, rosters are code, no migrations, single-worker conversatio
 vanguard/
   README.md                this file
   start.sh                 starts everything (NID registry, backend, ngrok, four dashboards)
+  deploy/                  deploy.sh, the VPS's pm2 apps and nginx sites
   server/                  FastAPI backend
     app/                   main.py, config.py, database.py
       models/  agents/  routers/  services/
@@ -1045,7 +1083,7 @@ vanguard/
   court-dashboard/         courts' dashboard
   prison-dashboard/        jails' dashboard
   portal/                  the front page: hotline number and a link to each app (index.html)
-  @latest/                 an unrelated Expo app scaffold (not part of DLAS)
+  user-mobile-app/         the citizen's Android app (src/app screens, modules/sos-gesture)
   vanguard-digital-leagal-aid/   a local reference PWA, kept out of git (see .gitignore)
 ```
 

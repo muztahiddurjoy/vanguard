@@ -176,3 +176,50 @@ describe("queue filters", () => {
     expect(within(queueList()).getByText("Jahanara Parvin")).toBeInTheDocument()
   })
 })
+
+describe("panel lawyer", () => {
+  const lawyerCard = (dialog: HTMLElement) =>
+    within(dialog).getByRole("region", { name: "Panel lawyer" })
+
+  it("assigns a lawyer to an application still waiting for its triage review", async () => {
+    const { user } = renderApp()
+    await user.click(within(rowFor("APP-2026-001")).getByRole("button", { name: "Moyuri Akter" }))
+    const dialog = await screen.findByRole("dialog")
+    // The next step is the triage review, yet the lawyer can be chosen now.
+    expect(within(dialog).getByRole("heading", { name: "Check the AI suggestion" })).toBeVisible()
+    expect(lawyerCard(dialog)).toHaveTextContent("No lawyer on this case yet.")
+    const assign = within(lawyerCard(dialog)).getByRole("button", { name: "Assign lawyer" })
+    expect(assign).toBeDisabled()
+
+    await user.click(within(dialog).getByRole("combobox", { name: "Choose a panel lawyer" }))
+    await user.click(await screen.findByRole("option", { name: "Adv. Nasrin Jahan" }))
+    await user.click(assign)
+
+    expect(lawyerCard(dialog)).toHaveTextContent("Adv. Nasrin Jahan")
+    expect(
+      within(lawyerCard(dialog)).getByRole("button", { name: "Change lawyer" }),
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("tab", { name: "Case information" }))
+    expect(within(dialog).getByText("Lawyer").nextElementSibling).toHaveTextContent(
+      "Adv. Nasrin Jahan",
+    )
+  })
+
+  it("moves a case to another lawyer, leaving the current one off the list", async () => {
+    const { user } = renderApp()
+    await user.click(within(rowFor("DLAS-2026-045")).getByRole("button", { name: "Abdul Malek" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(lawyerCard(dialog)).toHaveTextContent("Adv. Shahidul Islam")
+
+    await user.click(within(dialog).getByRole("combobox", { name: "Choose a panel lawyer" }))
+    expect(screen.queryByRole("option", { name: "Adv. Shahidul Islam" })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole("option", { name: "Adv. Taslima Akter" }))
+    await user.click(within(lawyerCard(dialog)).getByRole("button", { name: "Change lawyer" }))
+
+    expect(lawyerCard(dialog)).toHaveTextContent("Adv. Taslima Akter")
+    await user.click(within(dialog).getByRole("tab", { name: "History" }))
+    expect(
+      within(dialog).getByText("Case moved from Adv. Shahidul Islam to Adv. Taslima Akter"),
+    ).toBeInTheDocument()
+  })
+})
