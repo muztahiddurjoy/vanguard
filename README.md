@@ -967,6 +967,15 @@ the agents to use `gpt-6-luna`), then call a line from recorded answers with
 > subscribers. Keep `SMS_DRY_RUN=true`, or list only your own numbers in `SMS_ALLOWLIST`,
 > while it is connected.
 
+## Deploy on the VPS
+
+`deploy/deploy.sh` runs everything on the VPS. The backend and the NID registry run under
+pm2 on localhost ports. The dashboards and the legal aid app are static builds that nginx
+serves, each on its own `appbaksho.com` subdomain over HTTPS. For example, the DLAO
+dashboard is at `https://dlao.appbaksho.com` and the backend at
+`https://dlas-api.appbaksho.com`. [`deploy/README.md`](deploy/README.md) covers the hosts
+and ports, the DNS records, redeploying, the settings and the Twilio webhooks.
+
 ## Testing and quality checks
 
 Run each module's checks from its own folder. Every command below is also listed in that
@@ -1031,6 +1040,7 @@ per-user sign-in yet, rosters are code, no migrations, single-worker conversatio
 vanguard/
   README.md                this file
   start.sh                 starts everything (NID registry, backend, ngrok, four dashboards)
+  deploy/                  deploy.sh, the VPS's pm2 apps and nginx sites
   server/                  FastAPI backend
     app/                   main.py, config.py, database.py
       models/  agents/  routers/  services/
