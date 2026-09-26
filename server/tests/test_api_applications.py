@@ -307,3 +307,36 @@ def test_signature_bytes_are_stored_as_sent(client, db, monkeypatch):
     with open(doc.storage_path, "rb") as f:
         assert f.read() == PNG
     assert base64.b64encode(PNG).decode() not in str(doc.filename)
+
+
+def test_a_criminal_defence_case_is_not_marked_for_advice_or_mediation(client, monkeypatch):
+    # The State prosecutes: the person needs a lawyer in court, whatever the AI's rules say.
+    _, r = submit_from_court(client, monkeypatch, help_needed="defence")
+    ref = r.json()["id"]
+    officer = {"X-Officer-Id": "DLAO-RNG-01"}
+    detail = client.get(f"/dlao/cases/{ref}", headers=officer).json()
+    assert detail["category"] == "criminalDefence" and detail["track"] is None
+    client.post(f"/dlao/cases/{ref}/triage/rerun", headers=officer)
+    assert client.get(f"/dlao/cases/{ref}", headers=officer).json()["track"] is None
+
+
+def test_a_criminal_defence_case_keeps_a_sensitive_mark(client, monkeypatch):
+    _, r = submit_from_court(
+        client,
+        monkeypatch,
+        help_needed="bail",
+        narrative="Accused of hitting his wife; she was admitted to hospital after the beating.",
+    )
+    detail = client.get(f"/dlao/cases/{r.json()['id']}", headers={"X-Officer-Id": "D"}).json()
+    assert detail["track"]["key"] == "sensitive" and "sensitive" in detail["flags"]
+
+
+def test_family_help_from_a_court_is_still_marked(client, monkeypatch):
+    _, r = submit_from_court(
+        client,
+        monkeypatch,
+        help_needed="family",
+        narrative="Her husband has stopped paying maintenance for her and their two children.",
+    )
+    detail = client.get(f"/dlao/cases/{r.json()['id']}", headers={"X-Officer-Id": "D"}).json()
+    assert detail["category"] != "criminalDefence" and detail["track"] is not None

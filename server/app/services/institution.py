@@ -48,7 +48,7 @@ from app.models import (
     record_audit,
 )
 from app.models.case import PRIORITY_RANK
-from app.routers.dlao import due_at_for, get_case_or_404
+from app.routers.dlao import drop_track_for_court_cases, due_at_for, get_case_or_404
 from app.routers.duplicates import cases_of, find_duplicates_for
 from app.routers.intake import Identities, IntakeIn, PartyIn, apply_citizen, create_application
 from app.services.case_status import stage_of
@@ -343,6 +343,7 @@ def submit(db: Session, office: Office, body: ApplicationIn) -> tuple[Case, bool
     if body.help_needed in CRIMINAL_HELP:
         # T8 has no such category; it keeps one that is already set when it runs again.
         case.category = "criminalDefence"
+        drop_track_for_court_cases(case)
     if in_custody:
         hold_in_custody(db, case, office.actor)
     case.notices = {

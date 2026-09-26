@@ -309,6 +309,24 @@ def mark_do_not_call(db: Session, case: Case, reason: DoNotCallReason, actor: st
     )
 
 
+# Prosecuted by the State: such a case is neither settled by advice nor mediated, the
+# person needs a lawyer in court. Courts and jails send them (services.institution).
+COURT_ONLY_CATEGORIES = {"criminalDefence"}
+
+
+def drop_track_for_court_cases(case: Case) -> None:
+    """Take the AI's advice or mediation mark off a criminal defence case.
+
+    A sensitive mark stays: it protects the applicant. An officer's decision stays too.
+    """
+    if (
+        case.category in COURT_ONLY_CATEGORIES
+        and case.track_status == TrackStatus.SUGGESTED
+        and case.track != Track.SENSITIVE
+    ):
+        case.track = None
+
+
 def apply_triage(db: Session, case: Case, actor: str) -> None:
     """Run T8 on the case narrative and store the recommendation."""
     applicant = case.applicant
@@ -346,6 +364,7 @@ def apply_triage(db: Session, case: Case, actor: str) -> None:
     # An officer's confirmed or changed track stands; a fresh AI mark replaces only a mark.
     if case.track_status == TrackStatus.SUGGESTED:
         case.track = Track(rec["track"]["key"])
+        drop_track_for_court_cases(case)
     if case.track == Track.SENSITIVE:
         case.add_flag("sensitive")
     record_audit(
