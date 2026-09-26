@@ -24,9 +24,9 @@ npm install
 npm run dev        # http://localhost:5174
 ```
 
-Sign in with one of the **demo accounts**: Adv. Nasrin Jahan (`LAW-12`, up to date) or
-Adv. Shahidul Islam (`LAW-07`, reports late). Any panel lawyer ID and a password of 4+
-characters works.
+Sign in with one of the **demo accounts**: Adv. Nasrin Jahan (`LAW-12`, up to date),
+Adv. Shahidul Islam (`LAW-07`, reports late) or Adv. Rafiqul Hasan (`LAW-24`, a case the jail
+sent, with its court record). Any panel lawyer ID and a password of 4+ characters works.
 
 ### Live cases from the backend
 
@@ -53,11 +53,35 @@ assigns it on the DLAO dashboard. `../start.sh` runs everything, both dashboards
 
 | Screen                      | What it is for                                                                                                                                                                                                                                                                                                                                                                                  |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sign in**                 | Panel lawyer ID + password, the two demo accounts, keep me signed in                                                                                                                                                                                                                                                                                                                            |
+| **Sign in**                 | Panel lawyer ID + password, the three demo accounts, keep me signed in                                                                                                                                                                                                                                                                                                                          |
 | **My cases**                | The lawyer's profile (Bar Council enrolment, on the panel since), four numbers (open cases, hearings in the next 30 days, reports sent, reports late), "the office is waiting" when a report is late, search, and one card per case: where it stands in court, the next hearing, when the next report is due, the latest report, **Open case** and **Send an update**. Late reports come first. |
-| **Case**                    | Court progress (stage, next hearing, next report), every report sent from court (including a previous lawyer's), the client and how to contact them safely, who the complaint is against, and what happened                                                                                                                                                                                     |
+| **Case**                    | Court progress (stage, next hearing, next report), the **court record** (below), every report sent from court (including a previous lawyer's), the client and how to contact them safely, who the complaint is against, and what happened                                                                                                                                                       |
 | **Hearings**                | Hearings whose date has passed without a report, then the next 30 days grouped by day                                                                                                                                                                                                                                                                                                           |
 | **Send an update** (dialog) | What happened in court (the stage), the court, the date of the hearing, the next date fixed, what happened in the lawyer's words (20+ characters), and the order sheet or certified copy (PDF, JPEG or PNG, up to 10 MB)                                                                                                                                                                        |
+
+## Court record
+
+When a court or a jail sent the application, or the office has linked the client's court and
+jail records to the case, the **Case** screen shows what the lawyer taking over needs without
+collecting it again:
+
+- who sent the application (the court or jail, and the staff member), the help asked for, and
+  whether the client's identity was verified by **e-KYC** and they **signed** it;
+- each linked court case: court, number, type, sections, status, parties, the next
+  **cause-list listing** ("Listed on Tue, 29 Sept 2026, serial 7, 10:30, for evidence"), the
+  **proceedings** from the order sheet, and the lawyers who appeared, each **previous lawyer**
+  with their dates;
+- **custody** for a jail visit: the jail, prisoner number, ward and status, and the cases the
+  client is held on;
+- **previous records**: the client's other cases in the district's courts. Restricted records
+  are never shown, and no NID digits reach this dashboard.
+
+The lawyer sees records only for their own assigned cases. With a backend they come from
+`GET /lawyer/cases/{ref}/records`, fetched only when the lawyer opens the case (never for the
+list); the server records every view in the case's audit trail, and the screen says so.
+Without a backend, the sample case from Rangpur Central Jail (Jalal Uddin, `G.R. 455/2026`)
+has the same records as the court and jail dashboards' sample data; the other sample cases
+show that nothing is linked yet.
 
 ## Reporting rules
 
@@ -85,16 +109,16 @@ link appears only inside it. Sensitive cases say so.
 src/
   main.tsx  routes.tsx
   pages/          sign in, my cases, case, hearings, not found
-  api/            backend client (X-Lawyer-Id), server case view -> LawyerCase
+  api/            backend client (X-Lawyer-Id), server case and records views -> dashboard types
   auth/           sign-in (session storage) + route guard
-  state/          the lawyer's cases (sample or live) and sending an update
-  data/           types, the panel roster and the sample cases
+  state/          the lawyer's cases (sample or live), sending an update, a case's court record
+  data/           types, the panel roster, the sample cases and their court records
   i18n/           en/bn dictionaries, provider, locale formatters
   lib/            reporting rules, case sorting and search, safe-contact window maths
   components/
     ui/           shadcn/ui components (copied from the DLAO dashboard)
     layout/       header, bottom navigation, account menu, page header
-    cases/        case card, badges, update form, court reports, contact rules
+    cases/        case card, badges, update form, court reports, court record, contact rules
   test/           integration tests and the render helper
 ```
 
