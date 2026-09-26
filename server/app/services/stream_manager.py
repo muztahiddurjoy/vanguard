@@ -1,18 +1,34 @@
 """Bridges one Twilio media stream to a phone agent and ElevenLabs TTS.
 
-The agent is T5 intake on the application hotline, or the query helpline when
-the call came in on that line (the ``line`` stream parameter).
+Two numbers ring here (the ``line`` stream parameter). The query helpline is
+answered by the helpline agent from the first word. The application hotline
+first asks what the caller wants (``agents.hotline_menu``): to file a new case,
+or to hear the progress of one they already filed.
+
+- New case: T5 intake takes the call, from "tell me what happened".
+- Progress: the helpline agent asks for the tracking number and reads the
+  case's stage (``services.case_status``); a number said with the answer is
+  read at once. A caller who then says they want to apply is taken to intake.
+- Safety: a caller who starts saying what happened at the menu, or who says
+  they are in danger there or while asking about a case, goes straight to
+  intake, with what they said as its first turn: the 999 line and the escalated
+  application are T5's, as on any intake call. An answer the menu cannot place
+  is asked again; after ``MAX_MENU_ASKS`` of them intake takes the call anyway,
+  keeping any words that said something.
+- Nothing is filed for a caller who only asked about a case, or who hung up at
+  the menu: a call becomes an application only once intake has begun.
 
 Caller audio (μ-law 8 kHz) goes to a speech-to-text ``Transcriber``; each
-final utterance is one T5 turn; the reply is spoken back through ElevenLabs,
-whose ``ulaw_8000`` output Twilio plays as-is.
+final utterance is one turn of the agent the call is with; the reply is spoken
+back through ElevenLabs, whose ``ulaw_8000`` output Twilio plays as-is.
 
 - Barge-in: when the caller starts speaking over a reply, the TTS stream is
   cancelled and Twilio's queued audio cleared. Audio is generated faster than
   it plays, so a reply counts as playing until Twilio echoes its ``mark``.
-- Patience: while an intake caller is saying what happened, before any
-  question, their turn ends after a longer pause (``STT_STORY_END_OF_TURN_MS``),
-  so a story told with pauses is not answered halfway through.
+- Patience: at the menu, where many callers begin with what happened, and
+  while an intake caller is saying what happened, before any question, their
+  turn ends after a longer pause (``STT_STORY_END_OF_TURN_MS``), so a story
+  told with pauses is not answered halfway through.
 - Emergency: the 999 line is spoken at once and the application created while
   it plays; the tracking number follows. Nothing is looked up first.
 - Ending: after the closing line has actually finished playing (Twilio echoes
@@ -26,7 +42,7 @@ whose ``ulaw_8000`` output Twilio plays as-is.
 Speech-to-text is OpenAI ``gpt-live-transcribe`` (``services.speech_to_text``)
 when ``OPENAI_API_KEY`` is set. Without it callers hear ``NO_SPEECH_INPUT``
 and the call ends; if it fails during a call, they hear ``STT_FAILED`` and the
-call ends as a cut call.
+call ends (as a cut call, once intake has begun).
 """
 
 import asyncio
@@ -35,12 +51,13 @@ import contextlib
 import json
 import logging
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from sqlalchemy.orm import Session
 
-from app.agents.helpline import HelplineConversation, helpline
-from app.agents.t5_intake import IntakeConversation, conversations, with_token
+from app.agents.helpline import HelplineConversation, find_token, helpline
+from app.agents.hotline_menu import MAX_MENU_ASKS, MENU, MENU_AGAIN, TELL_ME, HotlineMenu, menu
+from app.agents.t5_intake import IntakeConversation, conversations, substance, with_token
 from app.config import get_settings
 from app.database import SessionLocal
 from app.services.case_status import lookup_token
@@ -72,6 +89,10 @@ STT_FAILED = {
 }
 
 
+# Who the caller is talking to: the hotline's opening question, T5, or the helpline.
+Mode = Literal["menu", "intake", "status"]
+
+
 def build_transcriber(language: str) -> Transcriber | None:
     """Return the speech-to-text adapter for ``language`` ("bn" or "en"), if one is set up."""
     if get_settings().stt_enabled:
@@ -96,6 +117,7 @@ class StreamManager:
         transcriber_factory: Callable[[str], Transcriber | None] = build_transcriber,
         intake: IntakeConversation | None = None,
         helpline_agent: HelplineConversation | None = None,
+        menu: HotlineMenu | None = None,
         session_factory: Callable[[], Session] = SessionLocal,
     ):
         self.ws = ws
@@ -103,13 +125,18 @@ class StreamManager:
         self.transcriber_factory = transcriber_factory
         self.intake = intake or conversations()
         self._helpline = helpline_agent
+        self._menu = menu
         self.session_factory = session_factory
 
         self.stream_sid: str | None = None
         self.call_sid: str | None = None
         self.caller: str | None = None
         self.language = "bn"
+        # The number that was called; ``mode`` is who the caller is talking to now.
         self.line = "intake"
+        self.mode: Mode = "menu"
+        # What the caller said at the menu that was not an answer to it.
+        self._unclear: list[str] = []
         self.transcriber: Transcriber | None = None
         self.case_ref: str | None = None
         self.tracking_token: str | None = None
@@ -120,7 +147,7 @@ class StreamManager:
         # The latest reply's mark until Twilio echoes it: its audio may still be playing.
         self._playing: str | None = None
         self._reply_count = 0
-        # True between the intake greeting and _finish: a hang-up then is a cut call.
+        # True from the start of intake until _finish: a hang-up then is a cut call.
         self._conversation_open = False
 
     # --- Twilio side ----------------------------------------------------------
@@ -173,23 +200,19 @@ class StreamManager:
             )
             return
 
-        state: Any
         if self.line == "helpline":
+            self.mode = "status"
             state = await asyncio.to_thread(
                 self.helpline.start, self.call_sid, language=self.language
             )
+            opening = state["reply"]
         else:
-            state = await asyncio.to_thread(
-                self.intake.start,
-                self.call_sid,
-                channel="hotline_16699",
-                language=self.language,
-                caller_phone=self.caller,
-            )
-            self._conversation_open = True
-            self._set_patience(state)
+            # Intake has not begun: a hang-up at the menu files nothing.
+            self.mode = "menu"
+            self._set_patience(story=True)  # many callers begin with what happened
+            opening = MENU[self.language]
         self._listen_task = asyncio.create_task(self._listen())
-        await self._speak(state["reply"])
+        await self._speak(opening)
 
     @property
     def helpline(self) -> HelplineConversation:
@@ -197,12 +220,17 @@ class StreamManager:
             self._helpline = helpline()
         return self._helpline
 
-    def _set_patience(self, state: Any) -> None:
-        """A story has pauses: wait longer for the end of a turn until it has been told."""
+    @property
+    def menu(self) -> HotlineMenu:
+        if self._menu is None:
+            self._menu = menu()
+        return self._menu
+
+    def _set_patience(self, *, story: bool) -> None:
+        """A story has pauses: wait longer for the end of a turn while one may be told."""
         if self.transcriber is None:
             return
         settings = get_settings()
-        story = state.get("asking") == "problem"
         self.transcriber.set_end_of_turn(
             settings.stt_story_end_of_turn_ms if story else settings.stt_end_of_turn_ms
         )
@@ -285,28 +313,99 @@ class StreamManager:
                 continue
             # What callers say is sensitive: only ever at DEBUG, for local testing.
             log.debug("call %s: caller said %r", self.call_sid, text)
-            state: Any
-            if self.line == "helpline":
-                state = await asyncio.to_thread(
-                    self.helpline.turn, self.call_sid, text, self._lookup
-                )
-                reply = state["reply"]
+            if self.mode == "menu":
+                ended = await self._menu_turn(text)
+            elif self.mode == "status":
+                ended = await self._status_turn(text)
             else:
-                state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
-                self._set_patience(state)
-                reply = state["reply"]
-                if state.get("emergency"):
-                    log.debug("call %s: replying %r", self.call_sid, reply)
-                    await self._emergency(state)
-                    return
-                if state.get("complete"):
-                    await asyncio.to_thread(self._finish, state)
-                    reply = with_token(reply, self.tracking_token, self.language)
-            log.debug("call %s: replying %r", self.call_sid, reply)
-            if state.get("complete"):
-                await self._say_and_hang_up(reply)
+                ended = await self._intake_turn(text)
+            if ended:
                 return
-            await self._speak(reply)
+
+    # Each turn handler speaks its reply and returns True once the call is over.
+
+    async def _menu_turn(self, text: str) -> bool:
+        """The caller's answer to the hotline's opening question."""
+        choice = await asyncio.to_thread(self.menu.choose, text, self.language)
+        if choice == "status":
+            return await self._to_status(text)
+        if choice == "new":
+            return await self._to_intake()
+        if choice == "unclear":
+            self._unclear.append(text)
+            if len(self._unclear) < MAX_MENU_ASKS:
+                return await self._reply(MENU_AGAIN[self.language])
+        # They have begun saying what happened (or we asked enough): intake hears it,
+        # with any earlier words that said something ("my husband"), and nothing else.
+        said = [u for u in self._unclear if substance(u) > 0]
+        if choice == "story":
+            said.append(text)
+        return await self._to_intake(" ".join(said))
+
+    async def _to_status(self, said: str) -> bool:
+        """The helpline agent asks for the tracking number, unless it was already said."""
+        assert self.call_sid is not None
+        self.mode = "status"
+        self._set_patience(story=False)
+        state = await asyncio.to_thread(
+            self.helpline.start, self.call_sid, language=self.language, tracking=True
+        )
+        if find_token(said):
+            return await self._status_turn(said)
+        return await self._reply(state["reply"])
+
+    async def _status_turn(self, text: str) -> bool:
+        assert self.call_sid is not None
+        state = await asyncio.to_thread(self.helpline.turn, self.call_sid, text, self._lookup)
+        # The hotline takes applications: a caller who wants to apply, or is in danger,
+        # is heard by intake (danger with what they said, so T5's 999 line and escalation
+        # follow). The helpline line answers such callers itself, as it always has.
+        if self.line != "helpline":
+            if state.get("intent") == "apply":
+                return await self._to_intake()
+            if state.get("intent") == "emergency":
+                return await self._to_intake(text)
+        return await self._reply(state["reply"], last=bool(state.get("complete")))
+
+    async def _to_intake(self, said: str = "") -> bool:
+        """Begin T5 intake: ``said`` is its first turn, else the caller is asked to tell it."""
+        assert self.call_sid is not None
+        state = await asyncio.to_thread(
+            self.intake.start,
+            self.call_sid,
+            channel="hotline_16699",
+            language=self.language,
+            caller_phone=self.caller,
+        )
+        self.mode = "intake"
+        self._conversation_open = True
+        if said:
+            return await self._intake_turn(said)
+        self._set_patience(story=state.get("asking") == "problem")
+        return await self._reply(TELL_ME[self.language])
+
+    async def _intake_turn(self, text: str) -> bool:
+        assert self.call_sid is not None
+        state = await asyncio.to_thread(self.intake.turn, self.call_sid, text)
+        self._set_patience(story=state.get("asking") == "problem")
+        reply = state["reply"]
+        if state.get("emergency"):
+            log.debug("call %s: replying %r", self.call_sid, reply)
+            await self._emergency(state)
+            return True
+        if state.get("complete"):
+            await asyncio.to_thread(self._finish, state)
+            reply = with_token(reply, self.tracking_token, self.language)
+        return await self._reply(reply, last=bool(state.get("complete")))
+
+    async def _reply(self, text: str, *, last: bool = False) -> bool:
+        """Speak ``text``; the ``last`` reply is played out and then the call ends."""
+        log.debug("call %s: replying %r", self.call_sid, text)
+        if last:
+            await self._say_and_hang_up(text)
+            return True
+        await self._speak(text)
+        return False
 
     async def _emergency(self, state: Any) -> None:
         """The 999 line at once; the application is created while it plays.
