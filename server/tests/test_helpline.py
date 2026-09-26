@@ -113,6 +113,9 @@ def test_a_caller_asked_for_the_number_can_still_apply_or_get_help():
     conv = HelplineConversation(use_default_llm=False)
     conv.start("h8", language="en", tracking=True)
     assert conv.turn("h8", "I want to file a new case", lookup)["intent"] == "apply"
+    # The menu's own words for it, which the hotline caller has just heard.
+    conv.start("h10", tracking=True)
+    assert conv.turn("h10", "নতুন মামলা", lookup)["intent"] == "apply"
 
     conv.start("h9", language="en", tracking=True)
     s = conv.turn("h9", "I don't know it, he is beating me right now", lookup)

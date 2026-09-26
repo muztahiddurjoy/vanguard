@@ -51,8 +51,9 @@ INTENT_TERMS: dict[str, tuple[str, ...]] = {
     "notice": ("against me", "filed against", "got an sms", "got a message", "received an sms",
                "received a message", "notice", "আমার বিরুদ্ধে", "এসএমএস পেয়েছি", "মেসেজ পেয়েছি",
                "নোটিশ"),
-    "apply": ("apply", "file a case", "make a complaint", "new case", "আবেদন করতে",
-              "অভিযোগ করতে", "মামলা করতে", "আবেদন করব"),
+    "apply": ("apply", "file a case", "make a complaint", "new case", "new application",
+              "new complaint", "আবেদন করতে", "অভিযোগ করতে", "মামলা করতে", "আবেদন করব",
+              "নতুন মামলা", "নতুন আবেদন", "নতুন অভিযোগ"),
     # Any other mention of a case or application is most likely about its progress.
     "track": ("status", "progress", "tracking", "case", "application", "update", "happening",
               "অবস্থা", "অগ্রগতি", "ট্র্যাকিং", "মামলা", "আবেদন", "কী হলো", "কি হলো"),
