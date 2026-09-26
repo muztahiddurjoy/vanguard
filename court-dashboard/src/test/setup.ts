@@ -35,5 +35,5 @@ window.scrollTo = () => {}
 
 // jsdom has no canvas: getContext would log "not implemented". The signature pad
 // treats null as "cannot draw here" and offers the upload instead.
-HTMLCanvasElement.prototype.getContext = (() =>
-  null) as typeof HTMLCanvasElement.prototype.getContext
+const canvas = Object.getPrototypeOf(document.createElement("canvas")) as HTMLCanvasElement
+canvas.getContext = (() => null) as HTMLCanvasElement["getContext"]
