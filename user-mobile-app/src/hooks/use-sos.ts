@@ -14,6 +14,20 @@ async function requestPermission(permission: string): Promise<PermissionOutcome>
 }
 
 /**
+ * The service starts (and stops) a moment after start() and stop() return, so
+ * read the state again until it has caught up.
+ */
+async function settled(wantRunning: boolean): Promise<SosStatus | null> {
+  if (!SosGesture) return null;
+  for (let i = 0; i < 15; i++) {
+    const status = SosGesture.getStatus();
+    if (status.serviceRunning === wantRunning) return status;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return SosGesture.getStatus();
+}
+
+/**
  * The volume-button SOS: its state, and what turning it on takes. The state is
  * read again whenever the app comes back to the front (the person may have been
  * to the accessibility settings) and whenever SOS fires.
@@ -62,11 +76,13 @@ export function useSos() {
     if (!current.callPermission) await requestCall();
     if (!current.notificationPermission) await requestNotifications();
     setStatus(await SosGesture.start());
+    setStatus(await settled(true));
   }, [requestCall, requestNotifications]);
 
   const turnOff = useCallback(async () => {
     if (!SosGesture) return;
     setStatus(await SosGesture.stop());
+    setStatus(await settled(false));
   }, []);
 
   const callNow = useCallback(async () => {
