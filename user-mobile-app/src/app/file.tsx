@@ -91,7 +91,10 @@ export default function FileScreen() {
 
   const current: Step = STEPS[step];
   const update = (fn: (d: Draft) => Draft) => setDraft((d) => (d ? fn(d) : d));
-  const err = (key: string) => (errors[key] ? t.file.errors[errors[key]!] : null);
+  // Errors appear when Next is pressed, and go as soon as the field is put right.
+  const stillWrong = validateStep(current, draft);
+  const shown = Object.keys(errors).filter((key) => stillWrong[key]);
+  const err = (key: string) => (shown.includes(key) ? t.file.errors[stillWrong[key]!] : null);
 
   const next = () => {
     const e = validateStep(current, draft);
@@ -140,10 +143,19 @@ export default function FileScreen() {
     <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
-          headerRight: () => <Button title={t.file.startOver} variant="ghost" onPress={startOver} />,
+          headerRight: () => (
+            <Pressable
+              onPress={startOver}
+              accessibilityRole="button"
+              accessibilityLabel={t.file.startOver}
+              hitSlop={12}
+              style={styles.headerButton}>
+              <Icon name="restart" size={24} />
+            </Pressable>
+          ),
         }}
       />
-      <Screen>
+      <Screen key={current}>
         <StepHeader step={step} />
         {current === 'who' && <WhoStep d={draft} update={update} err={err} />}
         {current === 'applicant' && <ApplicantStep d={draft} update={update} err={err} />}
@@ -151,7 +163,7 @@ export default function FileScreen() {
         {current === 'safety' && <SafetyStep d={draft} update={update} err={err} />}
         {current === 'review' && <ReviewStep d={draft} goTo={(s) => setStep(STEPS.indexOf(s))} />}
 
-        {Object.keys(errors).length > 0 && <Notice tone="danger">{t.file.fixFirst}</Notice>}
+        {shown.length > 0 && <Notice tone="danger">{t.file.fixFirst}</Notice>}
         {rejected && <Notice tone="danger">{rejected}</Notice>}
 
         <Row>
@@ -450,6 +462,7 @@ function ProblemStep({ d, update, err }: StepProps) {
             {p.inCourt}
           </Txt>
           <Switch
+            accessibilityLabel={p.inCourt}
             value={d.nextHearingDate !== null}
             onValueChange={(on) => {
               if (!on) update((x) => ({ ...x, nextHearingDate: null }));
@@ -517,6 +530,7 @@ function SafetyStep({ d, update, err }: StepProps) {
             </Txt>
           </View>
           <Switch
+            accessibilityLabel={s.monitored}
             testID="phone-monitored"
             value={d.phoneMonitored}
             onValueChange={(v) => update((x) => ({ ...x, phoneMonitored: v }))}
@@ -593,7 +607,7 @@ function ReviewStep({ d, goTo }: { d: Draft; goTo: (s: Step) => void }) {
       <Txt variant="heading">{r.title}</Txt>
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="bodyStrong">
+          <Txt variant="bodyStrong" style={{ flex: 1 }}>
             {d.forSelf ? r.forSelf : r.forOther(d.proxy.name, relationLabel(d.proxy.relation))}
           </Txt>
           {edit('who')}
@@ -601,7 +615,9 @@ function ReviewStep({ d, goTo }: { d: Draft; goTo: (s: Step) => void }) {
       </Card>
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="bodyStrong">{t.file.steps.applicant}</Txt>
+          <Txt variant="bodyStrong" style={{ flex: 1 }}>
+            {t.file.steps.applicant}
+          </Txt>
           {edit('applicant')}
         </Row>
         <Divider />
@@ -619,7 +635,9 @@ function ReviewStep({ d, goTo }: { d: Draft; goTo: (s: Step) => void }) {
       </Card>
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="bodyStrong">{t.file.steps.problem}</Txt>
+          <Txt variant="bodyStrong" style={{ flex: 1 }}>
+            {t.file.steps.problem}
+          </Txt>
           {edit('problem')}
         </Row>
         <Divider />
@@ -629,7 +647,9 @@ function ReviewStep({ d, goTo }: { d: Draft; goTo: (s: Step) => void }) {
       </Card>
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="bodyStrong">{t.file.steps.safety}</Txt>
+          <Txt variant="bodyStrong" style={{ flex: 1 }}>
+            {t.file.steps.safety}
+          </Txt>
           {edit('safety')}
         </Row>
         <Divider />
@@ -705,6 +725,7 @@ function Finished({ outcome }: { outcome: Outcome }) {
 }
 
 const styles = StyleSheet.create({
+  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   bar: { flexDirection: 'row', gap: Spacing.xs },
   barPart: { flex: 1, height: 6, borderRadius: Radius.pill },
   option: {
