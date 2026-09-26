@@ -198,7 +198,7 @@ export function CauseListEditor({
           <>
             <div
               aria-hidden
-              className="hidden gap-2 px-3 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[5rem_6rem_minmax(0,1fr)_minmax(0,1.4fr)_2.25rem]"
+              className="hidden gap-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[5rem_6rem_minmax(0,1fr)_minmax(0,1.4fr)_2.25rem]"
             >
               <span>{t.causeList.columns.serial}</span>
               <span>{t.causeList.columns.time}</span>
@@ -220,7 +220,7 @@ export function CauseListEditor({
                 })
                 return (
                   <li key={row.key}>
-                    <fieldset className="rounded-lg border bg-card p-3 md:border-0 md:bg-transparent md:p-0">
+                    <fieldset className="min-w-0 rounded-lg border bg-card p-3 md:border-0 md:bg-transparent md:p-0">
                       <legend className="mb-2 text-sm font-medium md:sr-only">
                         {t.causeList.row(n)}
                       </legend>
@@ -277,7 +277,7 @@ export function CauseListEditor({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="col-span-2 w-full justify-self-end md:col-span-1 md:w-9"
+                          className="col-span-2 w-full gap-1.5 justify-self-end md:col-span-1 md:w-9"
                           aria-label={t.causeList.removeRow(n)}
                           onClick={() => removeRow(row.key)}
                         >
