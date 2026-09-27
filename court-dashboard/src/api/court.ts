@@ -2,6 +2,8 @@ import { apiFetch, type Method } from "@/api/client"
 import type { CourtBackend } from "@/data/backend"
 import type {
   ApplicationDraft,
+  Bill,
+  BillQueue,
   CaseDraft,
   CauseList,
   CauseListDay,
@@ -151,5 +153,29 @@ export function createLiveBackend(staffId: string): CourtBackend {
       call<LegalAidStatus>(`/court/applications/${enc(ref)}/ekyc`, "POST", { check_id: checkId }),
     addSignature: (ref, s) =>
       call<LegalAidStatus>(`/court/applications/${enc(ref)}/signature`, "POST", signatureBody(s)),
+
+    listBills: () => call<BillQueue>("/court/bills"),
+    getBill: (number) => call<Bill>(`/court/bills/${enc(number)}`),
+    verifyBill: (number, d) =>
+      call<Bill>(
+        `/court/bills/${enc(number)}/verify`,
+        "POST",
+        compact({
+          lines: d.lines.map((l) =>
+            compact({
+              id: l.id,
+              allowed_taka: l.allowedTaka,
+              disallowed_reason: l.disallowedReason,
+            }),
+          ),
+          note: d.note,
+        }),
+      ),
+    returnBill: (number, justification) =>
+      call<Bill>(`/court/bills/${enc(number)}/return`, "POST", { justification }),
+    rejectBill: (number, justification) =>
+      call<Bill>(`/court/bills/${enc(number)}/reject`, "POST", { justification }),
+    releaseBill: (number, voucherNumber) =>
+      call<Bill>(`/court/bills/${enc(number)}/release`, "POST", { voucher_number: voucherNumber }),
   }
 }

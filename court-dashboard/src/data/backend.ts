@@ -1,5 +1,8 @@
 import type {
   ApplicationDraft,
+  Bill,
+  BillQueue,
+  BillVerifyDraft,
   CaseDraft,
   CaseStatus,
   CauseList,
@@ -44,4 +47,16 @@ export interface CourtBackend {
   /** Applies a later verified check to an application's applicant. */
   applyEkyc(ref: string, checkId: string): Promise<LegalAidStatus>
   addSignature(ref: string, signature: SignatureDraft): Promise<LegalAidStatus>
+
+  /** The panel lawyers' bills sent to this court, oldest submitted first (drafts excluded). */
+  listBills(): Promise<BillQueue>
+  getBill(number: string): Promise<Bill>
+  /** Taxes the bill: an allowed amount for every line, and a reason for every cut. */
+  verifyBill(number: string, draft: BillVerifyDraft): Promise<Bill>
+  /** Sends the bill back to the lawyer to correct, saying what is wrong. */
+  returnBill(number: string, justification: string): Promise<Bill>
+  /** Refuses the bill outright, saying why. */
+  rejectBill(number: string, justification: string): Promise<Bill>
+  /** Releases a verified bill for payment against a voucher number. */
+  releaseBill(number: string, voucherNumber: string): Promise<Bill>
 }

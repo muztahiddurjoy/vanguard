@@ -304,3 +304,130 @@ describe("e-KYC and applications in the sample records", () => {
     expect(await nst.listApplications()).toEqual([])
   })
 })
+
+describe("the sample bill register", () => {
+  it("shows a court only its own bills, the longest waiting first, and never a draft", async () => {
+    const { bills, totals } = await magistrate().listBills()
+    expect(bills.map((b) => b.number)).toEqual([
+      "BILL-2026-006",
+      "BILL-2026-004",
+      "BILL-2026-001",
+      "BILL-2026-003",
+      "BILL-2026-005",
+      "BILL-2026-002",
+    ])
+    expect(totals).toEqual({ claimed: 18400, allowed: 6100, released: 2800, awaitingCourt: 6100 })
+
+    const court = magistrate()
+    // A draft is the lawyer's own; another court's bill is not this court's.
+    expect((await failure(court.getBill("BILL-2026-007"))).status).toBe(404)
+    expect((await failure(court.getBill("BILL-2026-008"))).status).toBe(404)
+    expect((await tribunal().listBills()).bills.map((b) => b.number)).toEqual(["BILL-2026-008"])
+  })
+
+  it("taxes a bill line by line, and needs a reason for every cut", async () => {
+    const court = magistrate()
+    const bill = await court.getBill("BILL-2026-001")
+    expect(bill.claimedTotal).toBe(4300)
+    expect(bill.allowedTotal).toBeNull()
+    expect(bill.lines.filter((l) => l.overCeiling).map((l) => l.head)).toEqual([
+      "appearance",
+      "certifiedCopy",
+    ])
+    const full = bill.lines.map((l) => ({ id: l.id, allowedTaka: l.claimedTaka }))
+
+    // Every line, exactly once.
+    const refused = (lines: typeof full) => failure(court.verifyBill("BILL-2026-001", { lines }))
+    expect((await refused(full.slice(1))).status).toBe(422)
+    expect((await refused([...full.slice(1), full[1]])).status).toBe(422)
+    // Never more than was claimed, and never a fraction of a taka.
+    expect(
+      (
+        await failure(
+          court.verifyBill("BILL-2026-001", {
+            lines: full.map((l) => (l.id === 1 ? { ...l, allowedTaka: 1201 } : l)),
+          }),
+        )
+      ).status,
+    ).toBe(422)
+    expect(
+      (
+        await failure(
+          court.verifyBill("BILL-2026-001", {
+            lines: full.map((l) => (l.id === 1 ? { ...l, allowedTaka: 999.5 } : l)),
+          }),
+        )
+      ).status,
+    ).toBe(422)
+    // A cut with no reason, and a cut with too short a one.
+    const cut = full.map((l) => (l.id === 1 ? { ...l, allowedTaka: 1000 } : l))
+    const noReason = await failure(court.verifyBill("BILL-2026-001", { lines: cut }))
+    expect(noReason.status).toBe(422)
+    expect(noReason.detail).toBe(
+      "Every line allowed less than it claimed needs a reason of at least 10 characters",
+    )
+    expect(
+      (
+        await failure(
+          court.verifyBill("BILL-2026-001", {
+            lines: cut.map((l) => (l.id === 1 ? { ...l, disallowedReason: "too short" } : l)),
+          }),
+        )
+      ).status,
+    ).toBe(422)
+    // Nothing was written while the bill was refused.
+    expect((await court.getBill("BILL-2026-001")).status).toBe("submitted")
+    expect((await court.getBill("BILL-2026-001")).lines[0].allowedTaka).toBeNull()
+
+    const verified = await court.verifyBill("BILL-2026-001", {
+      lines: cut.map((l) =>
+        l.id === 1 ? { ...l, disallowedReason: "Only the ceiling is payable for appearance." } : l,
+      ),
+      note: "Taxed against the schedule.",
+    })
+    expect(verified.status).toBe("verified")
+    expect(verified.allowedTotal).toBe(4100)
+    expect(verified.lines[0].disallowedReason).toBe("Only the ceiling is payable for appearance.")
+    expect(verified.lines[1].disallowedReason).toBeNull()
+    expect(verified.decidedAt).not.toBeNull()
+    expect(verified.decisionNote).toBe("Taxed against the schedule.")
+    // A decision is taken once.
+    expect((await failure(court.verifyBill("BILL-2026-001", { lines: full }))).status).toBe(409)
+    expect((await failure(court.returnBill("BILL-2026-001", "a".repeat(30)))).status).toBe(409)
+  })
+
+  it("releases a bill only after it has been verified, and only once", async () => {
+    const court = magistrate()
+    expect((await failure(court.releaseBill("BILL-2026-001", "VCH-2026-00219"))).status).toBe(409)
+    expect((await failure(court.releaseBill("BILL-2026-003", " "))).status).toBe(422)
+
+    const released = await court.releaseBill("BILL-2026-003", " VCH-2026-00219 ")
+    expect(released.status).toBe("released")
+    expect(released.voucherNumber).toBe("VCH-2026-00219")
+    expect(released.releasedAt).not.toBeNull()
+    expect((await failure(court.releaseBill("BILL-2026-003", "VCH-2026-00220"))).status).toBe(409)
+    expect((await court.listBills()).totals.released).toBe(6100)
+  })
+
+  it("sends a bill back, or refuses it, only with a written justification", async () => {
+    const court = magistrate()
+    expect((await failure(court.returnBill("BILL-2026-002", "no receipts"))).status).toBe(422)
+    expect((await failure(court.rejectBill("BILL-2026-002", "not payable"))).status).toBe(422)
+
+    const returned = await court.returnBill(
+      "BILL-2026-002",
+      "  Attach the mediation attendance sheet for both sittings.  ",
+    )
+    expect(returned.status).toBe("returned")
+    expect(returned.decisionNote).toBe("Attach the mediation attendance sheet for both sittings.")
+    expect(returned.allowedTotal).toBeNull()
+
+    const other = magistrate()
+    const refused = await other.rejectBill(
+      "BILL-2026-001",
+      "The case was referred before any hearing, so no fee is payable.",
+    )
+    expect(refused.status).toBe("rejected")
+    expect((await failure(other.releaseBill("BILL-2026-001", "VCH-2026-00221"))).status).toBe(409)
+  })
+})
