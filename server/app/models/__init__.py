@@ -1,6 +1,7 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
 from app.models.audit import AuditAction, AuditEntry, SyncReceipt, record_audit, verify_chain
+from app.models.bill import Bill, BillHead, BillLine, BillStatus
 from app.models.case import (
     Case,
     CaseOutcome,
@@ -75,6 +76,10 @@ __all__ = [
     "Attendance",
     "AuditAction",
     "AuditEntry",
+    "Bill",
+    "BillHead",
+    "BillLine",
+    "BillStatus",
     "Case",
     "CaseOutcome",
     "CaseParty",
