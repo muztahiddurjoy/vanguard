@@ -193,3 +193,75 @@ export interface ApiCaseRecords {
   prisoner: ApiPrisonerDetail | null
   previousRecords: ApiCourtCaseSummary[]
 }
+
+// The Bill Gadget: the lawyer's bills for closed cases (L.A. Form 11) and the fee schedule.
+// Every amount is a whole number of taka.
+
+export interface ApiBillScheduleHead {
+  head: string
+  label: string
+  labelBn: string
+  ceilingTaka: number
+  voucherRequired: boolean
+  repeatable: boolean
+}
+
+export interface ApiBillSchedule {
+  version: string
+  reference: { en: string; bn: string }
+  heads: ApiBillScheduleHead[]
+}
+
+export interface ApiBillLine {
+  id: number | string
+  head: string
+  description: string
+  incurredOn: string
+  claimedTaka: number
+  allowedTaka: number | null
+  disallowedReason: string | null
+  voucherRef: string | null
+  ceilingTaka: number
+  overCeiling: boolean
+}
+
+export interface ApiBill {
+  number: string
+  status: string
+  case: {
+    ref: string
+    category: CaseCategory | null
+    outcome: string
+    closedAt: string
+    client: { name: string; nameBn: string | null }
+  }
+  lawyer: { id: string; name: string; nameBn: string | null; enrolment: string }
+  court: { id: string; name: string; nameBn: string | null } | null
+  lines: ApiBillLine[]
+  claimedTotal: number
+  allowedTotal: number | null
+  note: string | null
+  submittedAt: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+  voucherNumber: string | null
+  releasedAt: string | null
+  scheduleVersion: string
+}
+
+/** A closed case with no bill yet. */
+export interface ApiBillable {
+  ref: string
+  category: CaseCategory | null
+  outcome: string
+  closedAt: string
+  client: { name: string; nameBn: string | null }
+  court: { id: string; name: string; nameBn: string | null } | null
+  hearings: number
+}
+
+export interface ApiBills {
+  bills: ApiBill[]
+  billable: ApiBillable[]
+  totals: { claimed: number; allowed: number; released: number; awaitingCourt: number }
+}

@@ -1,6 +1,11 @@
 /** Server views -> the dashboard's types. Free text from the server reads the same in both languages. */
 
 import type {
+  ApiBill,
+  ApiBillable,
+  ApiBillLine,
+  ApiBills,
+  ApiBillSchedule,
   ApiCaseRecords,
   ApiCourtCaseDetail,
   ApiCourtCaseSummary,
@@ -11,6 +16,8 @@ import type {
   ApiUpdate,
 } from "@/api/types"
 import {
+  BILL_HEADS,
+  BILL_STATUSES,
   CATEGORIES,
   COURT_CASE_TYPES,
   COURT_PARTY_ROLES,
@@ -19,6 +26,11 @@ import {
   LAWYER_SIDES,
   PRISONER_STATUSES,
   PROCEEDING_KINDS,
+  type Bill,
+  type Billable,
+  type BillLine,
+  type BillSchedule,
+  type BillTotals,
   type CaseRecords,
   type ClientCustody,
   type CourtCase,
@@ -234,5 +246,104 @@ export function toCaseRecords(api: ApiCaseRecords): CaseRecords {
     courtCases: api.courtCases.map((c) => toCourtCaseRecord(c, isClient)),
     ...(prisoner ? { custody: toClientCustody(prisoner) } : {}),
     previousRecords: api.previousRecords.map(toCourtCase),
+  }
+}
+
+// The Bill Gadget: the lawyer's bills for closed cases, and the gazetted fee schedule.
+
+export function toBillLine(l: ApiBillLine): BillLine {
+  return {
+    id: String(l.id),
+    head: known(BILL_HEADS, l.head) ?? "other",
+    description: loc(l.description),
+    incurredOn: l.incurredOn,
+    claimedTaka: l.claimedTaka,
+    ...(l.allowedTaka != null ? { allowedTaka: l.allowedTaka } : {}),
+    ...(l.disallowedReason ? { disallowedReason: loc(l.disallowedReason) } : {}),
+    ...(l.voucherRef ? { voucherRef: l.voucherRef } : {}),
+    ceilingTaka: l.ceilingTaka,
+    overCeiling: l.overCeiling,
+  }
+}
+
+export function toBill(api: ApiBill): Bill {
+  const c = api.case
+  const { lawyer, court } = api
+  return {
+    number: api.number,
+    // A status this dashboard does not know is treated as one the court holds, never as a
+    // draft: the lines of a bill the lawyer has already sent must not look changeable.
+    status: known(BILL_STATUSES, api.status) ?? "submitted",
+    case: {
+      ref: c.ref,
+      category: known(CATEGORIES, c.category) ?? "other",
+      outcome: loc(c.outcome),
+      closedAt: c.closedAt,
+      client: { name: loc(c.client.name, c.client.nameBn) },
+    },
+    lawyer: {
+      id: lawyer.id,
+      name: loc(lawyer.name, lawyer.nameBn),
+      enrolment: lawyer.enrolment,
+    },
+    ...(court ? { court: { id: court.id, name: loc(court.name, court.nameBn) } } : {}),
+    lines: api.lines.map(toBillLine),
+    claimedTotal: api.claimedTotal,
+    ...(api.allowedTotal != null ? { allowedTotal: api.allowedTotal } : {}),
+    ...(api.note ? { note: loc(api.note) } : {}),
+    ...(api.submittedAt ? { submittedAt: api.submittedAt } : {}),
+    ...(api.decidedAt ? { decidedAt: api.decidedAt } : {}),
+    ...(api.decisionNote ? { decisionNote: loc(api.decisionNote) } : {}),
+    ...(api.voucherNumber ? { voucherNumber: api.voucherNumber } : {}),
+    ...(api.releasedAt ? { releasedAt: api.releasedAt } : {}),
+    scheduleVersion: api.scheduleVersion,
+  }
+}
+
+export function toBillable(api: ApiBillable): Billable {
+  return {
+    ref: api.ref,
+    category: known(CATEGORIES, api.category) ?? "other",
+    outcome: loc(api.outcome),
+    closedAt: api.closedAt,
+    client: { name: loc(api.client.name, api.client.nameBn) },
+    ...(api.court
+      ? { court: { id: api.court.id, name: loc(api.court.name, api.court.nameBn) } }
+      : {}),
+    hearings: api.hearings,
+  }
+}
+
+export function toBillSchedule(api: ApiBillSchedule): BillSchedule {
+  return {
+    version: api.version,
+    reference: loc(api.reference.en, api.reference.bn),
+    // A head the dashboard does not know is left out: it has no label to show.
+    heads: api.heads.flatMap((h) => {
+      const head = known(BILL_HEADS, h.head)
+      return head
+        ? [
+            {
+              head,
+              label: loc(h.label, h.labelBn),
+              ceilingTaka: h.ceilingTaka,
+              voucherRequired: h.voucherRequired,
+              repeatable: h.repeatable,
+            },
+          ]
+        : []
+    }),
+  }
+}
+
+export function toBills(api: ApiBills): {
+  bills: Bill[]
+  billable: Billable[]
+  totals: BillTotals
+} {
+  return {
+    bills: api.bills.map(toBill),
+    billable: api.billable.map(toBillable),
+    totals: api.totals,
   }
 }
