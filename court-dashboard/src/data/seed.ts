@@ -1,16 +1,24 @@
 import { atDate, atDay, inDays } from "@/data/clock"
-import { findPrison } from "@/data/courts"
+import { findCourt, findPrison } from "@/data/courts"
+import { findPanelLawyer } from "@/data/lawyers"
 import type {
+  Bill,
+  BillHead,
+  BillLine,
+  BillStatus,
+  CaseOutcome,
   CaseStatus,
   CaseType,
   CourtLawyer,
   EkycPerson,
+  LegalAidCategory,
   LegalAidStatus,
   Party,
   PrisonRef,
   PrisonerStatus,
   Proceeding,
 } from "@/data/types"
+import { HEAD_CEILINGS, SCHEDULE_VERSION, isDecided } from "@/lib/bill"
 
 // The district's shared demo records (server/scripts/seed_records.py), which the
 // sample backend serves when there is no server. Past dates are fixed; upcoming
@@ -72,6 +80,8 @@ export interface SampleStore {
   causeLists: StoredCauseList[]
   prisoners: StoredPrisoner[]
   applications: StoredApplication[]
+  /** Panel lawyers' bills, every court's: each court sees only its own. */
+  bills: Bill[]
   checks: StoredCheck[]
   nextId: { case: number; proceeding: number; lawyer: number; application: number }
 }
@@ -129,6 +139,306 @@ function party(
   nid?: string,
 ): StoredCase["parties"][number] {
   return { role, name, nameBn, fatherName, age, ...(nid ? { nid } : {}) }
+}
+
+function billLine(
+  id: number,
+  head: BillHead,
+  description: string,
+  incurredOn: string,
+  claimedTaka: number,
+  extra: { voucherRef?: string; allowedTaka?: number; disallowedReason?: string } = {},
+): BillLine {
+  const ceilingTaka = HEAD_CEILINGS[head]
+  return {
+    id,
+    head,
+    description,
+    incurredOn,
+    claimedTaka,
+    allowedTaka: extra.allowedTaka ?? null,
+    disallowedReason: extra.disallowedReason ?? null,
+    voucherRef: extra.voucherRef ?? null,
+    ceilingTaka,
+    overCeiling: claimedTaka > ceilingTaka,
+  }
+}
+
+function bill(b: {
+  number: string
+  courtId: string
+  status: BillStatus
+  /** A district legal aid panel lawyer's ID. */
+  lawyerId: string
+  caseRef: string
+  category: LegalAidCategory
+  outcome: CaseOutcome
+  closedAt: string
+  client: [string, string]
+  lines: BillLine[]
+  note?: string
+  submittedAt: string | null
+  decidedAt?: string
+  decisionNote?: string
+  voucherNumber?: string
+  releasedAt?: string
+}): Bill {
+  const court = findCourt(b.courtId)!
+  const lawyer = findPanelLawyer(b.lawyerId)!
+  return {
+    number: b.number,
+    status: b.status,
+    case: {
+      ref: b.caseRef,
+      category: b.category,
+      outcome: b.outcome,
+      closedAt: b.closedAt,
+      client: { name: b.client[0], nameBn: b.client[1] },
+    },
+    lawyer: {
+      id: lawyer.id,
+      name: lawyer.name.en,
+      nameBn: lawyer.name.bn,
+      enrolment: lawyer.enrolment,
+    },
+    court: { id: court.id, name: court.name, nameBn: court.nameBn },
+    lines: b.lines,
+    claimedTotal: b.lines.reduce((total, l) => total + l.claimedTaka, 0),
+    allowedTotal: isDecided(b.status)
+      ? b.lines.reduce((total, l) => total + (l.allowedTaka ?? 0), 0)
+      : null,
+    note: b.note ?? null,
+    submittedAt: b.submittedAt,
+    decidedAt: b.decidedAt ?? null,
+    decisionNote: b.decisionNote ?? null,
+    voucherNumber: b.voucherNumber ?? null,
+    releasedAt: b.releasedAt ?? null,
+    scheduleVersion: SCHEDULE_VERSION,
+  }
+}
+
+/** The bills the district's panel lawyers have sent in, one of every status. */
+function sampleBills(): Bill[] {
+  return [
+    bill({
+      number: "BILL-2026-001",
+      courtId: "RNG-CJM",
+      status: "submitted",
+      lawyerId: "LAW-07",
+      caseRef: "DLAS-2026-0181",
+      category: "criminalDefence",
+      outcome: "resolved",
+      closedAt: atDay(-18, 15),
+      client: ["Jalal Uddin", "জালাল উদ্দিন"],
+      lines: [
+        billLine(
+          1,
+          "appearance",
+          "Appeared at the charge hearing and two evidence dates.",
+          inDays(-40),
+          1200,
+        ),
+        billLine(
+          2,
+          "drafting",
+          "Drafted the bail petition and the written objection.",
+          inDays(-38),
+          1500,
+        ),
+        billLine(3, "processFee", "Process fee for summons on two witnesses.", inDays(-35), 400, {
+          voucherRef: "PF-3391",
+        }),
+        billLine(
+          4,
+          "conveyance",
+          "Bus fare to the court on three hearing dates.",
+          inDays(-30),
+          600,
+        ),
+        billLine(
+          5,
+          "certifiedCopy",
+          "Certified copies of the order sheet and the charge.",
+          inDays(-25),
+          600,
+        ),
+      ],
+      note: "Evidence ran over two extra days, so the appearance claim is above the usual head.",
+      submittedAt: atDay(-12, 11, 15),
+    }),
+    bill({
+      number: "BILL-2026-002",
+      courtId: "RNG-CJM",
+      status: "submitted",
+      lawyerId: "LAW-12",
+      caseRef: "DLAS-2026-0203",
+      category: "familyMaintenance",
+      outcome: "settled",
+      closedAt: atDay(-9, 13),
+      client: ["Rahima Begum", "রহিমা বেগম"],
+      lines: [
+        billLine(6, "vakalatnama", "Vakalatnama stamp and filing.", inDays(-28), 300),
+        billLine(7, "affidavit", "Affidavit of the maintenance statement.", inDays(-27), 300, {
+          voucherRef: "AF-8120",
+        }),
+        billLine(8, "clerical", "Typing and four sets of copies.", inDays(-26), 400),
+        billLine(
+          9,
+          "mediation",
+          "Two mediation sittings at the legal aid office.",
+          inDays(-20),
+          800,
+        ),
+      ],
+      submittedAt: atDay(-4, 10, 30),
+    }),
+    bill({
+      number: "BILL-2026-003",
+      courtId: "RNG-CJM",
+      status: "verified",
+      lawyerId: "LAW-21",
+      caseRef: "DLAS-2026-0166",
+      category: "domesticViolence",
+      outcome: "resolved",
+      closedAt: atDay(-22, 12),
+      client: ["Rohima Begum", "রোহিমা বেগম"],
+      lines: [
+        billLine(
+          10,
+          "appearance",
+          "Appeared on five dates before the tribunal.",
+          inDays(-50),
+          1000,
+          { allowedTaka: 1000 },
+        ),
+        billLine(11, "courtFee", "Court fee paid on the petition.", inDays(-48), 2200, {
+          voucherRef: "CF-2261",
+          allowedTaka: 2000,
+          disallowedReason: "Above the gazetted ceiling for court fee; allowed at the ceiling.",
+        }),
+        billLine(12, "clerical", "Typing and four sets of copies.", inDays(-45), 400, {
+          allowedTaka: 300,
+          disallowedReason: "Three sets of copies are on the record, not four.",
+        }),
+      ],
+      submittedAt: atDay(-9, 12),
+      decidedAt: atDay(-2, 15, 20),
+      decisionNote: "Taxed against the 2026.1 schedule. Two heads reduced; the rest is in order.",
+    }),
+    bill({
+      number: "BILL-2026-004",
+      courtId: "RNG-CJM",
+      status: "released",
+      lawyerId: "LAW-24",
+      caseRef: "DLAS-2026-0142",
+      category: "cyberHarassment",
+      outcome: "resolved",
+      closedAt: atDay(-36, 11),
+      client: ["Nusrat Jahan", "নুসরাত জাহান"],
+      lines: [
+        billLine(13, "appearance", "Appeared on four dates.", inDays(-70), 1000, {
+          allowedTaka: 1000,
+        }),
+        billLine(
+          14,
+          "drafting",
+          "Drafted the complaint and the evidence list.",
+          inDays(-68),
+          1500,
+          { allowedTaka: 1500 },
+        ),
+        billLine(
+          15,
+          "affidavit",
+          "Affidavit of the screenshots filed as evidence.",
+          inDays(-66),
+          300,
+          { voucherRef: "AF-7714", allowedTaka: 300 },
+        ),
+      ],
+      submittedAt: atDay(-24, 10),
+      decidedAt: atDay(-18, 11),
+      decisionNote: "Every head is within the schedule.",
+      voucherNumber: "VCH-2026-00187",
+      releasedAt: atDay(-15, 12, 30),
+    }),
+    bill({
+      number: "BILL-2026-005",
+      courtId: "RNG-CJM",
+      status: "returned",
+      lawyerId: "LAW-15",
+      caseRef: "DLAS-2026-0198",
+      category: "labourDispute",
+      outcome: "withdrawn",
+      closedAt: atDay(-14, 16),
+      client: ["Mofiz Uddin", "মফিজ উদ্দিন"],
+      lines: [
+        billLine(16, "appearance", "Appeared on three dates.", inDays(-33), 1000),
+        billLine(17, "conveyance", "Travel to the labour court.", inDays(-31), 900),
+        billLine(18, "other", "Wage statement obtained from the mill office.", inDays(-30), 1000),
+      ],
+      submittedAt: atDay(-6, 9, 45),
+      decidedAt: atDay(-5, 10),
+      decisionNote:
+        "The travel claim has no receipt and its dates are not on the cause list. Attach the receipts and send the bill again.",
+    }),
+    bill({
+      number: "BILL-2026-006",
+      courtId: "RNG-CJM",
+      status: "rejected",
+      lawyerId: "LAW-07",
+      caseRef: "DLAS-2026-0120",
+      category: "landDispute",
+      outcome: "referred",
+      closedAt: atDay(-45, 12),
+      client: ["Abdul Malek", "আব্দুল মালেক"],
+      lines: [
+        billLine(19, "appearance", "Appeared once for the first hearing.", inDays(-90), 1000),
+        billLine(20, "courtFee", "Court fee on the plaint.", inDays(-88), 2000),
+      ],
+      submittedAt: atDay(-30, 9),
+      decidedAt: atDay(-27, 16),
+      decisionNote:
+        "The case was referred to another district before any hearing, so no fee is payable under the scheme.",
+    }),
+    // Still the lawyer's own draft: the court is never shown it.
+    bill({
+      number: "BILL-2026-007",
+      courtId: "RNG-CJM",
+      status: "draft",
+      lawyerId: "LAW-12",
+      caseRef: "DLAS-2026-0211",
+      category: "childCustody",
+      outcome: "settled",
+      closedAt: atDay(-3, 12),
+      client: ["Shirina Akter", "শিরিনা আক্তার"],
+      lines: [billLine(21, "appearance", "Appeared on two dates.", inDays(-12), 1000)],
+      submittedAt: null,
+    }),
+    // The tribunal's own bill: the magistrate court cannot open it.
+    bill({
+      number: "BILL-2026-008",
+      courtId: "RNG-NST",
+      status: "submitted",
+      lawyerId: "LAW-21",
+      caseRef: "DLAS-2026-0205",
+      category: "dowryHarassment",
+      outcome: "resolved",
+      closedAt: atDay(-11, 15),
+      client: ["Rokeya Khatun", "রোকেয়া খাতুন"],
+      lines: [
+        billLine(
+          22,
+          "appearance",
+          "Appeared on four dates before the tribunal.",
+          inDays(-24),
+          1000,
+        ),
+        billLine(23, "mediation", "One mediation sitting.", inDays(-20), 800),
+      ],
+      submittedAt: atDay(-3, 11),
+    }),
+  ]
 }
 
 /** A fresh copy of the demo records, dated from today. */
@@ -369,6 +679,7 @@ export function createSampleStore(): SampleStore {
         },
       },
     ],
+    bills: sampleBills(),
     checks: [],
     nextId: { case: 6, proceeding: 7, lawyer: 3, application: 31 },
   }

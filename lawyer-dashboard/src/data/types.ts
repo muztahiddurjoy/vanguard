@@ -310,3 +310,144 @@ export interface CaseRecords {
   /** The client's other court cases; restricted ones are never included. */
   previousRecords: CourtCase[]
 }
+
+// The bill a panel lawyer claims for a closed case: NLASO's L.A. Form 11 (এল.এ. ফরম-১১).
+// Every amount is a whole number of taka — the fee schedule has no paisa.
+
+/** Where a bill stands between the lawyer, the court and the accounts branch. */
+export type BillStatus = "draft" | "submitted" | "returned" | "verified" | "released" | "rejected"
+
+export const BILL_STATUSES: readonly BillStatus[] = [
+  "draft",
+  "submitted",
+  "returned",
+  "verified",
+  "released",
+  "rejected",
+]
+
+/** A head of the gazetted fee schedule; every line is claimed under one of them. */
+export type BillHead =
+  | "appearance"
+  | "drafting"
+  | "courtFee"
+  | "vakalatnama"
+  | "certifiedCopy"
+  | "processFee"
+  | "affidavit"
+  | "clerical"
+  | "conveyance"
+  | "mediation"
+  | "other"
+
+export const BILL_HEADS: readonly BillHead[] = [
+  "appearance",
+  "drafting",
+  "courtFee",
+  "vakalatnama",
+  "certifiedCopy",
+  "processFee",
+  "affidavit",
+  "clerical",
+  "conveyance",
+  "mediation",
+  "other",
+]
+
+/** One head of the fee schedule, as the gazette sets it. */
+export interface BillScheduleHead {
+  head: BillHead
+  label: Localized
+  /** The most the court may allow on one line under this head, in taka. */
+  ceilingTaka: number
+  /** A bill of costs or receipt must be quoted on the line. */
+  voucherRequired: boolean
+  /** More than one line may be claimed under this head (one appearance per hearing). */
+  repeatable: boolean
+}
+
+/** The fee schedule the court reconciles a bill against. */
+export interface BillSchedule {
+  /** The gazette version the bill was claimed under. */
+  version: string
+  /** The gazette notification, for the lawyer to cite. */
+  reference: Localized
+  heads: BillScheduleHead[]
+}
+
+/** One expense on a bill, and what the court allowed on it. */
+export interface BillLine {
+  id: string
+  head: BillHead
+  description: Localized
+  /** The day the expense was incurred ("yyyy-mm-dd"). */
+  incurredOn: string
+  claimedTaka: number
+  /** Absent until the court has decided the bill. */
+  allowedTaka?: number
+  /** Why the court cut the line, in its own words. */
+  disallowedReason?: Localized
+  /** The receipt or bill of costs quoted for the line. */
+  voucherRef?: string
+  ceilingTaka: number
+  overCeiling: boolean
+}
+
+/** A bill for one closed case, as its panel lawyer sees it. */
+export interface Bill {
+  number: string
+  status: BillStatus
+  case: {
+    ref: string
+    category: CaseCategory
+    outcome: Localized
+    closedAt: string
+    client: { name: Localized }
+  }
+  lawyer: { id: string; name: Localized; enrolment: string }
+  /** Absent while no court has been recorded for the case. */
+  court?: { id: string; name: Localized }
+  lines: BillLine[]
+  claimedTotal: number
+  /** Absent until the court has decided the bill. */
+  allowedTotal?: number
+  note?: Localized
+  submittedAt?: string
+  decidedAt?: string
+  /** What the court wrote when it returned, verified or rejected the bill. */
+  decisionNote?: Localized
+  /** The accounts branch's voucher, once the money is released. */
+  voucherNumber?: string
+  releasedAt?: string
+  scheduleVersion: string
+}
+
+/** A closed case the lawyer may still claim for. */
+export interface Billable {
+  ref: string
+  category: CaseCategory
+  outcome: Localized
+  closedAt: string
+  client: { name: Localized }
+  court?: { id: string; name: Localized }
+  /** Hearings the lawyer attended, so appearance lines can be checked. */
+  hearings: number
+}
+
+/** The reconciliation row at the top of the Bill Gadget, in taka. */
+export interface BillTotals {
+  claimed: number
+  allowed: number
+  released: number
+  awaitingCourt: number
+}
+
+/** What the lawyer sends from the add-a-line form. */
+export interface BillLineDraft {
+  head: BillHead
+  description: string
+  /** yyyy-mm-dd */
+  incurredOn: string
+  claimedTaka: number
+  voucherRef?: string
+}

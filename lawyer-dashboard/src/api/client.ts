@@ -14,17 +14,24 @@ export function apiEnabled(): boolean {
 
 export class ApiError extends Error {
   readonly status: number
+  /** What the server said was wrong, line by line (its 422 answer), in its own words. */
+  readonly issues: string[]
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, issues: string[] = []) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.issues = issues
   }
 }
 
 export async function apiFetch<T>(
   path: string,
-  { lawyerId, method = "GET", body }: { lawyerId: string; method?: "GET" | "POST"; body?: unknown },
+  {
+    lawyerId,
+    method = "GET",
+    body,
+  }: { lawyerId: string; method?: "GET" | "POST" | "PUT"; body?: unknown },
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" }
   // Through a free ngrok tunnel a browser would get ngrok's warning page, not the answer.
@@ -42,13 +49,19 @@ export async function apiFetch<T>(
   })
   if (!res.ok) {
     let detail = res.statusText
+    let issues: string[] = []
     try {
       const data = (await res.json()) as { detail?: unknown }
       if (typeof data.detail === "string") detail = data.detail
+      // A refused bill comes back as {detail: {issues: [...]}}: keep every line.
+      else if (data.detail && typeof data.detail === "object") {
+        const found = (data.detail as { issues?: unknown }).issues
+        if (Array.isArray(found)) issues = found.filter((i): i is string => typeof i === "string")
+      }
     } catch {
       // Not JSON: keep the status text.
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, issues)
   }
   return (await res.json()) as T
 }

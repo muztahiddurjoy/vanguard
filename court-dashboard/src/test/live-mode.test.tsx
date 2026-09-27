@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
+  Bill,
   CauseList,
   CourtCaseDetail,
   CourtRef,
@@ -72,6 +73,61 @@ const JALAL: CourtCaseDetail = {
   legalAid: [],
 }
 
+/** BILL-2026-001 waiting for the court, as server/app/routers/court.py returns it. */
+const BILL: Bill = {
+  number: "BILL-2026-001",
+  status: "submitted",
+  case: {
+    ref: "DLAS-2026-0181",
+    category: "criminalDefence",
+    outcome: "resolved",
+    closedAt: "2026-09-10T09:00:00.000Z",
+    client: { name: "Jalal Uddin", nameBn: "জালাল উদ্দিন" },
+  },
+  lawyer: {
+    id: "LAW-07",
+    name: "Adv. Shahidul Islam",
+    nameBn: "অ্যাড. শহিদুল ইসলাম",
+    enrolment: "BD-BAR-16427",
+  },
+  court: { id: COURT.id, name: COURT.name, nameBn: COURT.nameBn },
+  lines: [
+    {
+      id: 1,
+      head: "appearance",
+      description: "Appeared at the charge hearing and two evidence dates.",
+      incurredOn: "2026-08-20",
+      claimedTaka: 1200,
+      allowedTaka: null,
+      disallowedReason: null,
+      voucherRef: null,
+      ceilingTaka: 1000,
+      overCeiling: true,
+    },
+    {
+      id: 2,
+      head: "drafting",
+      description: "Drafted the bail petition and the written objection.",
+      incurredOn: "2026-08-22",
+      claimedTaka: 1500,
+      allowedTaka: null,
+      disallowedReason: null,
+      voucherRef: "DR-1120",
+      ceilingTaka: 1500,
+      overCeiling: false,
+    },
+  ],
+  claimedTotal: 2700,
+  allowedTotal: null,
+  note: null,
+  submittedAt: "2026-09-16T05:15:00.000Z",
+  decidedAt: null,
+  decisionNote: null,
+  voucherNumber: null,
+  releasedAt: null,
+  scheduleVersion: "2026.1",
+}
+
 const EMPTY_LIST = (date: string): CauseList => ({
   court: COURT,
   date,
@@ -85,6 +141,7 @@ function fakeServer({ registry = "up" }: { registry?: "up" | "down" } = {}) {
   const calls: Call[] = []
   let failNextApplication = false
   const applications: LegalAidStatus[] = []
+  let bill: Bill = { ...BILL, lines: BILL.lines.map((l) => ({ ...l })) }
 
   vi.stubGlobal(
     "fetch",
@@ -219,6 +276,48 @@ function fakeServer({ registry = "up" }: { registry?: "up" | "down" } = {}) {
         }
         applications.push(created)
         return json(created, 201)
+      }
+      if (path === "/court/bills" && method === "GET")
+        return json({
+          bills: [bill],
+          totals: {
+            claimed: bill.claimedTotal,
+            allowed: bill.allowedTotal ?? 0,
+            released: bill.status === "released" ? (bill.allowedTotal ?? 0) : 0,
+            awaitingCourt: bill.status === "submitted" ? bill.claimedTotal : 0,
+          },
+        })
+      if (path === `/court/bills/${BILL.number}` && method === "GET") return json(bill)
+      if (path === `/court/bills/${BILL.number}/verify` && method === "POST") {
+        const b = body as {
+          lines: { id: number; allowed_taka: number; disallowed_reason?: string }[]
+          note?: string
+        }
+        bill = {
+          ...bill,
+          status: "verified",
+          lines: bill.lines.map((l) => {
+            const decided = b.lines.find((d) => d.id === l.id)!
+            return {
+              ...l,
+              allowedTaka: decided.allowed_taka,
+              disallowedReason: decided.disallowed_reason ?? null,
+            }
+          }),
+          allowedTotal: b.lines.reduce((total, l) => total + l.allowed_taka, 0),
+          decidedAt: NOW.toISOString(),
+          decisionNote: b.note ?? null,
+        }
+        return json(bill)
+      }
+      if (path === `/court/bills/${BILL.number}/release` && method === "POST") {
+        bill = {
+          ...bill,
+          status: "released",
+          voucherNumber: (body as { voucher_number: string }).voucher_number,
+          releasedAt: NOW.toISOString(),
+        }
+        return json(bill)
       }
       return json({ detail: "Not found" }, 404)
     }),
@@ -444,6 +543,58 @@ describe("with a backend (VITE_API_URL)", () => {
       in_custody: true,
       signature: { content_type: "image/png", data_b64: btoa("PNGDATA") },
     })
+  })
+
+  it("verifies and releases a bill in the server's field names", async () => {
+    const { calls } = fakeServer()
+    const { user } = renderApp({ path: "/bills" })
+    await user.click(await screen.findByRole("link", { name: "BILL-2026-001" }))
+    await user.click(await screen.findByRole("button", { name: "Check the bill" }))
+    const dialog = await screen.findByRole("dialog", {
+      name: "Check the bill against the fee schedule",
+    })
+    const appearance = within(dialog).getByRole("group", { name: "Line: Appearance" })
+    const allowed = within(appearance).getByLabelText("Allowed (taka)")
+    await user.clear(allowed)
+    await user.type(allowed, "1000")
+    await user.type(
+      within(appearance).getByLabelText("Why less is allowed"),
+      "Above the appearance ceiling of 1,000 taka.",
+    )
+    await user.type(
+      within(dialog).getByLabelText("Note on this decision (optional)"),
+      "Taxed on the 2026.1 schedule.",
+    )
+    await user.click(within(dialog).getByRole("button", { name: "Verify the bill" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: "Release for payment" }))
+    const release = await screen.findByRole("dialog", { name: "Release the bill for payment" })
+    await user.type(within(release).getByLabelText("Voucher number"), "VCH-2026-00219")
+    await user.click(within(release).getByRole("button", { name: "Release for payment" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    expect(screen.getByText("Released")).toBeInTheDocument()
+
+    const bills = calls.filter((c) => c.path.startsWith("/court/bills"))
+    expect(bills.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /court/bills",
+      "GET /court/bills/BILL-2026-001",
+      "POST /court/bills/BILL-2026-001/verify",
+      "POST /court/bills/BILL-2026-001/release",
+    ])
+    expect(bills.every((c) => c.staff === "CS-11" && c.auth === "Bearer s3cret")).toBe(true)
+    expect(bills[2].body).toEqual({
+      lines: [
+        {
+          id: 1,
+          allowed_taka: 1000,
+          disallowed_reason: "Above the appearance ceiling of 1,000 taka.",
+        },
+        { id: 2, allowed_taka: 1500 },
+      ],
+      note: "Taxed on the 2026.1 schedule.",
+    })
+    expect(bills[3].body).toEqual({ voucher_number: "VCH-2026-00219" })
   })
 
   it("lets staff go on without e-KYC when the registry is unavailable", async () => {

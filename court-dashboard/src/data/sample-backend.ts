@@ -9,6 +9,7 @@ import {
   LAWYER_SIDES,
   PARTY_ROLES,
   PROCEEDING_KINDS,
+  type Bill,
   type CauseList,
   type CourtCaseDetail,
   type CourtCaseSummary,
@@ -17,6 +18,15 @@ import {
   type LegalAidStatus,
   type SignatureDraft,
 } from "@/data/types"
+import {
+  MAX_DECISION_NOTE,
+  MAX_DISALLOWED_REASON,
+  MAX_JUSTIFICATION,
+  MAX_VOUCHER_NUMBER,
+  MIN_DISALLOWED_REASON,
+  MIN_JUSTIFICATION,
+  MIN_VOUCHER_NUMBER,
+} from "@/lib/bill"
 import { MAX_ENTRIES, MAX_PURPOSE_LENGTH, MAX_SERIAL } from "@/lib/cause-list"
 import { caseNumberKey, isCaseNumber, tidyCaseNumber } from "@/lib/case-number"
 import { isDay, today } from "@/lib/dates"
@@ -167,6 +177,22 @@ export function createSampleBackend(staff: CourtStaff, store: SampleStore): Cour
     )
     if (!found) throw notFound()
     return found
+  }
+
+  /** A bill sent to this court. A draft, or another court's bill, is not there at all. */
+  const ownBill = (number: string) => {
+    const found = store.bills.find(
+      (b) => b.court.id === courtId && b.number === number && b.status !== "draft",
+    )
+    if (!found) throw notFound()
+    return found
+  }
+
+  /** A bill the court has already decided is not open to a second decision. */
+  const undecided = (b: Bill) => {
+    if (b.status !== "submitted")
+      throw conflict("This bill is no longer waiting for the court's decision")
+    return b
   }
 
   /** A verified check this court made in the last two hours and has not used. */
@@ -499,6 +525,99 @@ export function createSampleBackend(staff: CourtStaff, store: SampleStore): Cour
       checkSignature(s)
       sign(app)
       return copy(app.view) satisfies LegalAidStatus
+    },
+
+    async listBills() {
+      const bills = store.bills
+        .filter((b) => b.court.id === courtId && b.status !== "draft")
+        .sort((a, b) => (a.submittedAt ?? "").localeCompare(b.submittedAt ?? ""))
+      const sum = (taka: (b: Bill) => number) => bills.reduce((total, b) => total + taka(b), 0)
+      return copy({
+        bills,
+        totals: {
+          claimed: sum((b) => b.claimedTotal),
+          allowed: sum((b) => b.allowedTotal ?? 0),
+          released: sum((b) => (b.status === "released" ? (b.allowedTotal ?? 0) : 0)),
+          awaitingCourt: sum((b) => (b.status === "submitted" ? b.claimedTotal : 0)),
+        },
+      })
+    },
+
+    async getBill(number) {
+      return copy(ownBill(number))
+    },
+
+    async verifyBill(number, draft) {
+      const b = undecided(ownBill(number))
+      const everyLineOnce = "Decide every line of the bill exactly once"
+      if (draft.lines.length !== b.lines.length) throw invalid(everyLineOnce)
+      const seen = new Set<number>()
+      // Nothing is written until every line passes: a refused bill is left as it was.
+      const decided = draft.lines.map((d) => {
+        const line = b.lines.find((l) => l.id === d.id)
+        if (!line || seen.has(d.id)) throw invalid(everyLineOnce)
+        seen.add(d.id)
+        if (
+          !Number.isInteger(d.allowedTaka) ||
+          d.allowedTaka < 0 ||
+          d.allowedTaka > line.claimedTaka
+        )
+          throw invalid("An allowed amount is whole taka, from 0 up to the amount claimed")
+        const cut = d.allowedTaka < line.claimedTaka
+        if (cut && !inRange(d.disallowedReason, MIN_DISALLOWED_REASON, MAX_DISALLOWED_REASON))
+          throw invalid(
+            `Every line allowed less than it claimed needs a reason of at least ${MIN_DISALLOWED_REASON} characters`,
+          )
+        return { line, allowedTaka: d.allowedTaka, reason: cut ? d.disallowedReason!.trim() : null }
+      })
+      if ((draft.note ?? "").trim().length > MAX_DECISION_NOTE)
+        throw invalid("The note is too long")
+
+      for (const { line, allowedTaka, reason } of decided) {
+        line.allowedTaka = allowedTaka
+        line.disallowedReason = reason
+      }
+      b.allowedTotal = b.lines.reduce((total, l) => total + (l.allowedTaka ?? 0), 0)
+      b.status = "verified"
+      b.decidedAt = new Date().toISOString()
+      b.decisionNote = draft.note?.trim() || null
+      return copy(b)
+    },
+
+    async returnBill(number, justification) {
+      const b = undecided(ownBill(number))
+      if (!inRange(justification, MIN_JUSTIFICATION, MAX_JUSTIFICATION))
+        throw invalid(
+          `Say what the lawyer should correct, in at least ${MIN_JUSTIFICATION} characters`,
+        )
+      b.status = "returned"
+      b.decidedAt = new Date().toISOString()
+      b.decisionNote = justification.trim()
+      return copy(b)
+    },
+
+    async rejectBill(number, justification) {
+      const b = undecided(ownBill(number))
+      if (!inRange(justification, MIN_JUSTIFICATION, MAX_JUSTIFICATION))
+        throw invalid(
+          `Say why the bill is refused, in at least ${MIN_JUSTIFICATION} characters`,
+        )
+      b.status = "rejected"
+      b.decidedAt = new Date().toISOString()
+      b.decisionNote = justification.trim()
+      return copy(b)
+    },
+
+    async releaseBill(number, voucherNumber) {
+      const b = ownBill(number)
+      if (b.status !== "verified")
+        throw conflict("Verify the bill before releasing it for payment")
+      if (!inRange(voucherNumber, MIN_VOUCHER_NUMBER, MAX_VOUCHER_NUMBER))
+        throw invalid("Enter the voucher number from the fee register")
+      b.status = "released"
+      b.voucherNumber = voucherNumber.trim()
+      b.releasedAt = new Date().toISOString()
+      return copy(b)
     },
   }
 }

@@ -214,3 +214,46 @@
   --font-sans: "Anek Bangla Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --lang-scale: 1.0625;
 }
+
+/*
+ * Printing a bill for the accounts branch (হিসাব শাখা). The bill page marks itself
+ * [data-print="sheet"]; [data-print="hide"] is the furniture that belongs on screen
+ * only (the app's header, the bottom bar, the buttons), and [data-print="only"] the
+ * blocks that exist for paper — the office heading and the signature lines.
+ */
+[data-print="only"] {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  :root {
+    --text-scale: 1;
+    --lang-scale: 1;
+  }
+  body:has([data-print="sheet"]) [data-print="hide"] {
+    display: none !important;
+  }
+  /* Paper needs none of the app's padding or its scroll box. */
+  body:has([data-print="sheet"]) #main {
+    padding: 0 !important;
+  }
+  body:has([data-print="sheet"]) [data-print="only"] {
+    display: flex !important;
+  }
+  /* Black on white, whatever theme the phone was in; the borders stay visible. */
+  [data-print="sheet"],
+  [data-print="sheet"] * {
+    color: #111 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-color: #999 !important;
+  }
+  [data-print="sheet"] li,
+  [data-print="sheet"] dl,
+  [data-print="sheet"] [data-slot="alert"] {
+    break-inside: avoid;
+  }
+}

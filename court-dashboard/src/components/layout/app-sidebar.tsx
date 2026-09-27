@@ -5,6 +5,7 @@ import {
   HandHelping,
   House,
   Landmark,
+  ReceiptText,
   type LucideIcon,
 } from "lucide-react"
 import { NavLink, matchPath, useLocation } from "react-router"
@@ -50,6 +51,7 @@ export function AppSidebar() {
       Icon: HandHelping,
       active: (p) => under(p, "/applications") && p !== "/applications/new",
     },
+    { to: "/bills", label: t.nav.bills, Icon: ReceiptText, active: (p) => under(p, "/bills") },
   ]
   const start: NavItem = {
     to: "/applications/new",

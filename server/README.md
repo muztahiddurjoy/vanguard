@@ -56,18 +56,23 @@ app/
               records.py (court cases, hearings, lawyers, cause lists, prisoners, e-KYC checks,
                           applications from courts and jails, links to legal aid cases)
               mediation.py (attendance, notices, UDC notices)
+              bill.py (a closed case's bill and its lines, the court's decision, the voucher)
   agents/     state.py  llm.py (optional Claude or OpenAI access)  spoken.py (reading callers' answers)
               t5_intake.py  t6_document.py  t7_settlement.py  t8_triage.py
               helpline.py (the AI query helpline)  hotline_menu.py (new case or status?)
   routers/    intake.py  dlao.py  duplicates.py  referrals.py  incidents.py
               mediation.py  sync.py  helpline.py  telephony.py  lawyer.py
               court.py  prison.py  records.py (the DLAO's view of them)  udc.py
+              lawyer_bills.py (claiming what a case cost)  court_bills.py (deciding it)
   services/   safe_contact.py  adnsms.py  crypto.py  elevenlabs.py  stream_manager.py
               speech_to_text.py (gpt-live-transcribe)  audio.py (μ-law, resampling, voice detection)
               nid_registry.py  notices.py (SMS to both parties)  case_status.py
               courts.py  prisons.py  udc.py  panel.py (rosters)
               ekyc.py  records.py (who may see which record)  institution.py (applications
               from courts and jails)  mediation.py (notices, no-shows, UDCs)
+              gazette.py (the fee ceilings a bill is checked against)  bills.py (one bill,
+              as both dashboards read it)
+scripts/      dashboard_fixture.py  simulate_call.py  seed_records.py
 scripts/      dashboard_fixture.py  simulate_call.py  seed_records.py  seed_cases.py
 tests/
 ```
@@ -93,6 +98,7 @@ tests/
 | | Jails: prisoners and the cases they are held on, the production list, and applications | `/prison/*` (prison-dashboard) |
 | | The records linked to a case, for the officer and the case's panel lawyer; search and link | `GET /dlao/cases/{ref}/records`, `/dlao/records/search`, `GET /lawyer/cases/{ref}/records` |
 | | Mediation notices to both parties, attendance, and UDCs asked to reach a party who keeps missing it | `/mediation/*`, `/udc/*` |
+| | Panel lawyers' bills: what a closed case cost, itemised against the committee's fee ceilings, decided by the court and released against a voucher | `/lawyer/bills/*` (lawyer-dashboard), `/court/bills/*` (court-dashboard) |
 
 Dashboard endpoints (`/dlao/...`) return the dashboard's own `LegalCase` shape
 (camelCase, same priority, queue, flag and triage-factor keys), so
@@ -231,6 +237,39 @@ is a 404, so its record IDs are not confirmed.
 with their hearings and cause lists, four prisoners in two jails, and one application from
 Rangpur Central Jail. `../start.sh` runs it.
 
+## Lawyers' bills
+
+A panel lawyer who took a case to court claims what it cost them **once the case is
+closed**. They itemise it, send it to the court that heard it, the court allows or cuts each
+line against the district committee's fee ceilings, and then releases it for payment against
+a voucher number. This is NLASO's এল.এ. ফরম-১১ (বিল ফরম) and
+এল.এ. ফরম-১৮ (আইনজীবীর ফি প্রদান রেজিস্টার). Money is whole taka everywhere: never a float.
+
+- **The ceilings** are in `services/gazette.py`: the committee's configured maximum per head
+  (appearance, drafting, court fee, vakalatnama, certified copy, process fee, affidavit,
+  clerical, conveyance, mediation, other), which heads need a receipt reference, and which
+  may be claimed more than once on one bill. They are this deployment's seeded numbers, not a
+  transcription of gazette text; a new gazette changes the numbers and `SCHEDULE_VERSION`,
+  and a bill already decided keeps the version it was checked against.
+  `GET /lawyer/bills/schedule` returns them in both languages. One bill may claim at most
+  `BILL_TOTAL_CEILING_TAKA` (15,000) for a case.
+- **The lawyer.** `GET /lawyer/bills` lists their bills, the closed cases they can still
+  claim for (`billable`, with the court that heard each) and their totals.
+  `POST /lawyer/cases/{ref}/bill` starts the draft: only for their own case (403 otherwise),
+  only once the case is closed (409), and only once per case (409). The court comes from the
+  court record linked to the case, or `courtId` names one on the roster.
+  `PUT /lawyer/bills/{number}` replaces every line and refuses the save with every problem
+  listed (`{"detail": {"issues": [...]}}`). `POST /lawyer/bills/{number}/submit` sends it.
+- **The court.** `GET /court/bills` lists the bills sent to this court, the ones waiting
+  longest first; a lawyer's draft and another court's bill are a 404, so their numbers are
+  not confirmed. `POST /court/bills/{number}/verify` decides every line at once: each line
+  exactly once, each amount between 0 and what was claimed, and **every line cut below what
+  was claimed carries a reason** of at least 10 characters. `.../return` sends it back with a
+  reason for the lawyer to correct (a returned bill goes back to draft on the next save),
+  `.../reject` refuses it, and `.../release` stamps the voucher number once it is verified.
+- Every step is on the audit ledger (`bill.drafted`, `bill.submitted`, `bill.returned`,
+  `bill.verified`, `bill.rejected`, `bill.released`), with the claimed and allowed totals on
+  the court's decision and the reason on a return or a rejection.
 `python -m scripts.seed_cases` (after it) adds the DLAO dashboard's demo cases: the
 applications in the dashboard's sample data (`src/data/cases.ts` and `closed-cases.ts`),
 made through the API as the office would have made them. That covers:
