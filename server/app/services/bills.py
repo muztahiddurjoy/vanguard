@@ -60,6 +60,17 @@ def lawyer_view(lawyer_id: str) -> dict[str, Any]:
     }
 
 
+def category_of(case: Case) -> str:
+    """The case's category, never empty.
+
+    ``Case.category`` is nullable: a case closed before triage ever named one has
+    none. The court dashboard reads these views without a mapping layer, so an
+    absent category would show as a blank label there; "other" is a category both
+    dashboards already know.
+    """
+    return case.category or "other"
+
+
 def client_view(case: Case) -> dict[str, Any] | None:
     applicant = case.applicant
     return {"name": applicant.name, "nameBn": applicant.name_bn} if applicant else None
@@ -122,7 +133,7 @@ def bill_view(db: Session, bill: Bill) -> dict[str, Any]:
         "status": bill.status,
         "case": {
             "ref": case.display_id,
-            "category": case.category,
+            "category": category_of(case),
             "outcome": case.outcome,
             "closedAt": closed_at(db, case),
             "client": client_view(case),
@@ -173,7 +184,7 @@ def billable_cases(db: Session, lawyer_id: str) -> list[dict[str, Any]]:
     return [
         {
             "ref": case.display_id,
-            "category": case.category,
+            "category": category_of(case),
             "outcome": case.outcome,
             "closedAt": closed.get(case.id),
             "client": client_view(case),

@@ -1,6 +1,9 @@
 """A panel lawyer's bill for a closed case, and the court's decision on it."""
 
+from sqlalchemy import select
+
 from app.database import utcnow
+from app.models import Case
 from tests.records_helpers import CJM, NST, day, register_case
 from tests.test_api_intake_dlao import create_moyuri
 from tests.test_api_lawyer import OFFICER, assign
@@ -521,3 +524,23 @@ def test_every_step_of_a_bill_is_on_the_unbroken_ledger(client, db):
     actions = {a["action"] for a in client.get(f"/dlao/cases/{REF}").json()["activity"]}
     assert not any(a.startswith("bill.") for a in actions)
     assert client.get("/dlao/audit/verify").json() == {"ok": True, "brokenAtSeq": None}
+
+
+def test_a_case_closed_without_a_category_still_reads_as_one(client, db):
+    """``Case.category`` is nullable, and the court dashboard has no mapping layer.
+
+    A case closed before triage ever named a category would otherwise show the
+    court a blank label, so the views fall back to "other" — a category both
+    dashboards already know.
+    """
+    closed_case_with_a_court(client)
+    case = db.scalars(select(Case).where(Case.application_id == REF)).first()
+    assert case is not None
+    case.category = None
+    db.commit()
+
+    billable = client.get("/lawyer/bills", headers=LAWYER).json()["billable"]
+    assert [c["category"] for c in billable] == ["other"]
+
+    bill = start(client).json()
+    assert bill["case"]["category"] == "other"
