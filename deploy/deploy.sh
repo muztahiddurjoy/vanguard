@@ -280,13 +280,35 @@ install_nginx_sites
 
 # --- Certificates ------------------------------------------------------------------
 
+# A nameserver of the zone HOST is in: the first of its parent domains that has any.
+zone_nameserver() {
+	local zone=${1#*.} ns
+	while [[ $zone == *.* ]]; do
+		ns=$(dig +short NS "$zone" | head -n 1)
+		[[ -z $ns ]] || {
+			printf '%s' "$ns"
+			return 0
+		}
+		zone=${zone#*.}
+	done
+	return 1
+}
+
+# HOST's addresses, from its zone's own nameserver when dig is there. Let's Encrypt
+# asks afresh too, while resolvers keep the old answer for a while after a record
+# changes (half an hour for appbaksho.com's wildcard).
+addresses() {
+	local ns
+	if command -v dig >/dev/null && ns=$(zone_nameserver "$1"); then
+		dig +short A "$1" "@$ns" | grep -E '^[0-9.]+$' | sort -u
+	else
+		getent ahostsv4 "$1" | awk '{print $1}' | sort -u
+	fi
+}
+
 # Whether every address HOST's DNS gives is this server's (a host can still point
 # elsewhere, e.g. at the domain's wildcard record).
-points_here() {
-	local addresses
-	addresses=$(getent ahostsv4 "$1" | awk '{print $1}' | sort -u)
-	[[ $addresses == "$PUBLIC_IP" ]]
-}
+points_here() { [[ $(addresses "$1") == "$PUBLIC_IP" ]]; }
 
 # A certificate for each host that has none yet and whose DNS points here. They
 # renew with the server's other certificates, reloading nginx.

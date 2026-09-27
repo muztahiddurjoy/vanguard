@@ -80,6 +80,13 @@ Keep `NID_HASH_KEY`: the National ID numbers already stored are hashed with it.
 The dashboards' builds carry the backend's `API_TOKEN`, so anyone who opens a dashboard can
 read it. If you change the token, rebuild (`deploy/deploy.sh`).
 
+## The mobile app
+
+A release build of `user-mobile-app/` calls `https://dlas-api.appbaksho.com`, set in its
+`.env.production`. It needs the backend's `API_TOKEN`. Build the token in through
+`user-mobile-app/.env.production.local` (git ignores it), or enter it in the app's
+**Settings**.
+
 ## Phone lines
 
 Point the Twilio numbers at the backend:
