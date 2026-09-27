@@ -49,7 +49,7 @@ ssh root@93.127.172.118
 cd /root/vanguard && git pull
 deploy/deploy.sh                # everything
 deploy/deploy.sh --no-build     # services, nginx and certificates only (keeps the builds)
-deploy/deploy.sh --seed-demo    # also add the demo court and jail records
+deploy/deploy.sh --seed-demo    # also add the demo data (court and jail records, DLAO cases)
 ```
 
 Each run does the following:
@@ -61,8 +61,16 @@ Each run does the following:
   `deploy/nginx-sites.sh`) and keeps the old ones if `nginx -t` refuses the new.
 - Gets any certificates that are missing.
 
-The database is kept. The demo records (the court and jail staff demo accounts' cases and
-prisoners) are added only with `--seed-demo`, and never twice.
+The database is kept. The demo data is added only with `--seed-demo`, and never twice. It
+covers:
+
+- The court and jail staff demo accounts' cases and prisoners (`scripts/seed_records.py`).
+- The DLAO dashboard's cases, dated over the past months (`scripts/seed_cases.py`). These
+  include their panel lawyers' reports, the court dates, mediation and closed cases.
+
+The seed prints each case's tracking number, for the helpline's status line and the citizen's
+app. The people's phone numbers come from the NID registry and may belong to real people, so
+keep `SMS_DRY_RUN=true`.
 
 ## Settings
 
@@ -79,6 +87,13 @@ Keep `NID_HASH_KEY`: the National ID numbers already stored are hashed with it.
 
 The dashboards' builds carry the backend's `API_TOKEN`, so anyone who opens a dashboard can
 read it. If you change the token, rebuild (`deploy/deploy.sh`).
+
+## The mobile app
+
+A release build of `user-mobile-app/` calls `https://dlas-api.appbaksho.com`, set in its
+`.env.production`. It needs the backend's `API_TOKEN`. Build the token in through
+`user-mobile-app/.env.production.local` (git ignores it), or enter it in the app's
+**Settings**.
 
 ## Phone lines
 

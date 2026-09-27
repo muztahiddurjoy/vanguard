@@ -51,8 +51,8 @@ from the environment.
 
 Options:
   --no-build     Keep the published web builds (update the services and nginx)
-  --seed-demo    Add the demo court and jail records (idempotent; the dashboards'
-                 demo staff accounts use them)
+  --seed-demo    Add the demo data the dashboards' demo accounts use: the court and
+                 jail records, and the DLAO dashboard's cases (only what is missing)
   -h, --help     Show this help
 EOF
 }
@@ -199,13 +199,17 @@ if ((SEED_DEMO)); then
 		.venv/bin/python -m scripts.seed_records --force)
 fi
 
+# The dashboards' origins, the only ones the backend (and nginx's own errors) answer.
 origins=()
 for app in "${DASHBOARDS[@]}"; do origins+=("https://${HOST[$app]}"); done
+CORS_ORIGINS=$(
+	IFS=,
+	echo "${origins[*]}"
+)
 say "Starting the backend and the NID registry"
 (
-	IFS=,
 	export VANGUARD_API_PORT=$API_PORT VANGUARD_NID_PORT=$NID_PORT VANGUARD_DATA_DIR=$DATA_DIR \
-		VANGUARD_PUBLIC_BASE_URL=https://$API_HOST VANGUARD_CORS_ORIGINS="${origins[*]}"
+		VANGUARD_PUBLIC_BASE_URL=https://$API_HOST VANGUARD_CORS_ORIGINS=$CORS_ORIGINS
 	env -u PYTHONPATH pm2 startOrReload "$DEPLOY/ecosystem.config.cjs" --update-env >/dev/null
 )
 pm2 save >/dev/null
@@ -222,6 +226,15 @@ wait_for() {
 }
 wait_for vanguard-nid "http://127.0.0.1:$NID_PORT/health"
 wait_for vanguard-api "http://127.0.0.1:$API_PORT/health"
+
+if ((SEED_DEMO)); then
+	# After the services: the court's application is checked with the NID registry.
+	# Idempotent; nothing is sent and no model is asked (scripts/seed_cases.py).
+	say "Adding the DLAO dashboard's demo cases"
+	(cd "$ROOT/server" && env -u PYTHONPATH DATABASE_URL="sqlite:///$DATA_DIR/dlas.db" \
+		UPLOAD_DIR="$DATA_DIR/uploads" NID_SERVER_URL="http://127.0.0.1:$NID_PORT" \
+		LOG_LEVEL=WARNING .venv/bin/python -m scripts.seed_cases --force)
+fi
 
 # --- Web apps ----------------------------------------------------------------------
 
@@ -260,7 +273,8 @@ done
 install_nginx_sites() {
 	local sites=() app
 	for app in "${APPS[@]}"; do sites+=("${HOST[$app]}=$WEB_ROOT/$app"); done
-	"$DEPLOY/nginx-sites.sh" "$API_HOST" "$API_PORT" "${sites[@]}" >"$NGINX_SITE.next"
+	CORS_ORIGINS=$CORS_ORIGINS "$DEPLOY/nginx-sites.sh" "$API_HOST" "$API_PORT" "${sites[@]}" \
+		>"$NGINX_SITE.next"
 	[[ ! -f $NGINX_SITE ]] || cp "$NGINX_SITE" "$NGINX_SITE.previous"
 	mv "$NGINX_SITE.next" "$NGINX_SITE"
 	ln -sfn "$NGINX_SITE" /etc/nginx/sites-enabled/vanguard
@@ -280,13 +294,35 @@ install_nginx_sites
 
 # --- Certificates ------------------------------------------------------------------
 
+# A nameserver of the zone HOST is in: the first of its parent domains that has any.
+zone_nameserver() {
+	local zone=${1#*.} ns
+	while [[ $zone == *.* ]]; do
+		ns=$(dig +short NS "$zone" | head -n 1)
+		[[ -z $ns ]] || {
+			printf '%s' "$ns"
+			return 0
+		}
+		zone=${zone#*.}
+	done
+	return 1
+}
+
+# HOST's addresses, from its zone's own nameserver when dig is there. Let's Encrypt
+# asks afresh too, while resolvers keep the old answer for a while after a record
+# changes (half an hour for appbaksho.com's wildcard).
+addresses() {
+	local ns
+	if command -v dig >/dev/null && ns=$(zone_nameserver "$1"); then
+		dig +short A "$1" "@$ns" | grep -E '^[0-9.]+$' | sort -u
+	else
+		getent ahostsv4 "$1" | awk '{print $1}' | sort -u
+	fi
+}
+
 # Whether every address HOST's DNS gives is this server's (a host can still point
 # elsewhere, e.g. at the domain's wildcard record).
-points_here() {
-	local addresses
-	addresses=$(getent ahostsv4 "$1" | awk '{print $1}' | sort -u)
-	[[ $addresses == "$PUBLIC_IP" ]]
-}
+points_here() { [[ $(addresses "$1") == "$PUBLIC_IP" ]]; }
 
 # A certificate for each host that has none yet and whose DNS points here. They
 # renew with the server's other certificates, reloading nginx.
