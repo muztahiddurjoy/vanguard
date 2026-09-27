@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
-import { fetchCase, fetchCases, fetchHearings, openEvidence, saveAction } from "@/api/cases"
-import { apiEnabled } from "@/api/client"
+import {
+  fetchCase,
+  fetchCases,
+  fetchEvidenceFile,
+  fetchHearings,
+  openEvidence,
+  saveAction,
+  uploadEvidence,
+} from "@/api/cases"
+import { ApiError, apiEnabled } from "@/api/client"
 import { useAuth } from "@/auth/use-auth"
 import { CaseDetailDialog, type CaseTab } from "@/components/case-detail/case-detail-dialog"
 import { DuplicateReviewDialog } from "@/components/duplicate/duplicate-review-dialog"
 import { INITIAL_CASES } from "@/data/cases"
 import { HEARINGS } from "@/data/hearings"
-import type { Hearing, LegalCase, NextAction } from "@/data/types"
+import type { CaseDocument, Hearing, LegalCase, NextAction } from "@/data/types"
+import type { EvidenceKind } from "@/lib/evidence"
 import { mediationHearings } from "@/lib/mediation"
 import { useI18n } from "@/i18n/use-i18n"
 import { CasesContext, type CasesSync } from "@/state/cases-context"
@@ -20,6 +29,24 @@ type DialogState = (
   open: boolean
   /** Bumped on every open so the dialog remounts with fresh local state. */
   seq: number
+}
+
+/**
+ * Files uploaded without a backend, so "Open" can still show them. They live as long as
+ * the page does, like the built-in cases they belong to.
+ */
+const sampleFiles = new Map<string, Blob>()
+let nextSampleId = 1
+
+function sampleDocument(file: File): CaseDocument {
+  const id = `local-${nextSampleId++}`
+  sampleFiles.set(id, file)
+  return {
+    id,
+    name: file.name,
+    type: file.type.startsWith("image/") ? "image" : file.type === "text/plain" ? "text" : "pdf",
+    sizeBytes: file.size,
+  }
 }
 
 /**
@@ -133,6 +160,31 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     [live, officerId],
   )
 
+  const addEvidence = useCallback(
+    async (c: LegalCase, file: File, kind: EvidenceKind) => {
+      // With a backend the server stores the file, reads it and names it back; without
+      // one the file stays in the browser, which is enough to show how the screen works.
+      const document = live
+        ? await uploadEvidence(c.id, file, kind, officerId)
+        : sampleDocument(file)
+      apply({ type: "addEvidence", id: c.id, document, at: new Date().toISOString() })
+      return document
+    },
+    [live, officerId],
+  )
+
+  const openDocument = useCallback(
+    async (c: LegalCase, documentId: string) => {
+      if (!live) {
+        const held = sampleFiles.get(documentId)
+        if (!held) throw new ApiError(404, "No such file on this case")
+        return held
+      }
+      return fetchEvidenceFile(c.id, documentId, officerId)
+    },
+    [live, officerId],
+  )
+
   // Keep the id while closing so content doesn't vanish mid-animation.
   const close = () => setDialog((d) => d && { ...d, open: false })
 
@@ -149,6 +201,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
       runAction,
       hearings,
       revealEvidence,
+      addEvidence,
+      openDocument,
       refreshCase: refresh,
       refreshHearings,
     }),
@@ -161,6 +215,8 @@ export function CasesProvider({ children }: { children: ReactNode }) {
       runAction,
       hearings,
       revealEvidence,
+      addEvidence,
+      openDocument,
       refresh,
       refreshHearings,
     ],

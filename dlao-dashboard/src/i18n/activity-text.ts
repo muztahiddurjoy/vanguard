@@ -26,6 +26,7 @@ export const ACTOR: Record<ActivityEvent["type"], Actor> = {
   lawyerReassigned: "officer",
   evidenceViewed: "officer",
   evidenceAcknowledged: "officer",
+  evidenceAdded: "officer",
 }
 
 export function lawyerName(id: string, pick: I18nValue["pick"]): string {
@@ -78,5 +79,7 @@ export function describeEvent(e: ActivityEvent, { t, f, pick }: I18nValue): stri
       return t.activity.evidenceViewed
     case "evidenceAcknowledged":
       return t.activity.evidenceAcknowledged
+    case "evidenceAdded":
+      return e.name ? t.activity.evidenceAddedNamed(e.name) : t.activity.evidenceAdded
   }
 }

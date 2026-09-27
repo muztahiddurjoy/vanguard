@@ -206,3 +206,53 @@ describe("sensitive evidence (A3)", () => {
     expect(panel).not.toHaveTextContent("Access Restricted")
   })
 })
+
+describe("papers handed in at the office", () => {
+  const evidence = (dialog: HTMLElement) =>
+    within(dialog).getByRole("region", { name: "Documents and evidence" })
+
+  const paper = (name = "porcha.pdf", type = "application/pdf", size = 2048) =>
+    new File([new Uint8Array(size)], name, { type })
+
+  it("adds one to the case and records it in the history", async () => {
+    const { user, dialog } = await openCase("DLAS-2026-045", "Abdul Malek")
+    const panel = evidence(dialog)
+    const before = within(panel).getAllByRole("listitem").length
+
+    await user.upload(
+      within(panel).getByLabelText("Add a paper handed in at the office"),
+      paper("mutation-dolil.pdf"),
+    )
+    // Named from the file name, so the officer usually need not think about it.
+    expect(within(panel).getByRole("combobox", { name: "What is it?" })).toHaveTextContent(
+      "Land paper (khatian, porcha, deed)",
+    )
+    await user.click(within(panel).getByRole("button", { name: "Add to the case" }))
+
+    expect(await within(panel).findByText("mutation-dolil.pdf")).toBeInTheDocument()
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(before + 1)
+
+    await user.click(within(dialog).getByRole("tab", { name: "History" }))
+    expect(within(dialog).getByText("mutation-dolil.pdf was added to the case")).toBeInTheDocument()
+  })
+
+  it("offers to add one to a case that has no files at all", async () => {
+    const { dialog } = await openCase("APP-2026-001", "Moyuri Akter")
+    const panel = evidence(dialog)
+    // The panel used to disappear entirely, so there was nowhere to put the first paper.
+    expect(within(panel).getByText("No files on this case yet.")).toBeInTheDocument()
+    expect(within(panel).getByLabelText("Add a paper handed in at the office")).toBeInTheDocument()
+  })
+
+  it("refuses a file the server would not store", async () => {
+    const { user, dialog } = await openCase("DLAS-2026-045", "Abdul Malek")
+    const panel = evidence(dialog)
+
+    await user.upload(
+      within(panel).getByLabelText("Add a paper handed in at the office"),
+      paper("scan.pdf", "application/pdf", 11 * 1024 * 1024),
+    )
+    expect(await within(panel).findByText("The file must be 10 MB or smaller")).toBeInTheDocument()
+    expect(within(panel).queryByRole("button", { name: "Add to the case" })).not.toBeInTheDocument()
+  })
+})

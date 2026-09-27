@@ -2,11 +2,18 @@ import { screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import fixture from "@/api/fixtures/server-cases.json"
-import { openEvidence, saveAction } from "@/api/cases"
+import { fetchEvidenceFile, openEvidence, saveAction, uploadEvidence } from "@/api/cases"
 import { DEMO_OFFICER } from "@/data/officer"
 import { renderApp } from "@/test/render-app"
 
-type Call = { method: string; path: string; body?: unknown; officer?: string }
+type Call = {
+  method: string
+  path: string
+  body?: unknown
+  /** A file upload, whose body is multipart rather than JSON. */
+  form?: { kind: string; filename: string; contentType: string }
+  officer?: string
+}
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } })
@@ -18,12 +25,32 @@ function fakeServer({ failList = 0, failSaves = false } = {}) {
   const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
     const path = String(url).replace("http://api.test", "")
     const headers = (init?.headers ?? {}) as Record<string, string>
+    const isForm = init?.body instanceof FormData
     calls.push({
       method: init?.method ?? "GET",
       path,
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      body: init?.body && !isForm ? JSON.parse(String(init.body)) : undefined,
+      ...(isForm
+        ? {
+            form: {
+              kind: String((init!.body as FormData).get("kind")),
+              filename: ((init!.body as FormData).get("file") as File).name,
+              // A multipart upload must not carry a JSON content type of its own.
+              contentType: headers["Content-Type"] ?? "",
+            },
+          }
+        : {}),
       officer: headers["X-Officer-Id"],
     })
+    if (path.endsWith("/documents") && init?.method === "POST") {
+      return json({ document: { id: 12, kind: "land_record", status: "processed" } }, 201)
+    }
+    if (path.endsWith("/file")) {
+      return new Response("%PDF-1.4", {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      })
+    }
     if (path === "/dlao/cases") {
       if (listFailures-- > 0) return json({ detail: "down" }, 503)
       return json(fixture.list)
@@ -180,6 +207,39 @@ describe("with a backend (VITE_API_URL)", () => {
         post("/evidence/view"),
       ]),
     )
+  })
+
+  it("sends a paper handed in at the office as a multipart upload", async () => {
+    const calls = fakeServer()
+    const document = await uploadEvidence(
+      familyCase,
+      new File([new Uint8Array(2048)], "porcha.pdf", { type: "application/pdf" }),
+      "land_record",
+      DEMO_OFFICER.id,
+    )
+    // The officer just chose the file, so its name and size come from it rather than
+    // from the upload answer, which does not repeat them.
+    expect(document).toEqual({ id: "12", name: "porcha.pdf", type: "pdf", sizeBytes: 2048 })
+
+    const upload = calls.find((c) => c.method === "POST" && c.path.endsWith("/documents"))!
+    expect(upload.path).toBe(`/dlao/cases/${familyCase}/documents`)
+    expect(upload.officer).toBe(DEMO_OFFICER.id)
+    expect(upload.form).toEqual({
+      kind: "land_record",
+      filename: "porcha.pdf",
+      // No JSON content type: the browser sets multipart with its own boundary.
+      contentType: "",
+    })
+  })
+
+  it("fetches a file with the officer's own header rather than linking to it", async () => {
+    const calls = fakeServer()
+    const blob = await fetchEvidenceFile(familyCase, "12", DEMO_OFFICER.id)
+    expect(await blob.text()).toBe("%PDF-1.4")
+
+    const opened = calls.find((c) => c.path.endsWith("/file"))!
+    expect(opened.path).toBe(`/dlao/cases/${familyCase}/documents/12/file`)
+    expect(opened.officer).toBe(DEMO_OFFICER.id)
   })
 
   it("tells the officer when the server refuses a decision, and reloads", async () => {
