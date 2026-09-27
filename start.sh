@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Start DLAS locally: the NID registry, the backend with its database, the DLAO
-# dashboard showing the backend's cases, and the panel lawyers', court and jail
-# dashboards on the same backend, with an ngrok tunnel that puts the backend (so
-# Twilio can reach the phone lines) and every dashboard on one public URL.
-# Ctrl-C stops everything.
+# dashboard showing the backend's cases, and the panel lawyers', court, jail and
+# Union Digital Centre dashboards on the same backend, with an ngrok tunnel that
+# puts the backend (so Twilio can reach the phone lines) and every dashboard on
+# one public URL. Ctrl-C stops everything.
 #
 # Dependencies are installed on the first run (and again when the requirements
 # change). Each service's output is shown here and kept in .logs/.
@@ -19,12 +19,13 @@ DASHBOARD_PORT=5173
 LAWYER_PORT=5174
 COURT_PORT=5175
 PRISON_PORT=5176
+UDC_PORT=5177
 
 # The dashboards' folders. Through the tunnel each is served at /<folder>/ from
 # its public copy (a production build) on the port beside it.
-APPS=(dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard)
+APPS=(dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard udc-dashboard)
 declare -A PUBLIC_PORT=([dlao-dashboard]=4173 [lawyer-dashboard]=4174
-	[court-dashboard]=4175 [prison-dashboard]=4176)
+	[court-dashboard]=4175 [prison-dashboard]=4176 [udc-dashboard]=4177)
 
 INSTALL=0
 NGROK=1
@@ -38,11 +39,12 @@ Usage: ./start.sh [options]
 
 Starts the NID registry (port $NID_PORT), the backend with its SQLite database
 (port $SERVER_PORT), the DLAO dashboard (port $DASHBOARD_PORT), the panel lawyers'
-dashboard (port $LAWYER_PORT), the court dashboard (port $COURT_PORT) and the jail
-dashboard (port $PRISON_PORT), and an ngrok tunnel that makes them reachable from
-anywhere: the backend at the tunnel's URL, and each dashboard at /<its folder>/
-on the same URL (e.g. /dlao-dashboard/), as a production build that calls the
-backend there and is rebuilt whenever its code changes (ports 4173-4176).
+dashboard (port $LAWYER_PORT), the court dashboard (port $COURT_PORT), the jail
+dashboard (port $PRISON_PORT) and the Union Digital Centre dashboard (port
+$UDC_PORT), and an ngrok tunnel that makes them reachable from anywhere: the
+backend at the tunnel's URL, and each dashboard at /<its folder>/ on the same URL
+(e.g. /dlao-dashboard/), as a production build that calls the backend there and is
+rebuilt whenever its code changes (ports 4173-4177).
 The database gets the demo court and jail records (server/scripts/seed_records.py).
 The tunnel uses PUBLIC_BASE_URL in server/.env as its domain when one is set.
 Ctrl-C stops everything. Logs are kept in .logs/.
@@ -81,8 +83,8 @@ else
 	BOLD='' DIM='' RED='' GREEN='' YELLOW='' RESET=''
 fi
 declare -A COLOR=([nid]=$'\e[36m' [ngrok]=$'\e[35m' [server]=$'\e[32m' [dashboard]=$'\e[34m' [lawyer]=$'\e[33m'
-	[court]=$'\e[94m' [prison]=$'\e[91m' [public-dlao]=$'\e[34m' [public-lawyer]=$'\e[33m'
-	[public-court]=$'\e[94m' [public-prison]=$'\e[91m')
+	[court]=$'\e[94m' [prison]=$'\e[91m' [udc]=$'\e[96m' [public-dlao]=$'\e[34m' [public-lawyer]=$'\e[33m'
+	[public-court]=$'\e[94m' [public-prison]=$'\e[91m' [public-udc]=$'\e[96m')
 [[ -t 1 ]] || COLOR=()
 
 say() { printf '%s==>%s %s\n' "$BOLD" "$RESET" "$*"; }
@@ -179,7 +181,7 @@ port_owner() {
 }
 
 ports=("$NID_PORT" "$SERVER_PORT")
-((!DASHBOARD)) || ports+=("$DASHBOARD_PORT" "$LAWYER_PORT" "$COURT_PORT" "$PRISON_PORT")
+((!DASHBOARD)) || ports+=("$DASHBOARD_PORT" "$LAWYER_PORT" "$COURT_PORT" "$PRISON_PORT" "$UDC_PORT")
 ((!DASHBOARD || !NGROK)) || ports+=("${PUBLIC_PORT[@]}")
 for port in "${ports[@]}"; do
 	owner=$(port_owner "$port")
@@ -351,7 +353,7 @@ server_env=(NID_SERVER_URL="http://localhost:$NID_PORT")
 # Every dashboard must reach the backend, whatever CORS_ORIGINS in server/.env says.
 cors=$(server_setting CORS_ORIGINS)
 for origin in "http://localhost:$DASHBOARD_PORT" "http://localhost:$LAWYER_PORT" \
-	"http://localhost:$COURT_PORT" "http://localhost:$PRISON_PORT"; do
+	"http://localhost:$COURT_PORT" "http://localhost:$PRISON_PORT" "http://localhost:$UDC_PORT"; do
 	[[ ,$cors, == *",$origin,"* ]] || cors=${cors:+$cors,}$origin
 done
 server_env+=(CORS_ORIGINS="$cors")
@@ -398,6 +400,9 @@ if ((DASHBOARD)); then
 		npm run dev -- --port "$COURT_PORT" --strictPort
 	start prison "$ROOT/prison-dashboard" env "${dashboard_env[@]}" \
 		npm run dev -- --port "$PRISON_PORT" --strictPort
+	# Union Digital Centres file for neighbours who cannot use the forms themselves.
+	start udc "$ROOT/udc-dashboard" env "${dashboard_env[@]}" \
+		npm run dev -- --port "$UDC_PORT" --strictPort
 	if [[ -n $public_url ]]; then
 		for app in "${APPS[@]}"; do start_public_copy "public-${app%-dashboard}" "$app"; done
 	fi
@@ -405,6 +410,7 @@ if ((DASHBOARD)); then
 	wait_for lawyer "http://localhost:$LAWYER_PORT" 60
 	wait_for court "http://localhost:$COURT_PORT" 60
 	wait_for prison "http://localhost:$PRISON_PORT" 60
+	wait_for udc "http://localhost:$UDC_PORT" 60
 	if [[ -n $public_url ]]; then
 		for app in "${APPS[@]}"; do
 			wait_for "public-${app%-dashboard}" "http://localhost:${PUBLIC_PORT[$app]}/$app/" 60
@@ -445,6 +451,7 @@ if ((DASHBOARD)); then
 	dashboard_row "Lawyers" "$LAWYER_PORT" lawyer-dashboard "panel lawyers' dashboard"
 	dashboard_row "Courts" "$COURT_PORT" court-dashboard "court staff: CS-11, CS-14"
 	dashboard_row "Jails" "$PRISON_PORT" prison-dashboard "jail staff: JS-08, JS-03"
+	dashboard_row "UDCs" "$UDC_PORT" udc-dashboard "centres: UDC-MTP, UDC-PGC"
 fi
 row "Backend API" "http://localhost:$SERVER_PORT/docs"
 row "NID registry" "http://localhost:$NID_PORT/docs"

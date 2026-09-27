@@ -10,6 +10,7 @@ subdomain of `appbaksho.com`:
 | `https://lawyer.appbaksho.com` | Panel lawyers' dashboard | nginx, static build |
 | `https://court.appbaksho.com` | Courts' dashboard | nginx, static build |
 | `https://prison.appbaksho.com` | Jails' dashboard | nginx, static build |
+| `https://udc.appbaksho.com` | Union Digital Centres' dashboard | nginx, static build |
 | `https://legalaid.appbaksho.com` | Legal aid app (`vanguard-digital-leagal-aid/`) | nginx, static build |
 | `https://dlas-api.appbaksho.com` | Backend: the dashboards' API and the phone lines | pm2 `vanguard-api` on `127.0.0.1:3130` |
 | (not public) | NID registry, called only by the backend | pm2 `vanguard-nid` on `127.0.0.1:3131` |
@@ -29,11 +30,12 @@ wildcard record (`*`) sends every other subdomain to Vercel.
 | A | `lawyer` | `93.127.172.118` |
 | A | `court` | `93.127.172.118` |
 | A | `prison` | `93.127.172.118` |
+| A | `udc` | `93.127.172.118` |
 | A | `legalaid` | `93.127.172.118` |
 | A | `dlas-api` | `93.127.172.118` |
 
 ```bash
-for name in dlao lawyer court prison legalaid dlas-api; do
+for name in dlao lawyer court prison udc legalaid dlas-api; do
   vercel dns add appbaksho.com "$name" A 93.127.172.118
 done
 ```
