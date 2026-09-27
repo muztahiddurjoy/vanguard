@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import get_settings
 from app.database import init_db
@@ -28,6 +30,38 @@ from app.routers import (
 from app.services.elevenlabs import ElevenLabsTTS
 
 log = logging.getLogger(__name__)
+
+
+class ServerErrorInsideCors:
+    """Answer an unhandled error with a JSON 500 that the CORS headers are added to.
+
+    Starlette answers such errors in its outermost layer, outside CORSMiddleware, so a
+    dashboard on another origin got a 500 without them: the browser hid it and the
+    dashboard could only say the server was unreachable. The error is raised on after
+    the answer, so it is still logged (and still fails tests).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def tracked(message: Message) -> None:
+            nonlocal started
+            started = started or message["type"] == "http.response.start"
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracked)
+        except Exception:
+            if not started:
+                response = JSONResponse({"detail": "Internal Server Error"}, status_code=500)
+                await response(scope, receive, send)
+            raise
 
 
 async def voice_status() -> str:
@@ -74,6 +108,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    # Added first, so it runs inside CORSMiddleware (the last one added is outermost).
+    app.add_middleware(ServerErrorInsideCors)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
