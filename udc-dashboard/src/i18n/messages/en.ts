@@ -74,6 +74,7 @@ export const en = {
     needsPapers: "No papers yet",
     filedOn: (when: string) => `Filed ${when}`,
     countApplications: (n: string) => `${n} applications`,
+    oneApplication: "1 application",
     countNotices: (n: string) => `${n} to pass on`,
     startTitle: "Someone at the counter?",
     startBody: "File their application now. It takes about five minutes.",

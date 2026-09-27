@@ -184,7 +184,13 @@ export function TodayPage() {
         <Panel
           title={t.today.waitingTitle}
           hint={t.today.waitingHint}
-          count={waiting.length > 0 ? t.today.countApplications(f.num(waiting.length)) : undefined}
+          count={
+            waiting.length === 0
+              ? undefined
+              : waiting.length === 1
+                ? t.today.oneApplication
+                : t.today.countApplications(f.num(waiting.length))
+          }
         >
           {waiting.length === 0 ? (
             <Nothing text={t.today.waitingEmpty} />

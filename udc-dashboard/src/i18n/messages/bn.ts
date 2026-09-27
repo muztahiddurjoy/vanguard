@@ -72,6 +72,7 @@ export const bn: Messages = {
     needsPapers: "কোনো কাগজ নেই",
     filedOn: (when: string) => `${when} জমা হয়েছে`,
     countApplications: (n: string) => `${n}টি আবেদন`,
+    oneApplication: "১টি আবেদন",
     countNotices: (n: string) => `${n}টি জানানো বাকি`,
     startTitle: "কেউ কাউন্টারে এসেছেন?",
     startBody: "এখনই তাঁর আবেদন করে দিন। পাঁচ মিনিটের মতো লাগে।",
