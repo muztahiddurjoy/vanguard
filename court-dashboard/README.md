@@ -71,7 +71,7 @@ cause lists and applications: anything else is "not found".
 | **Register a case** (`/cases/new`)                     | Number, type, title, sections, filing date, the parties (role, name, Bangla name, father, age, optional NID) and **restricted**                                                                                                                                                                                                                                                                                                                                        |
 | **Case** (`/cases/:id`)                                | The parties (each with **Apply for legal aid**), the next date, the proceedings (**Record proceedings**), the lawyers now and before (**Add lawyer**, **End appearance**), upcoming cause-list slots, who is held on the case and in which jail, and its legal aid applications                                                                                                                                                                                        |
 | **Legal aid** (`/applications`)                        | The court's applications: applicant, help needed, when, stage, lawyer, identity verified, signed; filtered by stage                                                                                                                                                                                                                                                                                                                                                    |
-| **Application** (`/applications/:ref`)                 | The tracking number, large, to give the applicant; the stage, lawyer, next hearing and court case; the identity (**Verify now**) and the signature (**Add signature**, once verified)                                                                                                                                                                                                                                                                                  |
+| **Application** (`/applications/:ref`)                 | The tracking number, large, to give the applicant; the stage, lawyer, next hearing and court case; the identity (**Verify now**) and the signature (**Add signature**, once verified); and the **papers** filed with it, with **Add a paper** and **Open**                                                                                                                                                                                                             |
 | **New application** (`/applications/new?case=&party=`) | Four steps: identity (e-KYC), the application, the signature, review and submit. Opened from a party, it starts with their name, the case and custody filled in.                                                                                                                                                                                                                                                                                                       |
 
 ## The rules
@@ -88,6 +88,12 @@ in `src/data/sample-backend.ts`:
   age and address come from the registry, not from what was typed.
 - **One application per wizard.** Each wizard makes one `client_ref`; a double click or a retry
   after a lost answer returns the same application.
+- **Papers are added after the application goes.** A court has the papers on its own file, not
+  in the applicant's hands, so they are attached from the application page rather than during
+  the wizard. A PDF, JPEG, PNG or text file up to 10 MB; the kind is guessed from the file name
+  and T6 corrects it once the server has read the file. Nothing is ever deleted or replaced: a
+  correction is another upload. A file is fetched with the staff ID header rather than linked
+  to, because a plain link could not say who was asking.
 - **Restricted records.** A juvenile's case or a sealed record is marked _restricted_: it is
   never shown as anyone's previous record to the legal aid office or a lawyer.
 - **Cause lists.** Serials are 1–999 and unique on a day; a case number that is not registered

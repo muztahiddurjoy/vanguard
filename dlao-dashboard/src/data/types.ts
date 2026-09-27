@@ -372,6 +372,7 @@ export type ActivityEvent =
   | { type: "lawyerReassigned"; at: string; from: string; to: string; justification?: string }
   | { type: "evidenceViewed"; at: string }
   | { type: "evidenceAcknowledged"; at: string }
+  | { type: "evidenceAdded"; at: string; name?: string }
 
 // --- Court and jail records (the server's records database) -----------------
 

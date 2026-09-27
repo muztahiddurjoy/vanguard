@@ -1,4 +1,4 @@
-import { apiFetch } from "@/api/client"
+import { apiFetch, apiFetchBlob } from "@/api/client"
 import { toCourtDate, toJailStaff, toLegalAidStatus, toPrisoner, toPrisonerDetail } from "@/api/map"
 import type {
   ApiCourtDate,
@@ -12,10 +12,12 @@ import type {
   AdmitDraft,
   ApplicationDraft,
   CaseRef,
+  EvidenceList,
   JailBackend,
   JailStaff,
   SignatureData,
   StatusFilter,
+  UploadResult,
 } from "@/data/types"
 
 /** The member of jail staff with this ID, or an ApiError (401) if they are not on the roster. */
@@ -138,5 +140,19 @@ export function createLiveBackend(staffId: string): JailBackend {
         await send<ApiLegalAidStatus>(`${app(ref)}/signature`, signatureBody(signature)),
       )
     },
+
+    evidence: (ref) => get<EvidenceList>(`${app(ref)}/documents`),
+    addEvidence(ref, draft) {
+      const form = new FormData()
+      form.append("file", draft.file, draft.file.name)
+      form.append("kind", draft.kind)
+      return apiFetch<UploadResult>(`${app(ref)}/documents`, {
+        staffId,
+        method: "POST",
+        body: form,
+      })
+    },
+    openEvidence: (ref, documentId) =>
+      apiFetchBlob(`${app(ref)}/documents/${documentId}/file`, { staffId }),
   }
 }

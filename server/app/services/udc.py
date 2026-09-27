@@ -140,3 +140,19 @@ def udc_for_upazila(upazila: str | None) -> Udc | None:
         return None
     name = upazila.strip()
     return _BY_UPAZILA.get(name.casefold()) or _BY_UPAZILA.get(name)
+
+
+def udc_ref(udc_id: str) -> dict[str, Any]:
+    """The centre, as the dashboards and the officer's case lists name it."""
+    udc = get_udc(udc_id)
+    if udc is None:
+        return {"id": udc_id, "name": udc_id, "nameBn": udc_id}
+    return {"id": udc.id, "name": udc.name, "nameBn": udc.name_bn}
+
+
+def entrepreneur_ref(udc_id: str) -> dict[str, Any]:
+    """Who acted at the centre: its entrepreneur, whom ``X-Udc-Id`` stands for."""
+    udc = get_udc(udc_id)
+    if udc is None:
+        return {"id": udc_id, "name": udc_id, "nameBn": udc_id}
+    return {"id": udc.id, "name": udc.entrepreneur, "nameBn": udc.entrepreneur_bn}

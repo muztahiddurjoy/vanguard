@@ -1,4 +1,8 @@
-"""Legal aid applications a court or a jail submits for someone before them.
+"""Legal aid applications an office submits for someone in front of it.
+
+Three kinds of office file this way: a court and a jail for someone before them
+(court-dashboard, prison-dashboard), and a Union Digital Centre for a neighbour who
+cannot read the forms or use a phone app (udc-dashboard).
 
 Each is an ordinary application: ``routers.intake.create_application`` records it, T8
 triages it, T4 looks for duplicates and the audit trail has it, as for every other
@@ -6,15 +10,19 @@ channel. On top of that:
 
 1. A verified e-KYC check (``services.ekyc``) fills in the applicant from the NID
    registry, and is then used up.
-2. Nobody is sent an SMS: someone in the dock or in jail has no phone to hand, so
-   staff give them the tracking number (``notices.filer`` is ``handedOver``).
-3. Someone in custody is flagged ``inCustody`` and is at least high priority.
+2. A court's or a jail's applicant is sent no SMS: someone in the dock or in jail has
+   no phone to hand, so staff give them the tracking number (``notices.filer`` is
+   ``handedOver``). A centre's applicant is standing at the counter with their own
+   phone, so the usual notices go out when a number is given.
+3. Someone in custody is flagged ``inCustody`` and is at least high priority. Nobody
+   a centre files for is in custody.
 4. The court case, or the prisoner and every registered case they are held on, are
-   linked to the application, so the officer and the panel lawyer see them.
+   linked to the application, so the officer and the panel lawyer see them. A centre
+   has no such record of its own to link.
 5. The applicant's signature, taken only once e-KYC has verified who they are, is kept
    as a document.
 
-A court or a jail sees only the applications it submitted (404 for any other).
+An office sees only the applications it submitted (404 for any other).
 """
 
 import base64
@@ -24,7 +32,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -51,10 +59,13 @@ from app.models.case import PRIORITY_RANK
 from app.routers.dlao import drop_track_for_court_cases, due_at_for, get_case_or_404
 from app.routers.duplicates import cases_of, find_duplicates_for
 from app.routers.intake import Identities, IntakeIn, PartyIn, apply_citizen, create_application
+from app.services.adnsms import normalize_bd_mobile
 from app.services.case_status import stage_of
 from app.services.court_progress import next_hearing
 from app.services.ekyc import fill_prisoner, use_check
+from app.services.evidence import evidence_counts
 from app.services.nid_registry import Citizen
+from app.services.notices import send_intake_notices
 from app.services.records import (
     application_of,
     court_ref,
@@ -71,7 +82,11 @@ from app.services.records import (
 from app.services.uploads import save_upload
 
 CRIMINAL_HELP = (HelpNeeded.DEFENCE, HelpNeeded.BAIL, HelpNeeded.APPEAL)
-PROVENANCE = {"court": Provenance.COURT_REFERRAL, "prison": Provenance.PRISON_REFERRAL}
+PROVENANCE = {
+    "court": Provenance.COURT_REFERRAL,
+    "prison": Provenance.PRISON_REFERRAL,
+    "udc": Provenance.UDC_OPERATOR,
+}
 # A signature is a picture of it on the staff's tablet: PNG or JPEG, and small.
 SIGNATURE_TYPES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff"}
 MAX_SIGNATURE_BYTES = 2 * 1024 * 1024
@@ -80,15 +95,15 @@ SIGN_AFTER_EKYC = "Verify the applicant's identity (e-KYC) before adding their s
 
 @dataclass(frozen=True)
 class Office:
-    """The court or jail a member of staff works for."""
+    """The court, jail or Union Digital Centre filing on someone's behalf."""
 
-    kind: Literal["court", "prison"]
+    kind: Literal["court", "prison", "udc"]
     id: str
     staff_id: str
 
     @property
     def actor(self) -> str:
-        """As ``CourtStaff.actor`` and ``PrisonStaff.actor`` name them in the ledger."""
+        """As ``CourtStaff.actor``, ``PrisonStaff.actor`` and ``Udc.actor`` name them."""
         return f"{self.kind}:{self.staff_id}"
 
 
@@ -102,6 +117,17 @@ class ApplicantIn(BaseModel):
     upazila: str | None = Field(default=None, max_length=120)
     district: str | None = Field(default=None, max_length=120)
     preferred_language: Literal["bn", "en"] = "bn"
+    # A number to reach them on, for an office whose applicant has a phone (a centre).
+    # A court's or a jail's applicant is in the dock or in a cell: leave it unset.
+    phone: str | None = None
+    # Why someone else is filing for them: they cannot read the forms, they share a
+    # phone, they need an interpreter. The officer needs this to make contact at all.
+    accessibility_flags: list[AccessibilityFlag] = []
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, value: str | None) -> str | None:
+        return normalize_bd_mobile(value) if value and value.strip() else None
 
 
 class SignatureIn(BaseModel):
@@ -122,6 +148,7 @@ class ApplicationIn(BaseModel):
     in_custody: bool = False
     # A jail: one of its own prisoners (required); they are in custody.
     prisoner_id: int | None = None
+    # A centre: neither, and nobody it files for is in custody.
     signature: SignatureIn | None = None
 
 
@@ -261,6 +288,18 @@ def _subject(
     db: Session, office: Office, body: ApplicationIn
 ) -> tuple[CourtCase | None, Prisoner | None, bool]:
     """The court case or prisoner the application is about, and whether they are held."""
+    if office.kind == "udc":
+        if body.court_case_id is not None or body.prisoner_id is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "A Union Digital Centre files for a neighbour, not about a court case or a prisoner",
+            )
+        if body.in_custody:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Someone in custody applies through the court or the jail holding them",
+            )
+        return None, None, False
     if office.kind == "court":
         if body.prisoner_id is not None:
             raise HTTPException(
@@ -309,17 +348,26 @@ def submit(db: Session, office: Office, body: ApplicationIn) -> tuple[Case, bool
         signature = decode_signature(body.signature)
 
     a = body.applicant
+    # Someone in the dock or a cell has no phone to hand, whatever the form said.
+    phone = None if in_custody else a.phone
+    # What the office ticked, plus the one thing custody settles on its own. Absent
+    # details are not a claim: a court that did not ask for a number has not learnt
+    # that the applicant has none.
+    flags = list(dict.fromkeys(a.accessibility_flags))
+    if in_custody and AccessibilityFlag.NO_OWN_PHONE not in flags:
+        flags.append(AccessibilityFlag.NO_OWN_PHONE)
     data = IntakeIn(
         applicant=PartyIn(
             name=a.name.strip(),
             name_bn=a.name_bn,
+            phone=phone,
             guardian_name=a.father_name,
             village=a.village,
             upazila=a.upazila,
             district=a.district,
             age=a.age,
             preferred_language=a.preferred_language,
-            accessibility_flags=[AccessibilityFlag.NO_OWN_PHONE] if in_custody else [],
+            accessibility_flags=flags,
         ),
         narrative=body.narrative,
         client_ref=body.client_ref,
@@ -346,10 +394,11 @@ def submit(db: Session, office: Office, body: ApplicationIn) -> tuple[Case, bool
         drop_track_for_court_cases(case)
     if in_custody:
         hold_in_custody(db, case, office.actor)
-    case.notices = {
-        **(case.notices or {}),
-        "filer": {"status": "handedOver", "via": office.kind, "at": utcnow().isoformat()},
-    }
+    if phone is None:
+        case.notices = {
+            **(case.notices or {}),
+            "filer": {"status": "handedOver", "via": office.kind, "at": utcnow().isoformat()},
+        }
     app = InstitutionApplication(
         case_id=case.id,
         office_kind=office.kind,
@@ -373,6 +422,10 @@ def submit(db: Session, office: Office, body: ApplicationIn) -> tuple[Case, bool
                 link_record(db, case, actor=office.actor, court_case=registered[key])
     if signature is not None:
         store_signature(db, case, app, signature, office.actor)
+    if phone is not None:
+        # Last, once the case is fully marked: a notice must never go out ahead of a
+        # do-not-call mark or a priority that would have held it back.
+        send_intake_notices(db, case, office.actor)
     return case, True
 
 
@@ -451,6 +504,7 @@ def status_views(
     court_cases = {c.id: c for c in db.scalars(select(CourtCase).where(CourtCase.id.in_(cc_ids)))}
     prisoners = {p.id: p for p in db.scalars(select(Prisoner).where(Prisoner.id.in_(p_ids)))}
     docs = {d.id: d for d in db.scalars(select(Document).where(Document.id.in_(doc_ids)))}
+    evidence = evidence_counts(db, [c.id for c, _ in pairs])
 
     views = []
     for case, app in pairs:
@@ -478,6 +532,7 @@ def status_views(
         doc = docs.get(app.signature_document_id or 0)
         hearing = next_hearing(case)
         applicant = case.applicant
+        needs = (applicant.accessibility_flags or []) if applicant else []
         views.append(
             {
                 "id": case.display_id,
@@ -488,9 +543,17 @@ def status_views(
                 "applicant": {
                     "name": applicant.name if applicant else None,
                     "nameBn": applicant.name_bn if applicant else None,
+                    # Why the office filed for them: no phone of their own, cannot read
+                    # the forms, needs an interpreter. Never the number itself.
+                    "accessibilityFlags": needs,
+                    "hasPhone": bool(applicant and applicant.phone),
                 },
                 "helpNeeded": app.help_needed,
                 "inCustody": app.in_custody,
+                # Whether the applicant was sent the tracking number or given it by hand.
+                "noticeToApplicant": (case.notices or {}).get("filer"),
+                # How many papers have been attached (a signature is not one of them).
+                "evidence": evidence.get(case.id, 0),
                 "identity": {
                     "verified": check is not None,
                     "method": "ekyc" if check else None,

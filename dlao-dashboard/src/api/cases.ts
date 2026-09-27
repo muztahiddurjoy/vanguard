@@ -1,7 +1,8 @@
-import { apiFetch } from "@/api/client"
+import { apiFetch, apiFetchBlob } from "@/api/client"
 import { toDocument, toHearing, toLegalCase } from "@/api/map-case"
 import type { ApiCase, ApiDocument, ApiHearing } from "@/api/types"
 import type { CaseDocument, Hearing, LegalCase } from "@/data/types"
+import type { EvidenceKind } from "@/lib/evidence"
 import type { CaseAction } from "@/state/cases-reducer"
 
 export async function fetchCases(officerId?: string): Promise<LegalCase[]> {
@@ -28,6 +29,44 @@ export async function openEvidence(id: string, officerId?: string): Promise<Case
     { method: "POST", officerId },
   )
   return documents.filter((d) => d.kind !== "settlement_draft").map(toDocument)
+}
+
+/**
+ * Papers handed in at the office, added to the case. The server reads the file (T6) and
+ * rebuilds what the case still needs, so the answer carries the checklist back.
+ */
+export async function uploadEvidence(
+  id: string,
+  file: File,
+  kind: EvidenceKind,
+  officerId?: string,
+): Promise<CaseDocument> {
+  const form = new FormData()
+  form.append("file", file, file.name)
+  form.append("kind", kind)
+  const result = await apiFetch<{ document: ApiDocument }>(
+    `/dlao/cases/${encodeURIComponent(id)}/documents`,
+    { method: "POST", officerId, body: form },
+  )
+  // The upload answer names the file it stored, but not its size or filename, which the
+  // server knows and the officer just chose.
+  return {
+    ...toDocument(result.document),
+    name: file.name,
+    sizeBytes: file.size,
+  }
+}
+
+/** One of the case's files. Opening it is recorded, as revealing its name is. */
+export function fetchEvidenceFile(
+  id: string,
+  documentId: string,
+  officerId?: string,
+): Promise<Blob> {
+  return apiFetchBlob(
+    `/dlao/cases/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}/file`,
+    { officerId },
+  )
 }
 
 /**

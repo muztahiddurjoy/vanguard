@@ -59,7 +59,15 @@ describe("the sample court records", () => {
       expect.objectContaining({ prisonerNo: "RCJ-2026-0412", status: "undertrial" }),
     ])
     const sohel = await tribunal().getCase(3)
-    expect(sohel.legalAid).toEqual([{ id: "APP-2026-027", stage: "received", lawyer: null }])
+    // The jail's application for the accused, and the tribunal's own for the victim's mother.
+    expect(sohel.legalAid).toEqual([
+      { id: "APP-2026-027", stage: "received", lawyer: null },
+      {
+        id: "DLAS-2026-104",
+        stage: "lawyerAssigned",
+        lawyer: { id: "LAW-21", name: "Adv. Taslima Akter", nameBn: "অ্যাড. তাসলিমা আক্তার" },
+      },
+    ])
     expect(sohel.causeList).toEqual([
       expect.objectContaining({ date: addDays(today(), 1), serial: 2, time: "11:00" }),
     ])
@@ -300,8 +308,10 @@ describe("e-KYC and applications in the sample records", () => {
     ).toBe(409)
     const app = await cjm.createApplication(application())
     expect((await failure(nst.getApplication(app.id))).status).toBe(404)
-    // The jail's application for Sohel Rana is on his case, but it is not the tribunal's own.
-    expect(await nst.listApplications()).toEqual([])
+    // The tribunal sees its own application and nothing the magistrate court sent. The
+    // jail's application is on the tribunal's case, but it is not the tribunal's own either.
+    expect((await nst.listApplications()).map((a) => a.id)).toEqual(["DLAS-2026-104"])
+    expect((await cjm.listApplications()).map((a) => a.id)).toEqual([app.id])
   })
 })
 

@@ -45,8 +45,17 @@ def test_a_court_submits_a_verified_signed_application(client, db, monkeypatch):
     assert len(status["trackingToken"]) == 9 and status["trackingToken"][4] == "-"
     assert status["submittedBy"] == {"id": "CS-11", "name": "Md. Abdul Hakim",
                                      "nameBn": "মো. আব্দুল হাকিম"}  # fmt: skip
-    # Details come from the registry, not the form.
-    assert status["applicant"] == {"name": "Jalal Uddin", "nameBn": "জালাল উদ্দিন"}
+    # Details come from the registry, not the form. Someone in the dock has no phone
+    # to hand, so the court is told to give them the tracking number itself.
+    assert status["applicant"] == {
+        "name": "Jalal Uddin",
+        "nameBn": "জালাল উদ্দিন",
+        "accessibilityFlags": ["no_own_phone"],
+        "hasPhone": False,
+    }
+    assert status["noticeToApplicant"] == {"status": "handedOver", "via": "court",
+                                          "at": status["noticeToApplicant"]["at"]}  # fmt: skip
+    assert status["evidence"] == 0
     assert status["helpNeeded"] == "defence" and status["inCustody"] is True
     assert status["identity"]["verified"] is True and status["identity"]["method"] == "ekyc"
     assert status["identity"]["nidLast4"] == "6397" and status["identity"]["verifiedAt"]

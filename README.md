@@ -5,8 +5,9 @@ decision.
 
 A person calls a hotline and an AI listens, verifies who they are against the National ID
 registry, and files the case. The District Legal Aid Officer (DLAO) confirms the AI's marks,
-both sides hear by SMS, courts and jails can apply on behalf of people before them, a panel
-lawyer takes the case to court and reports back, and every step is audited.
+both sides hear by SMS, courts and jails apply on behalf of people before them and Union
+Digital Centres on behalf of neighbours who cannot use the forms at all, a panel lawyer takes
+the case to court and reports back, and every step is audited.
 
 **Contents**
 
@@ -31,6 +32,7 @@ lawyer takes the case to court and reports back, and every step is audited.
 | [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, updates from court, each case's court record, and the bill for a case that has closed (English and বাংলা) | same as above | 5174 |
 | [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, legal aid applications for people before the court with e-KYC and e-signature, and panel lawyers' bills to check and release (English and বাংলা) | same as above | 5175 |
 | [`prison-dashboard/`](prison-dashboard/README.md) | The jails' dashboard: prisoners and the court cases they are held on, the production list, and legal aid applications for prisoners, with e-KYC and e-signature (English and বাংলা) | same as above | 5176 |
+| [`udc-dashboard/`](udc-dashboard/README.md) | The Union Digital Centres' dashboard: filing an application for a neighbour who cannot use the forms, the papers they brought, and mediation dates to pass on in person (English and বাংলা) | same as above | 5177 |
 | [`portal/`](portal/README.md) | The front page: the hotline number, and a button for each app with the address it opens (English and বাংলা) | one static HTML file | any static server |
 | [`user-mobile-app/`](user-mobile-app/README.md) | The citizen's Android app: SOS (both volume buttons call for help, from any screen), filing a case, their cases and each one's progress, documents, the helpline and mediation notices (English and বাংলা) | Expo SDK 57, React Native 0.86, a Kotlin module for SOS | Metro 8081 |
 
@@ -54,7 +56,7 @@ Who uses which dashboard, and how each one signs in to the backend:
 | Panel lawyer | `lawyer-dashboard` | `/lawyer/*`, `/lawyer/bills/*` | `X-Lawyer-Id` |
 | Court staff (bench assistant, sheristadar) | `court-dashboard` | `/court/*`, `/court/bills/*` | `X-Court-Staff-Id` |
 | Jail staff (legal aid desk, deputy jailer) | `prison-dashboard` | `/prison/*` | `X-Prison-Staff-Id` |
-| Union Digital Centre entrepreneur | none (API only) | `/udc/*` | `X-Udc-Id` |
+| Union Digital Centre entrepreneur | `udc-dashboard` | `/udc/*` | `X-Udc-Id` |
 | Caller | the phone (or `/intake/*` and `/helpline/*` on the web) | `/telephony/*` | none (Twilio signature) |
 | Citizen (or someone applying for them) | `user-mobile-app` (Android) | `/intake/web`, `/intake/cases/{ref}/documents`, `/helpline/*` | none: a case is theirs by its tracking number |
 
@@ -72,10 +74,10 @@ flowchart TB
     LAW["lawyer-dashboard :5174<br/>panel lawyer"]
     COURT["court-dashboard :5175<br/>court staff"]
     PRISON["prison-dashboard :5176<br/>jail staff"]
+    UDC["udc-dashboard :5177<br/>Union Digital Centre"]
   end
 
   Caller(["Caller<br/>hotline or helpline"])
-  UDC(["Union Digital Centre<br/>tablet and SMS"])
 
   subgraph Back["server/ (FastAPI, :8000)"]
     direction TB
@@ -356,19 +358,20 @@ at a UDC) and the call ends; a voice that is definitely broken gets Twilio's own
 
 ```mermaid
 flowchart TB
-  In1["Hotline / UDC / web<br/>T5 intake"] --> New
+  In1["Hotline / web<br/>T5 intake"] --> New
   In2["court-dashboard<br/>POST /court/applications"] --> Inst
   In3["prison-dashboard<br/>POST /prison/applications"] --> Inst
-  In4["UDC tablet<br/>POST /sync/batch"] --> New
+  In4["udc-dashboard<br/>POST /udc/applications"] --> Inst
+  In5["UDC tablet, offline<br/>POST /sync/batch"] --> New
 
   Inst["institution service<br/>verified e-KYC used once,<br/>registry's details win,<br/>client_ref makes a retry safe"] --> New
   New["Create application<br/>APP-year-number + 8-digit tracking number"] --> Dup["T4 duplicate check<br/>(merge blocked if NIDs differ)"]
   Dup --> Tri["T8 triage<br/>priority + advice / mediation / sensitive"]
   Tri --> Link["Link court case or prisoner<br/>by normalised case number"]
   Link --> Q["DLAO queue and alerts"]
-  Tri --> Notice{"Channel"}
-  Notice -->|"hotline, UDC, web"| SMS["SMS notices through safe_contact:<br/>tracking number to the filer,<br/>visit-the-office to the respondent<br/>(held for an officer if risky)"]
-  Notice -->|"court or jail"| Hand["No SMS: staff hand the<br/>tracking number over"]
+  Tri --> Notice{"Can the applicant<br/>be reached?"}
+  Notice -->|"a phone number is known"| SMS["SMS notices through safe_contact:<br/>tracking number to the filer,<br/>visit-the-office to the respondent<br/>(held for an officer if risky)"]
+  Notice -->|"in the dock, in a cell,<br/>or no phone at all"| Hand["No SMS: staff or the centre<br/>hand the tracking number over"]
   Tri --> Aud[("Audit ledger")]
 ```
 
@@ -621,6 +624,34 @@ flowchart TB
   CD -.->|"cause lists saved by the court"| CourtSide["court-dashboard"]
 ```
 
+#### `udc-dashboard/` (port 5177): Union Digital Centre entrepreneurs
+
+The channel that reaches the people the others cannot. A court can only help someone already
+before it, the hotline needs a phone the caller can speak on privately, and the Android app
+needs a smartphone and the confidence to use it. A centre needs none of that: the applicant
+walks into the union's centre, the entrepreneur does the typing and scans the papers they
+brought, and they leave with a tracking number.
+
+A centre sees only its own applications and its own mediation notices. It has no records of
+its own to link, cannot name a court case or a prisoner, and cannot mark anyone as in custody —
+someone in custody applies through the court or jail holding them.
+
+```mermaid
+flowchart TB
+  SI["Sign in<br/>GET /udc/me"] --> Today["Today<br/>dates still to pass on,<br/>applications only the centre can finish"]
+  Today --> File["File an application"]
+  subgraph Wiz["File an application: five steps"]
+    direction LR
+    W1["1. e-KYC<br/>NID and date of birth<br/>from their card"] --> W2["2. The applicant<br/>phone, and why the<br/>centre is filing"] --> W3["3. Papers<br/>NID, kabinnama, porcha,<br/>a GD copy"] --> W4["4. Signature<br/>finger or thumbprint,<br/>only once verified"] --> W5["5. Read it back<br/>and file"]
+  end
+  File --> Wiz
+  W5 --> Done["Tracking number<br/>read out, printed, and by SMS<br/>when a number was given"]
+  Done --> Apps["Applications /applications"]
+  Apps --> App["Application /applications/ref<br/>stage, lawyer, next hearing,<br/>Check identity now, Take their signature,<br/>Add a paper"]
+  Today --> Notices["Mediation dates /notices<br/>who to tell, where they live,<br/>the date and place"]
+  Notices --> Told["I told them<br/>POST /udc/notices/id/informed"]
+```
+
 ### `user-mobile-app/`: the citizen's app
 
 An Android app for the people the office serves, in Bangla or English. It has no account: a
@@ -784,6 +815,10 @@ stateDiagram-v2
   }
 ```
 
+### An application filed on someone's behalf, end to end
+
+The same flow for a court, a jail and a Union Digital Centre: they differ only in what they
+are filing about, and in whether the applicant can be sent an SMS.
 ### A panel lawyer's bill, from a closed case to a voucher
 
 The lawyer itemises, the court taxes it line by line. A bill is not accepted or refused whole:
@@ -820,14 +855,14 @@ against, so an old bill still reads against the ceilings that applied to it.
 ```mermaid
 sequenceDiagram
   autonumber
-  actor Staff as Court or jail staff
-  participant Dash as court- or prison-dashboard
+  actor Staff as Court, jail or centre
+  participant Dash as court-, prison- or udc-dashboard
   participant Srv as Backend
   participant NID as NID registry
   participant DL as DLAO dashboard
   participant Law as Lawyer dashboard
 
-  Staff->>Dash: opens a party (or prisoner) and applies
+  Staff->>Dash: opens a party, prisoner, or the person at the counter
   Dash->>Srv: POST …/ekyc (NID, date of birth, name)
   Srv->>NID: look the NID up
   NID-->>Srv: record
@@ -836,11 +871,13 @@ sequenceDiagram
   Dash->>Srv: POST …/applications (client_ref, e-KYC id, signature)
   Srv->>Srv: triage, duplicate check, audit, in custody = at least high priority
   Srv->>Srv: link the court case, or the prisoner and all their cases
-  Srv-->>Dash: tracking number (no SMS: staff hand it over)
-  Srv-->>DL: appears in the queue, marked with the court or jail
+  Srv-->>Dash: tracking number (by SMS too, if the applicant has a phone)
+  Staff->>Dash: POST …/applications/ref/documents for each paper they brought
+  Srv->>Srv: T6 reads each file and rebuilds what the case still needs
+  Srv-->>DL: appears in the queue, marked with the court, jail or centre
   DL->>Srv: assigns a panel lawyer
   Srv-->>Dash: stage, lawyer and next hearing follow the case
-  Srv-->>Law: case appears with its court record
+  Srv-->>Law: case appears with its court record and its papers
 ```
 
 ### Who sees which record
@@ -958,10 +995,11 @@ public URL:
 | Panel lawyers | `<public URL>/lawyer-dashboard/` | <http://localhost:5174> |
 | Courts | `<public URL>/court-dashboard/` | <http://localhost:5175> |
 | Jails | `<public URL>/prison-dashboard/` | <http://localhost:5176> |
+| Union Digital Centres | `<public URL>/udc-dashboard/` | <http://localhost:5177> |
 
 The public URL (for example `https://reach-parched-pastor.ngrok-free.dev`) is the one
 `start.sh` prints. ngrok sends each dashboard's path to that dashboard and everything else to
-the backend. The dashboards there are production builds (served from ports 4173–4176) that
+the backend. The dashboards there are production builds (served from ports 4173–4177) that
 call the backend at the public URL. They are rebuilt whenever their code changes: reload the
 page to see a change. On this computer the dev servers keep hot reload and call the backend at
 <http://localhost:8000>. A dev server's page is around 185 requests, more than ngrok's free
@@ -999,8 +1037,8 @@ cd ../lawyer-dashboard && npm install
 echo "VITE_API_URL=http://localhost:8000" > .env.local
 npm run dev &
 
-# 5. Courts' and jails' dashboards, on the same backend (ports 5175 and 5176)
-for app in court-dashboard prison-dashboard; do
+# 5. Courts', jails' and centres' dashboards, on the same backend (ports 5175-5177)
+for app in court-dashboard prison-dashboard udc-dashboard; do
   (cd ../$app && npm install && echo "VITE_API_URL=http://localhost:8000" > .env.local && npm run dev &)
 done
 
@@ -1016,6 +1054,14 @@ dashboard's queue at high priority, marked *In custody*; its **Court and jail re
 his charge, the lawyer who withdrew, his next listing and his previous case. Assign it to a
 panel lawyer, and the jail sees the lawyer's name at once. Court staff do the same from the
 court dashboard (`CS-11`), for anyone on their register.
+
+To follow an application from a Union Digital Centre: on the centre's dashboard, sign in as
+Rehana Parvin (`UDC-MTP`) and file an application. Verify the applicant by e-KYC (Rahima Begum,
+NID `6390284417`, born 11 February 1992), give a mobile number, tick that she cannot read, add
+a paper or two, let her sign on screen and file it. She is sent the tracking number by SMS, and
+the DLAO dashboard's queue has the case with the papers on it and *cannot read or write* against
+her name. Leave the number out instead, and the centre is told to write the tracking number down
+because that slip is all she will have.
 
 To follow a case from the officer to the lawyer and back: assign a panel lawyer on the DLAO
 dashboard (for example Adv. Nasrin Jahan, `LAW-12`), sign in as that lawyer on the lawyers'
@@ -1082,7 +1128,7 @@ optional in development. The ones that matter most:
 | `ENVIRONMENT` | `production` turns on Twilio signature checks and refuses unsafe defaults | `development` |
 | `DATABASE_URL` | SQLite in development, Postgres in production | `server/dlas.db` |
 | `API_TOKEN` | Shared bearer token the dashboards send | empty (open) |
-| `CORS_ORIGINS` | Dashboard origins allowed to call the API (ports 5173 to 5176 by default) | localhost |
+| `CORS_ORIGINS` | Dashboard origins allowed to call the API (ports 5173 to 5177 by default) | localhost |
 | `NID_HASH_KEY` | Key for the HMAC of stored NIDs; production refuses the development value | `change-me` |
 | `NID_SERVER_URL`, `NID_SERVER_API_KEY` | Where the registry is, and its key | `http://localhost:8100` |
 | `LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Which optional model the agents consult | `anthropic`, no key |
@@ -1124,6 +1170,7 @@ vanguard/
   lawyer-dashboard/        panel lawyers' dashboard
   court-dashboard/         courts' dashboard
   prison-dashboard/        jails' dashboard
+  udc-dashboard/           Union Digital Centres' dashboard
   portal/                  the front page: hotline number and a link to each app (index.html)
   user-mobile-app/         the citizen's Android app (src/app screens, modules/sos-gesture)
   vanguard-digital-leagal-aid/   a local reference PWA, kept out of git (see .gitignore)

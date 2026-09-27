@@ -265,3 +265,36 @@ describe("the court's applications", () => {
     expect(waiting).toHaveTextContent("Not signed")
   })
 })
+
+describe("the papers on an application", () => {
+  /** The tribunal's own application, for the mother of the victim in its case. */
+  const OWN = "/applications/DLAS-2026-104"
+
+  it("takes a paper from the court file and lists it", async () => {
+    const { user } = renderApp({ path: OWN, staffId: "CS-14" })
+    const panel = await screen.findByRole("region", { name: "Papers" })
+    expect(await within(panel).findByText(/No papers yet/)).toBeInTheDocument()
+
+    await user.upload(
+      within(panel).getByLabelText("Choose a file"),
+      new File([new Uint8Array(4096)], "charge-sheet.pdf", { type: "application/pdf" }),
+    )
+    await user.click(within(panel).getByRole("button", { name: "Add a paper" }))
+
+    expect(await within(panel).findByText("charge-sheet.pdf")).toBeInTheDocument()
+    expect(within(panel).getByText(/Added by Farzana Yeasmin/)).toBeInTheDocument()
+  })
+
+  it("refuses a file the server would not store", async () => {
+    const { user } = renderApp({ path: OWN, staffId: "CS-14" })
+    const panel = await screen.findByRole("region", { name: "Papers" })
+    await within(panel).findByText(/No papers yet/)
+
+    await user.upload(
+      within(panel).getByLabelText("Choose a file"),
+      new File([new Uint8Array(11 * 1024 * 1024)], "scan.pdf", { type: "application/pdf" }),
+    )
+    expect(await within(panel).findByText("The file must be 10 MB or smaller")).toBeInTheDocument()
+    expect(within(panel).queryByRole("button", { name: "Add a paper" })).not.toBeInTheDocument()
+  })
+})

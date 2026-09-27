@@ -24,15 +24,17 @@ PUBLIC_IP=${PUBLIC_IP:-$(hostname -I | awk '{print $1}')}
 
 # The web apps, each on its own host. The legal aid app keeps its own data; the
 # dashboards call the backend.
-APPS=(dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard vanguard-digital-leagal-aid)
+APPS=(dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard udc-dashboard
+	vanguard-digital-leagal-aid)
 declare -A HOST=(
 	[dlao-dashboard]=dlao.$DOMAIN
 	[lawyer-dashboard]=lawyer.$DOMAIN
 	[court-dashboard]=court.$DOMAIN
 	[prison-dashboard]=prison.$DOMAIN
+	[udc-dashboard]=udc.$DOMAIN
 	[vanguard-digital-leagal-aid]=legalaid.$DOMAIN
 )
-DASHBOARDS=(dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard)
+DASHBOARDS=(dlao-dashboard lawyer-dashboard court-dashboard prison-dashboard udc-dashboard)
 
 BUILD=1
 SEED_DEMO=0

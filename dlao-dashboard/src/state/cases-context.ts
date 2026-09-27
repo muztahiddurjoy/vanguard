@@ -2,6 +2,7 @@ import { createContext } from "react"
 
 import type { CaseTab } from "@/components/case-detail/case-detail-dialog"
 import type { CaseDocument, Hearing, LegalCase, NextAction } from "@/data/types"
+import type { EvidenceKind } from "@/lib/evidence"
 import type { CaseAction } from "@/state/cases-reducer"
 
 /** Only with a backend: whether its cases have arrived. */
@@ -21,6 +22,10 @@ export interface CasesValue {
   hearings: Hearing[]
   /** A sensitive case's documents, named; opening them is recorded. */
   revealEvidence: (c: LegalCase) => Promise<CaseDocument[]>
+  /** Papers handed in at the office, added to the case. */
+  addEvidence: (c: LegalCase, file: File, kind: EvidenceKind) => Promise<CaseDocument>
+  /** One of the case's files, for the browser to show. Opening it is recorded. */
+  openDocument: (c: LegalCase, documentId: string) => Promise<Blob>
   /** With a backend: fetch one case again, e.g. after mediation changed its tags. */
   refreshCase: (id: string) => void
   /** With a backend: fetch the hearings again, e.g. after a session was scheduled. */

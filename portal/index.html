@@ -619,6 +619,13 @@
         <path d="M18 18v-7" />
         <path d="M12 2l8 5H4z" />
       </symbol>
+      <!-- The Union Digital Centre dashboard's own mark (udc-dashboard/public/favicon.svg) -->
+      <symbol id="i-store" viewBox="0 0 24 24">
+        <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+        <path d="M2 7h20" />
+        <path d="M4 11v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9" />
+        <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
+      </symbol>
       <symbol id="i-users" viewBox="0 0 24 24">
         <path d="M18 21a8 8 0 0 0-16 0" />
         <circle cx="10" cy="8" r="5" />
@@ -803,6 +810,28 @@
           </li>
           <li class="card">
             <span class="app-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-store" /></svg>
+            </span>
+            <h3 class="card-title" data-i18n="udc.name">Union Digital Centre</h3>
+            <p class="card-desc" data-i18n="udc.desc">
+              For centre entrepreneurs: file a legal aid application for a neighbour who cannot use
+              the forms, add the papers they brought, and pass on mediation dates.
+            </p>
+            <div class="card-action">
+              <a
+                class="btn btn-lg btn-primary"
+                href="https://udc.appbaksho.com/"
+                aria-label="Open the Union Digital Centre dashboard"
+                data-i18n-label="udc.open"
+              >
+                <span data-i18n="open">Open</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              </a>
+              <p class="card-url" translate="no">udc.appbaksho.com</p>
+            </div>
+          </li>
+          <li class="card">
+            <span class="app-icon">
               <svg class="icon" aria-hidden="true"><use href="#i-users" /></svg>
             </span>
             <h3 class="card-title" data-i18n="legalaid.name">Digital Legal Aid</h3>
@@ -896,6 +925,10 @@
           "prison.desc":
             "For jail staff: prisoners and the cases they are held on, the days to produce them in court, and legal aid applications.",
           "prison.open": "Open the jail dashboard",
+          "udc.name": "Union Digital Centre",
+          "udc.desc":
+            "For centre entrepreneurs: file a legal aid application for a neighbour who cannot use the forms, add the papers they brought, and pass on mediation dates.",
+          "udc.open": "Open the Union Digital Centre dashboard",
           "legalaid.name": "Digital Legal Aid",
           "legalaid.desc":
             "For citizens, Union Digital Centres and mediators: apply for legal aid, follow a case, and settle a dispute by mediation. Works offline.",
@@ -938,6 +971,10 @@
           "prison.desc":
             "কারা কর্মকর্তাদের জন্য: বন্দিরা আর যে মামলায় তাঁরা আটক, কবে কাকে আদালতে হাজির করতে হবে, আর আইনি সহায়তার আবেদন।",
           "prison.open": "কারাগারের ড্যাশবোর্ড খুলুন",
+          "udc.name": "ইউনিয়ন ডিজিটাল সেন্টার",
+          "udc.desc":
+            "সেন্টারের উদ্যোক্তাদের জন্য: যিনি নিজে ফরম পূরণ করতে পারেন না তাঁর হয়ে আইনি সহায়তার আবেদন করুন, তাঁর আনা কাগজ যোগ করুন, আর মধ্যস্থতার তারিখ জানিয়ে দিন।",
+          "udc.open": "ইউনিয়ন ডিজিটাল সেন্টার ড্যাশবোর্ড খুলুন",
           "legalaid.name": "ডিজিটাল লিগ্যাল এইড",
           "legalaid.desc":
             "নাগরিক, ইউনিয়ন ডিজিটাল সেন্টার ও মধ্যস্থতাকারীদের জন্য: আইনি সহায়তার আবেদন, মামলার খোঁজ, আর মধ্যস্থতায় বিরোধ মেটানো। ইন্টারনেট ছাড়াও চলে।",

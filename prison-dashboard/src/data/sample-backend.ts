@@ -8,24 +8,27 @@ import {
   type SamplePrisoner,
 } from "@/data/prisoners"
 import { sampleCauseLists, sampleCourtCases } from "@/data/records"
-import type {
-  ApplicationDraft,
-  CaseRef,
-  CourtDate,
-  EkycPerson,
-  EkycQuery,
-  EkycResult,
-  EkycStatus,
-  JailBackend,
-  JailStaff,
-  LegalAidStatus,
-  Prisoner,
-  PrisonerDetail,
-  PrisonCase,
-  SignatureData,
+import {
+  DOCUMENT_KINDS,
+  type ApplicationDraft,
+  type CaseRef,
+  type CourtDate,
+  type EvidenceDocument,
+  type EkycPerson,
+  type EkycQuery,
+  type EkycResult,
+  type EkycStatus,
+  type JailBackend,
+  type JailStaff,
+  type LegalAidStatus,
+  type Prisoner,
+  type PrisonerDetail,
+  type PrisonCase,
+  type SignatureData,
 } from "@/data/types"
 import { caseNumberKey } from "@/lib/case-number"
 import { daysBetween, parseDay, today } from "@/lib/dates"
+import { EVIDENCE_TYPES, MAX_EVIDENCE_BYTES } from "@/lib/evidence"
 import { namesMatch } from "@/lib/names"
 import { lastFour, normalizeNid } from "@/lib/nid"
 import { inStatusFilter } from "@/lib/prisoners"
@@ -38,6 +41,25 @@ export const MAX_COURT_DATE_DAYS = 62
 const notFound = () => new ApiError(404, "Not found")
 const invalid = (detail: string) => new ApiError(422, detail)
 const conflict = (detail: string) => new ApiError(409, detail)
+const refused = (status: number, detail: string) => new ApiError(status, detail)
+
+/** A media type the server would store. */
+function storable(type: string): type is (typeof EVIDENCE_TYPES)[number] {
+  return (EVIDENCE_TYPES as readonly string[]).includes(type)
+}
+
+/** A file kept in memory, so it can be opened again without a server. */
+interface StoredDocument {
+  view: EvidenceDocument
+  blob: Blob
+}
+
+/** Stands in for the SHA-256 the server records of the bytes it stored. */
+function hex(bytes: number): string {
+  const data = new Uint8Array(bytes)
+  crypto.getRandomValues(data)
+  return Array.from(data, (b) => b.toString(16).padStart(2, "0")).join("")
+}
 
 export const EKYC_UNUSABLE = "This e-KYC check has expired or was already used"
 export const VERIFY_BEFORE_SIGNING =
@@ -109,9 +131,12 @@ export function createSampleBackend(staff: JailStaff): JailBackend {
   const courtCases = sampleCourtCases()
   const causeLists = sampleCauseLists()
   const checks = new Map<string, Check>()
+  // The papers on each application, by its reference. They last as long as the page.
+  const documents = new Map<string, StoredDocument[]>()
   let nextPrisonerId = 100
   let nextApplication = 62
   let nextCheck = 1
+  let nextDocument = 1
 
   const ownPrisoner = (id: number) => {
     const found = prisoners.find((p) => p.id === id && p.prisonId === prisonId)
@@ -428,6 +453,53 @@ export function createSampleBackend(staff: JailStaff): JailBackend {
       checkSignature(signature)
       a.signature = { uploadedAt: new Date().toISOString(), by: staff.name.en }
       return status(a)
+    },
+
+    async evidence(ref) {
+      const a = ownApplication(ref)
+      return {
+        documents: (documents.get(a.id) ?? []).map((d) => ({ ...d.view })),
+        limits: { maxBytes: MAX_EVIDENCE_BYTES, contentTypes: [...EVIDENCE_TYPES] },
+      }
+    },
+
+    async addEvidence(ref, draft) {
+      const a = ownApplication(ref)
+      const { file, kind } = draft
+      if (!DOCUMENT_KINDS.includes(kind)) throw invalid("Unknown kind of document")
+      // Standing in for the server, this has the last word on the type, so unlike
+      // fileProblem it refuses a file whose type the browser could not name.
+      if (!storable(file.type)) throw refused(415, "Upload a PDF, JPEG, PNG or text file")
+      if (file.size > MAX_EVIDENCE_BYTES) throw refused(413, "Files must be 10 MB or smaller")
+      if (file.size === 0) throw invalid("The file is empty")
+
+      const view: EvidenceDocument = {
+        id: nextDocument++,
+        kind,
+        status: "uploaded",
+        filename: file.name.slice(0, 255),
+        contentType: file.type,
+        sizeBytes: file.size,
+        // T6 reads the file on the server; there is nothing here to read it with.
+        summary: null,
+        withheld: false,
+        sha256: hex(32),
+        uploadedBy: `prison:${staff.id}`,
+        createdAt: new Date().toISOString(),
+      }
+      documents.set(a.id, [...(documents.get(a.id) ?? []), { view, blob: file }])
+      return {
+        document: { id: view.id, kind, status: view.status, summary: null },
+        checklist: [],
+        missing: [],
+      }
+    },
+
+    async openEvidence(ref, documentId) {
+      const a = ownApplication(ref)
+      const found = (documents.get(a.id) ?? []).find((d) => d.view.id === documentId)
+      if (!found) throw refused(404, "No such file on this case")
+      return found.blob
     },
   }
 }

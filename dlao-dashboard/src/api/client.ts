@@ -25,6 +25,33 @@ export class ApiError extends Error {
   }
 }
 
+function headersFor(officerId: string | undefined, body: unknown): Record<string, string> {
+  const headers: Record<string, string> = { Accept: "application/json" }
+  // Through a free ngrok tunnel a browser would get ngrok's warning page, not the answer.
+  headers["ngrok-skip-browser-warning"] = "1"
+  const token = import.meta.env.VITE_API_TOKEN
+  if (token) headers.Authorization = `Bearer ${token}`
+  // Who is acting, for the server's audit ledger.
+  if (officerId) headers["X-Officer-Id"] = officerId
+  // A file upload sets its own content type, with the multipart boundary in it.
+  if (body !== undefined && !(body instanceof FormData))
+    headers["Content-Type"] = "application/json"
+  return headers
+}
+
+async function failure(res: Response): Promise<ApiError> {
+  let message = res.statusText
+  let detail: unknown
+  try {
+    const data = (await res.json()) as { detail?: unknown }
+    detail = data.detail
+    if (typeof data.detail === "string") message = data.detail
+  } catch {
+    // Not JSON: keep the status text.
+  }
+  return new ApiError(res.status, message, detail)
+}
+
 export async function apiFetch<T>(
   path: string,
   {
@@ -33,31 +60,21 @@ export async function apiFetch<T>(
     body,
   }: { officerId?: string; method?: "GET" | "POST"; body?: unknown } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" }
-  // Through a free ngrok tunnel a browser would get ngrok's warning page, not the answer.
-  headers["ngrok-skip-browser-warning"] = "1"
-  const token = import.meta.env.VITE_API_TOKEN
-  if (token) headers.Authorization = `Bearer ${token}`
-  // Who is acting, for the server's audit ledger.
-  if (officerId) headers["X-Officer-Id"] = officerId
-  if (body !== undefined) headers["Content-Type"] = "application/json"
-
   const res = await fetch(apiUrl() + path, {
     method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: headersFor(officerId, body),
+    body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
   })
-  if (!res.ok) {
-    let message = res.statusText
-    let detail: unknown
-    try {
-      const data = (await res.json()) as { detail?: unknown }
-      detail = data.detail
-      if (typeof data.detail === "string") message = data.detail
-    } catch {
-      // Not JSON: keep the status text.
-    }
-    throw new ApiError(res.status, message, detail)
-  }
+  if (!res.ok) throw await failure(res)
   return (await res.json()) as T
+}
+
+/** A file from the backend, which needs the same headers as any other request. */
+export async function apiFetchBlob(
+  path: string,
+  { officerId }: { officerId?: string } = {},
+): Promise<Blob> {
+  const res = await fetch(apiUrl() + path, { headers: headersFor(officerId, undefined) })
+  if (!res.ok) throw await failure(res)
+  return await res.blob()
 }

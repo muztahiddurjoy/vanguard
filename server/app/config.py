@@ -14,9 +14,10 @@ class Settings(BaseSettings):
     app_name: str = "DLAS Backend"
     environment: str = "development"
     database_url: str = "sqlite:///./dlas.db"
-    # The DLAO, panel lawyers', court and prison dashboards.
+    # The DLAO, panel lawyers', court, prison and Union Digital Centre dashboards.
     cors_origins: str = (
-        "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176"
+        "http://localhost:5173,http://localhost:5174,http://localhost:5175,"
+        "http://localhost:5176,http://localhost:5177"
     )
     # Shared bearer token for the dashboard and UDC clients. Empty disables the check.
     api_token: str = ""

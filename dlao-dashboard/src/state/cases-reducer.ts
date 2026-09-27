@@ -1,6 +1,7 @@
 import type {
   ActivityEvent,
   Attendance,
+  CaseDocument,
   CaseFlag,
   LegalCase,
   NextAction,
@@ -59,6 +60,8 @@ export type CaseAction =
   | { type: "viewEvidence"; id: string; at: string }
   /** The receiving officer confirms the evidence arrived (A3). */
   | { type: "acknowledgeEvidence"; id: string; by: string; at: string }
+  /** A paper handed in at the office, added to the case by the officer. */
+  | { type: "addEvidence"; id: string; document: CaseDocument; at: string }
   /** Built-in cases: a court case or prisoner record found in the records search. */
   | { type: "linkRecord"; id: string; courtCaseId?: number; prisonerId?: number }
   /** Built-in cases: mediation, with the server's rules (lib/mediation). */
@@ -291,6 +294,18 @@ export function casesReducer(cases: LegalCase[], action: CaseAction): LegalCase[
 
     case "viewEvidence":
       return update(cases, action.id, (c) => log(c, { type: "evidenceViewed", at: action.at }))
+
+    case "addEvidence":
+      return update(cases, action.id, (c) =>
+        log(
+          { ...c, documents: [...(c.documents ?? []), action.document] },
+          {
+            type: "evidenceAdded",
+            at: action.at,
+            ...(action.document.name ? { name: action.document.name } : {}),
+          },
+        ),
+      )
 
     case "acknowledgeEvidence":
       return update(cases, action.id, (c) => {

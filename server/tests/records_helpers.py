@@ -87,12 +87,20 @@ def admit(client, headers: dict = RCJ, **fields: Any) -> dict:  # type: ignore[n
     return r.json()
 
 
+def office_base(headers: dict) -> str:
+    """The API prefix these headers sign in to: a court, a jail or a centre."""
+    if "X-Court-Staff-Id" in headers:
+        return "/court"
+    return "/udc" if "X-Udc-Id" in headers else "/prison"
+
+
 def check(
     client, headers: dict, nid: str = JALAL_NID, dob: str = "1990-06-05", **extra: Any
 ) -> dict:  # type: ignore[no-untyped-def]
-    base = "/court" if "X-Court-Staff-Id" in headers else "/prison"
     r = client.post(
-        f"{base}/ekyc", json={"nid": nid, "date_of_birth": dob, **extra}, headers=headers
+        f"{office_base(headers)}/ekyc",
+        json={"nid": nid, "date_of_birth": dob, **extra},
+        headers=headers,
     )
     assert r.status_code == 200, r.text
     return r.json()
