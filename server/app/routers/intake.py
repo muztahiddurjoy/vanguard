@@ -5,7 +5,6 @@ provenance and safety needs, the case gets an APP- reference, T8 triage runs,
 and possible duplicates (T4) are queued for review.
 """
 
-import base64
 import contextlib
 import uuid
 from dataclasses import dataclass
@@ -19,8 +18,6 @@ from sqlalchemy.orm import Session
 
 from app.agents import t5_intake
 from app.agents.spoken import parse_safe_window
-from app.agents.state import DocumentState
-from app.agents.t6_document import run_document_review
 from app.config import get_settings
 from app.database import get_db, utcnow
 from app.models import (
@@ -28,11 +25,7 @@ from app.models import (
     AuditAction,
     Case,
     CaseParty,
-    ChecklistItem,
-    ChecklistStatus,
-    Document,
     DocumentKind,
-    DocumentStatus,
     DoNotCallReason,
     IntakeChannel,
     Party,
@@ -54,9 +47,10 @@ from app.routers.dlao import (
 )
 from app.routers.duplicates import cases_of, find_duplicates_for
 from app.services.adnsms import normalize_bd_mobile
+from app.services.evidence import store_document
 from app.services.nid_registry import Citizen
 from app.services.notices import send_intake_notices
-from app.services.uploads import MAX_UPLOAD_BYTES, save_upload
+from app.services.uploads import MAX_UPLOAD_BYTES
 
 router = APIRouter(prefix="/intake", tags=["intake"], dependencies=[Depends(require_api_token)])
 
@@ -294,93 +288,9 @@ def udc_intake(
 
 # --- documents (T6) ----------------------------------------------------------
 
-
-def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -> DocumentState:
-    """Run T6 on the new document and rebuild the case checklist.
-
-    Documents already read are passed as text, so only the new one is OCR'd.
-    """
-    existing = db.scalars(
-        select(Document).where(Document.case_id == case.id, Document.id != new_doc.id)
-    ).all()
-    # Not intake evidence: drafts are generated here, court orders come from the lawyer,
-    # and a signature is what court or jail staff took from the applicant.
-    not_evidence = (
-        DocumentKind.SETTLEMENT_DRAFT,
-        DocumentKind.COURT_ORDER,
-        DocumentKind.APPLICANT_SIGNATURE,
-    )
-    docs: list[dict[str, Any]] = [
-        {"id": d.id, "kind": d.kind, "content_type": d.content_type, "text": d.extracted_text}
-        for d in existing
-        if d.kind not in not_evidence
-    ]
-    docs.append(
-        {
-            "id": new_doc.id,
-            "kind": None if new_doc.kind == DocumentKind.OTHER else new_doc.kind,
-            "filename": new_doc.filename,
-            "content_type": new_doc.content_type,
-            "data_b64": base64.b64encode(data).decode(),
-        }
-    )
-    out = run_document_review(case.category, docs)
-    result = out["results"][str(new_doc.id)]
-    new_doc.extracted_text = result["text"]
-    new_doc.summary = result["summary"]
-    new_doc.kind = result["kind"]
-    new_doc.status = DocumentStatus(result["status"])
-
-    current = {
-        i.item_key: i
-        for i in db.scalars(select(ChecklistItem).where(ChecklistItem.case_id == case.id))
-    }
-    for item in out["checklist"]:
-        row = current.get(item["key"]) or ChecklistItem(case_id=case.id, item_key=item["key"])
-        if row.status == ChecklistStatus.WAIVED:
-            continue  # an officer's waiver stands
-        row.label, row.label_bn, row.required = item["label"], item["label_bn"], item["required"]
-        row.status = ChecklistStatus(item["status"])
-        row.document_id = item["document_id"]
-        db.add(row)
-    return out
-
-
-def store_document(
-    db: Session,
-    case: Case,
-    *,
-    data: bytes,
-    filename: str | None,
-    content_type: str | None,
-    kind: DocumentKind,
-    actor: str,
-) -> dict[str, Any]:
-    """Validate, store and read one document, and refresh the checklist. Caller commits."""
-    doc = save_upload(
-        db, case, data=data, filename=filename, content_type=content_type, kind=kind, actor=actor
-    )
-    digest = doc.sha256
-    out = refresh_checklist(db, case, doc, data)
-    record_audit(
-        db,
-        actor=actor,
-        action=AuditAction.DOCUMENT_UPLOADED,
-        entity_type="case",
-        entity_id=case.id,
-        details={"documentId": doc.id, "kind": doc.kind, "sha256": digest, "status": doc.status},
-    )
-    return {
-        "document": {
-            "id": doc.id,
-            "kind": doc.kind,
-            "status": doc.status,
-            "summary": doc.summary,
-            "sha256": digest,
-        },
-        "checklist": out["checklist"],
-        "missing": out["missing"],
-    }
+# Storing and reading a document lives in ``services.evidence``, which every channel
+# that can attach one shares (the citizen's app here, the offices on their own
+# applications, the officer on any case).
 
 
 @router.post("/cases/{ref}/documents", status_code=status.HTTP_201_CREATED)
@@ -391,6 +301,7 @@ async def upload_document(
     db: Session = Depends(get_db),
     actor: str = Depends(current_actor),
 ) -> dict[str, Any]:
+    """A document the applicant sends in themselves, from the web form or their app."""
     case = get_case_or_404(db, ref)
     result = store_document(
         db,

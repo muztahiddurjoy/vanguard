@@ -10,7 +10,19 @@ its prisoners needs: each case's number, court, next date and cause list slots.
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +31,7 @@ from app.database import get_db
 from app.models import (
     AuditAction,
     CauseListEntry,
+    DocumentKind,
     Prisoner,
     PrisonerCase,
     PrisonerStatus,
@@ -26,7 +39,7 @@ from app.models import (
 )
 from app.models.party import hash_nid
 from app.routers import require_api_token
-from app.services import ekyc, institution
+from app.services import ekyc, evidence, institution
 from app.services.courts import get_court
 from app.services.prisons import PrisonStaff, get_prison_staff
 from app.services.records import (
@@ -383,3 +396,42 @@ def add_signature(
     case = institution.add_signature(db, office, ref, body)
     db.commit()
     return institution.status_of(db, office, case)
+
+
+# --- the prisoner's papers -------------------------------------------------------------
+
+
+@router.get("/applications/{ref}/documents")
+def list_documents(
+    ref: str, db: Session = Depends(get_db), office: institution.Office = Depends(office_of)
+) -> dict[str, Any]:
+    """What has been attached so far, and what the server will accept."""
+    case = institution.own_application(db, office, ref)
+    return {"documents": evidence.evidence_views(db, case), "limits": evidence.upload_limits()}
+
+
+@router.post("/applications/{ref}/documents", status_code=status.HTTP_201_CREATED)
+async def add_document(
+    ref: str,
+    file: UploadFile = File(...),
+    kind: DocumentKind = Form(DocumentKind.OTHER),
+    db: Session = Depends(get_db),
+    office: institution.Office = Depends(office_of),
+) -> dict[str, Any]:
+    """Attach a paper from the prisoner's file. T6 reads it and the checklist follows."""
+    case = institution.own_application(db, office, ref)
+    result = await evidence.add_upload(db, case, file=file, kind=kind, actor=office.actor)
+    db.commit()
+    return result
+
+
+@router.get("/applications/{ref}/documents/{document_id}/file")
+def open_document(
+    ref: str,
+    document_id: int,
+    db: Session = Depends(get_db),
+    office: institution.Office = Depends(office_of),
+) -> FileResponse:
+    """The file itself, so the legal aid desk can check the scan is readable."""
+    case = institution.own_application(db, office, ref)
+    return evidence.file_response(db, case, document_id)

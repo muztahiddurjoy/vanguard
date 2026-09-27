@@ -7,7 +7,8 @@ the React app can swap its sample data for these endpoints.
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -23,6 +24,7 @@ from app.models import (
     CaseStatus,
     ChecklistItem,
     Document,
+    DocumentKind,
     DoNotCallReason,
     MediationSession,
     MediationStatus,
@@ -40,7 +42,7 @@ from app.models import (
 )
 from app.models.case import PRIORITY_RANK
 from app.routers import current_actor, require_api_token
-from app.services import notices, safe_contact
+from app.services import evidence, notices, safe_contact
 from app.services.court_progress import (
     latest_stage,
     missed_updates,
@@ -526,6 +528,43 @@ def evidence_acknowledged(db: Session, case: Case) -> bool:
         ).first()
         is not None
     )
+
+
+@router.post("/cases/{ref}/documents", status_code=status.HTTP_201_CREATED)
+async def add_document(
+    ref: str,
+    file: UploadFile = File(...),
+    kind: DocumentKind = Form(DocumentKind.OTHER),
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> dict[str, Any]:
+    """Papers handed in at the office, or posted in, added to the case by the officer."""
+    case = get_case_or_404(db, ref)
+    result = await evidence.add_upload(db, case, file=file, kind=kind, actor=actor)
+    db.commit()
+    return result
+
+
+@router.get("/cases/{ref}/documents/{document_id}/file")
+def open_document(
+    ref: str,
+    document_id: int,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_actor),
+) -> FileResponse:
+    """One of the case's files. Opening it is recorded, as revealing its name is."""
+    case = get_case_or_404(db, ref)
+    response = evidence.file_response(db, case, document_id)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.EVIDENCE_VIEWED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documentId": document_id},
+    )
+    db.commit()
+    return response
 
 
 @router.post("/cases/{ref}/evidence/view")

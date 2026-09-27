@@ -61,9 +61,9 @@ from app.routers.duplicates import cases_of, find_duplicates_for
 from app.routers.intake import Identities, IntakeIn, PartyIn, apply_citizen, create_application
 from app.services.adnsms import normalize_bd_mobile
 from app.services.case_status import stage_of
-from app.services.evidence import evidence_counts
 from app.services.court_progress import next_hearing
 from app.services.ekyc import fill_prisoner, use_check
+from app.services.evidence import evidence_counts
 from app.services.nid_registry import Citizen
 from app.services.notices import send_intake_notices
 from app.services.records import (
@@ -532,6 +532,7 @@ def status_views(
         doc = docs.get(app.signature_document_id or 0)
         hearing = next_hearing(case)
         applicant = case.applicant
+        needs = (applicant.accessibility_flags or []) if applicant else []
         views.append(
             {
                 "id": case.display_id,
@@ -544,7 +545,7 @@ def status_views(
                     "nameBn": applicant.name_bn if applicant else None,
                     # Why the office filed for them: no phone of their own, cannot read
                     # the forms, needs an interpreter. Never the number itself.
-                    "accessibilityFlags": (applicant.accessibility_flags or []) if applicant else [],
+                    "accessibilityFlags": needs,
                     "hasPhone": bool(applicant and applicant.phone),
                 },
                 "helpNeeded": app.help_needed,

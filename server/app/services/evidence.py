@@ -1,31 +1,42 @@
-"""The papers attached to a case, and who may add or open one.
+"""The papers attached to a case: storing one, reading the case's list, opening a file.
 
-Every front end that can hold a person's papers can now attach them: a Union Digital
-Centre or a court or a jail on the application it submitted, and the officer on any
-case in their office. Each upload goes through ``routers.intake.store_document``, so
-T6 reads it, the case checklist is rebuilt, and the audit ledger records it — exactly
-as an upload from the citizen's app does.
+Every front end that can hold a person's papers can attach them: the citizen's app on
+their own case, a Union Digital Centre or a court or a jail on the application it
+submitted, and the officer on any case in their office. Every one of them ends in
+``store_document`` here, so whatever the channel, T6 reads the file, the case checklist
+is rebuilt from what has arrived, and the audit ledger records the hash of the bytes.
 
-Evidence is only ever added. Nothing here removes or replaces a file: the ledger
-records a hash of what arrived, and a later correction is another upload, not a
-rewrite of the first.
+Evidence is only ever added. Nothing here removes or replaces a file: a later
+correction is another upload, not a rewrite of the first.
 
-A signature taken after e-KYC (``DocumentKind.APPLICANT_SIGNATURE``) and a generated
-settlement draft live in the same table but are not evidence, so they cannot be
-uploaded here and are listed apart.
+A signature taken after e-KYC (``DocumentKind.APPLICANT_SIGNATURE``), a court order a
+lawyer sent, and a generated settlement draft live in the same table but are not
+evidence someone brought in, so they cannot be uploaded as such and are listed apart.
 """
 
+import base64
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.agents.state import DocumentState
+from app.agents.t6_document import run_document_review
 from app.database import as_utc
-from app.models import Case, Document, DocumentKind
-from app.routers.intake import store_document
-from app.services.uploads import ALLOWED_TYPES, MAX_UPLOAD_BYTES
+from app.models import (
+    AuditAction,
+    Case,
+    ChecklistItem,
+    ChecklistStatus,
+    Document,
+    DocumentKind,
+    DocumentStatus,
+    record_audit,
+)
+from app.services.uploads import ALLOWED_TYPES, MAX_UPLOAD_BYTES, save_upload
 
 # What someone at a counter can attach. The rest of ``DocumentKind`` is produced by the
 # system (a settlement draft), by a lawyer (a court order) or by e-KYC (a signature).
@@ -43,21 +54,21 @@ EVIDENCE_KINDS: tuple[DocumentKind, ...] = (
     DocumentKind.OTHER,
 )
 
-# Not evidence, and not for anyone to upload as evidence.
-NOT_EVIDENCE = (
-    DocumentKind.SETTLEMENT_DRAFT,
-    DocumentKind.COURT_ORDER,
-    DocumentKind.APPLICANT_SIGNATURE,
-)
+# Not evidence someone brings in, and so not for anyone to upload as evidence. Each is
+# named as the refusal should read, since "a applicant signature" is not a sentence.
+NOT_EVIDENCE_REASON = {
+    DocumentKind.SETTLEMENT_DRAFT: "A settlement draft is written by the office, not brought in",
+    DocumentKind.COURT_ORDER: "A court order reaches the case from the panel lawyer",
+    DocumentKind.APPLICANT_SIGNATURE: "The applicant's signature is taken after e-KYC",
+}
+NOT_EVIDENCE = tuple(NOT_EVIDENCE_REASON)
 
 
 def check_kind(kind: DocumentKind) -> DocumentKind:
     """``kind`` if a person may attach it, else 422 naming why they may not."""
-    if kind in NOT_EVIDENCE:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"A {kind.replace('_', ' ')} is not evidence someone can attach",
-        )
+    reason = NOT_EVIDENCE_REASON.get(kind)
+    if reason is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, reason)
     return kind
 
 
@@ -110,6 +121,87 @@ def evidence_counts(db: Session, case_ids: list[int]) -> dict[int, int]:
     return {case_id: count for case_id, count in rows}
 
 
+def refresh_checklist(db: Session, case: Case, new_doc: Document, data: bytes) -> DocumentState:
+    """Run T6 on the new document and rebuild the case checklist.
+
+    Documents already read are passed as text, so only the new one is OCR'd.
+    """
+    existing = db.scalars(
+        select(Document).where(Document.case_id == case.id, Document.id != new_doc.id)
+    ).all()
+    docs: list[dict[str, Any]] = [
+        {"id": d.id, "kind": d.kind, "content_type": d.content_type, "text": d.extracted_text}
+        for d in existing
+        if d.kind not in NOT_EVIDENCE
+    ]
+    docs.append(
+        {
+            "id": new_doc.id,
+            "kind": None if new_doc.kind == DocumentKind.OTHER else new_doc.kind,
+            "filename": new_doc.filename,
+            "content_type": new_doc.content_type,
+            "data_b64": base64.b64encode(data).decode(),
+        }
+    )
+    out = run_document_review(case.category, docs)
+    result = out["results"][str(new_doc.id)]
+    new_doc.extracted_text = result["text"]
+    new_doc.summary = result["summary"]
+    new_doc.kind = result["kind"]
+    new_doc.status = DocumentStatus(result["status"])
+
+    current = {
+        i.item_key: i
+        for i in db.scalars(select(ChecklistItem).where(ChecklistItem.case_id == case.id))
+    }
+    for item in out["checklist"]:
+        row = current.get(item["key"]) or ChecklistItem(case_id=case.id, item_key=item["key"])
+        if row.status == ChecklistStatus.WAIVED:
+            continue  # an officer's waiver stands
+        row.label, row.label_bn, row.required = item["label"], item["label_bn"], item["required"]
+        row.status = ChecklistStatus(item["status"])
+        row.document_id = item["document_id"]
+        db.add(row)
+    return out
+
+
+def store_document(
+    db: Session,
+    case: Case,
+    *,
+    data: bytes,
+    filename: str | None,
+    content_type: str | None,
+    kind: DocumentKind,
+    actor: str,
+) -> dict[str, Any]:
+    """Validate, store and read one document, and refresh the checklist. Caller commits."""
+    doc = save_upload(
+        db, case, data=data, filename=filename, content_type=content_type, kind=kind, actor=actor
+    )
+    digest = doc.sha256
+    out = refresh_checklist(db, case, doc, data)
+    record_audit(
+        db,
+        actor=actor,
+        action=AuditAction.DOCUMENT_UPLOADED,
+        entity_type="case",
+        entity_id=case.id,
+        details={"documentId": doc.id, "kind": doc.kind, "sha256": digest, "status": doc.status},
+    )
+    return {
+        "document": {
+            "id": doc.id,
+            "kind": doc.kind,
+            "status": doc.status,
+            "summary": doc.summary,
+            "sha256": digest,
+        },
+        "checklist": out["checklist"],
+        "missing": out["missing"],
+    }
+
+
 async def add_upload(
     db: Session, case: Case, *, file: UploadFile, kind: DocumentKind, actor: str
 ) -> dict[str, Any]:
@@ -152,6 +244,22 @@ def stored_file(db: Session, case: Case, document_id: int) -> tuple[Document, Pa
     if not path.is_file():
         raise HTTPException(status.HTTP_410_GONE, "This file is no longer stored on the server")
     return doc, path
+
+
+def file_response(db: Session, case: Case, document_id: int) -> FileResponse:
+    """One of the case's files, shown in the browser rather than downloaded blindly.
+
+    The name is the one the person uploading gave, which the browser uses if they do
+    save it. Nothing is guessed about the bytes: an unknown type is sent as binary so
+    no browser renders it as a page.
+    """
+    doc, path = stored_file(db, case, document_id)
+    return FileResponse(
+        path,
+        media_type=doc.content_type or "application/octet-stream",
+        filename=doc.filename or f"document-{doc.id}",
+        content_disposition_type="inline",
+    )
 
 
 def upload_limits() -> dict[str, Any]:
