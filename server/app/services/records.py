@@ -44,6 +44,7 @@ from app.services.case_status import stage_of
 from app.services.courts import COURTS_BY_ID, get_court_staff
 from app.services.panel import get_lawyer
 from app.services.prisons import PRISONS_BY_ID, get_prison_staff
+from app.services.udc import entrepreneur_ref, udc_ref
 
 # Held now: the jail must produce them in court on each date.
 IN_CUSTODY = (PrisonerStatus.UNDERTRIAL, PrisonerStatus.CONVICTED)
@@ -92,10 +93,15 @@ def prison_ref(prison_id: str) -> dict[str, Any]:
 
 
 def office_ref(kind: str, office_id: str) -> dict[str, Any]:
-    return court_ref(office_id) if kind == "court" else prison_ref(office_id)
+    if kind == "court":
+        return court_ref(office_id)
+    return udc_ref(office_id) if kind == "udc" else prison_ref(office_id)
 
 
 def staff_ref(kind: str, staff_id: str) -> dict[str, Any]:
+    """Who acted for an office. A Union Digital Centre acts as its entrepreneur."""
+    if kind == "udc":
+        return entrepreneur_ref(staff_id)
     staff = get_court_staff(staff_id) if kind == "court" else get_prison_staff(staff_id)
     if staff is None:
         return {"id": staff_id, "name": staff_id, "nameBn": staff_id}
@@ -108,7 +114,7 @@ def lawyer_ref(lawyer_id: str | None) -> dict[str, Any] | None:
 
 
 def submitted_by_summary(case: Case) -> dict[str, Any] | None:
-    """For the DLAO's case lists: the court or jail that submitted it, from intake data."""
+    """For the DLAO's case lists: the court, jail or centre that submitted it, from intake data."""
     info = (case.intake_data or {}).get("submittedBy")
     if not info:
         return None
