@@ -242,6 +242,77 @@ export interface LegalAidStatus {
   prisoner: { id: number; prisonerNo: string; prison: PrisonRef } | null
 }
 
+// --- the applicant's papers ----------------------------------------------------------
+
+/**
+ * What staff may attach to an application. The server's other document kinds are produced
+ * by the system (a settlement draft), by a panel lawyer (a court order) or by e-KYC (the
+ * applicant's signature), so none of those is on this list.
+ */
+export const DOCUMENT_KINDS = [
+  "nid_copy",
+  "birth_certificate",
+  "marriage_certificate",
+  "land_record",
+  "medical_certificate",
+  "gd_fir_copy",
+  "employment_proof",
+  "income_proof",
+  "photo_evidence",
+  "screenshot",
+  "other",
+] as const
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
+
+export interface EvidenceDocument {
+  id: number
+  kind: DocumentKind
+  status: string
+  filename: string | null
+  contentType: string | null
+  sizeBytes: number | null
+  /** T6's plain-language summary of what the file shows, when it could read it. */
+  summary: string | null
+  withheld: boolean
+  sha256: string | null
+  uploadedBy: string | null
+  createdAt: string
+}
+
+/** What the server will accept, so the dashboard can refuse a file before sending it. */
+export interface UploadLimits {
+  maxBytes: number
+  contentTypes: string[]
+}
+
+export interface EvidenceList {
+  documents: EvidenceDocument[]
+  limits: UploadLimits
+}
+
+/** A document the case still needs, as T6 works it out from what has arrived. */
+export interface ChecklistItem {
+  key: string
+  label: string
+  labelBn: string | null
+  required: boolean
+  status: "missing" | "provided" | "waived"
+  documentId: number | null
+}
+
+/** What one upload changed: the file, and what the case still needs after it. */
+export interface UploadResult {
+  document: { id: number; kind: DocumentKind; status: string; summary: string | null }
+  checklist: ChecklistItem[]
+  missing: string[]
+}
+
+/** One file on its way to an application, with the kind staff chose for it. */
+export interface EvidenceDraft {
+  file: File
+  kind: DocumentKind
+}
+
 export type EkycStatus = "verified" | "notMatched" | "unavailable"
 
 /** The registry's record of a verified person. Never the full NID. */

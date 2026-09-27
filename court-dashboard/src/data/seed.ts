@@ -1,10 +1,11 @@
 import { atDate, atDay, inDays } from "@/data/clock"
-import { findPrison } from "@/data/courts"
+import { findCourt, findPrison } from "@/data/courts"
 import type {
   CaseStatus,
   CaseType,
   CourtLawyer,
   EkycPerson,
+  EvidenceDocument,
   LegalAidStatus,
   Party,
   PrisonRef,
@@ -59,12 +60,20 @@ export interface StoredCheck {
   used: boolean
 }
 
+/** A file kept in memory, so it can be opened again without a server. */
+export interface StoredDocument {
+  view: EvidenceDocument
+  blob: Blob
+}
+
 export interface StoredApplication {
   office: { kind: "court" | "prison"; id: string }
   clientRef: string | null
   /** Court cases this application is linked to. */
   caseIds: number[]
   view: LegalAidStatus
+  /** The papers attached to it. */
+  documents: StoredDocument[]
 }
 
 export interface SampleStore {
@@ -73,7 +82,13 @@ export interface SampleStore {
   prisoners: StoredPrisoner[]
   applications: StoredApplication[]
   checks: StoredCheck[]
-  nextId: { case: number; proceeding: number; lawyer: number; application: number }
+  nextId: {
+    case: number
+    proceeding: number
+    lawyer: number
+    application: number
+    document: number
+  }
 }
 
 const CJM_CLERK = "Md. Abdul Hakim"
@@ -367,9 +382,43 @@ export function createSampleStore(): SampleStore {
           courtCase: null,
           prisoner: { id: 2, prisonerNo: "RCJ-2026-0388", prison: rangpurJail },
         },
+        documents: [],
+      },
+      // The tribunal's own application for the victim's mother, with the papers it filed.
+      {
+        office: { kind: "court", id: "RNG-NST" },
+        clientRef: null,
+        caseIds: [3],
+        view: {
+          id: "DLAS-2026-104",
+          applicationId: "APP-2026-024",
+          trackingToken: "7302-6184",
+          submittedAt: atDay(-9, 11, 15),
+          submittedBy: { id: "CS-14", name: NST_CLERK, nameBn: "ফারজানা ইয়াসমিন" },
+          applicant: { name: "Rahima Begum", nameBn: "রহিমা বেগম" },
+          helpNeeded: "other",
+          inCustody: false,
+          identity: {
+            verified: true,
+            method: "ekyc",
+            verifiedAt: atDay(-9, 11, 10),
+            nidLast4: "4417",
+          },
+          signature: { uploadedAt: atDay(-9, 11, 18), by: "court:CS-14" },
+          stage: "lawyerAssigned",
+          lawyer: { id: "LAW-21", name: "Adv. Taslima Akter", nameBn: "অ্যাড. তাসলিমা আক্তার" },
+          nextHearing: inDays(1),
+          courtCase: {
+            id: 3,
+            caseNumber: "Nari-Shishu 112/2026",
+            court: findCourt("RNG-NST")!,
+          },
+          prisoner: null,
+        },
+        documents: [],
       },
     ],
     checks: [],
-    nextId: { case: 6, proceeding: 7, lawyer: 3, application: 31 },
+    nextId: { case: 6, proceeding: 7, lawyer: 3, application: 31, document: 1 },
   }
 }

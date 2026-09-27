@@ -5,6 +5,7 @@ import { NAME_MATCH, ageOn, findCitizen, nameSimilarity } from "@/data/registry"
 import type { SampleStore, StoredApplication, StoredCase } from "@/data/seed"
 import {
   CASE_TYPES,
+  DOCUMENT_KINDS,
   HELP_NEEDED,
   LAWYER_SIDES,
   PARTY_ROLES,
@@ -14,12 +15,14 @@ import {
   type CourtCaseSummary,
   type CourtStaff,
   type EkycPerson,
+  type EvidenceDocument,
   type LegalAidStatus,
   type SignatureDraft,
 } from "@/data/types"
 import { MAX_ENTRIES, MAX_PURPOSE_LENGTH, MAX_SERIAL } from "@/lib/cause-list"
 import { caseNumberKey, isCaseNumber, tidyCaseNumber } from "@/lib/case-number"
 import { isDay, today } from "@/lib/dates"
+import { EVIDENCE_TYPES, MAX_EVIDENCE_BYTES } from "@/lib/evidence"
 import { isNid, normalizeNid } from "@/lib/nid"
 import { MAX_SIGNATURE_BYTES } from "@/lib/signature"
 
@@ -46,6 +49,11 @@ function randomHex(bytes: number) {
 function inRange(text: string | undefined, min: number, max: number) {
   const n = (text ?? "").trim().length
   return n >= min && n <= max
+}
+
+/** A media type the server would store. */
+function storable(type: string): type is (typeof EVIDENCE_TYPES)[number] {
+  return (EVIDENCE_TYPES as readonly string[]).includes(type)
 }
 
 /**
@@ -410,6 +418,7 @@ export function createSampleBackend(staff: CourtStaff, store: SampleStore): Cour
         office: { kind: "court", id: courtId },
         clientRef: d.clientRef,
         caseIds: courtCase ? [courtCase.id] : [],
+        documents: [],
         view: {
           id,
           applicationId: id,
@@ -499,6 +508,53 @@ export function createSampleBackend(staff: CourtStaff, store: SampleStore): Cour
       checkSignature(s)
       sign(app)
       return copy(app.view) satisfies LegalAidStatus
+    },
+
+    async listEvidence(ref) {
+      const app = ownApplication(ref)
+      return {
+        documents: copy(app.documents.map((d) => d.view)),
+        limits: { maxBytes: MAX_EVIDENCE_BYTES, contentTypes: [...EVIDENCE_TYPES] },
+      }
+    },
+
+    async addEvidence(ref, draft) {
+      const app = ownApplication(ref)
+      const { file, kind } = draft
+      if (!DOCUMENT_KINDS.includes(kind)) throw invalid("Unknown kind of document")
+      // Standing in for the server, this has the last word on the type, so unlike
+      // fileProblem it refuses a file whose type the browser could not name.
+      if (!storable(file.type)) throw new ApiError(415, "Upload a PDF, JPEG, PNG or text file")
+      if (file.size > MAX_EVIDENCE_BYTES) throw new ApiError(413, "Files must be 10 MB or smaller")
+      if (file.size === 0) throw invalid("The file is empty")
+
+      const view: EvidenceDocument = {
+        id: store.nextId.document++,
+        kind,
+        status: "uploaded",
+        filename: file.name.slice(0, 255),
+        contentType: file.type,
+        sizeBytes: file.size,
+        // T6 reads the file on the server; there is nothing here to read it with.
+        summary: null,
+        withheld: false,
+        sha256: randomHex(32),
+        uploadedBy: `court:${staff.id}`,
+        createdAt: new Date().toISOString(),
+      }
+      app.documents.push({ view, blob: file })
+      return {
+        document: { id: view.id, kind, status: view.status, summary: null },
+        checklist: [],
+        missing: [],
+      }
+    },
+
+    async openEvidence(ref, documentId) {
+      const app = ownApplication(ref)
+      const found = app.documents.find((d) => d.view.id === documentId)
+      if (!found) throw new ApiError(404, "No such file on this case")
+      return found.blob
     },
   }
 }

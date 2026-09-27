@@ -1,6 +1,7 @@
 import { useId, useState } from "react"
-import { FileImage, FileText, Files, Plus, X } from "lucide-react"
+import { Files, Plus, X } from "lucide-react"
 
+import { FileIcon } from "@/components/applications/file-icon"
 import { KindSelect } from "@/components/applications/kind-select"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
@@ -8,12 +9,6 @@ import { Input } from "@/components/ui/input"
 import type { DocumentKind, EvidenceDraft } from "@/data/types"
 import { useI18n } from "@/i18n/use-i18n"
 import { EVIDENCE_ACCEPT, fileProblem, guessKind } from "@/lib/evidence"
-
-/** The icon for a file, from its type: a picture, or a page. */
-export function FileIcon({ contentType }: { contentType: string | null | undefined }) {
-  const Icon = contentType?.startsWith("image/") ? FileImage : FileText
-  return <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
-}
 
 /**
  * Step 3 of the wizard: the papers the person brought, chosen but not yet sent.

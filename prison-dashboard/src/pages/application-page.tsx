@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react"
 import { Link, useParams } from "react-router"
 
 import { ApiError } from "@/api/client"
+import { EvidencePanel } from "@/components/applications/evidence-panel"
 import { SignatureButton, VerifyButton } from "@/components/applications/identity-actions"
 import { TrackingNumber } from "@/components/applications/tracking-number"
 import { SignedBadge, StageBadge, VerifiedBadge } from "@/components/common/badges"
@@ -136,6 +137,10 @@ function ApplicationView({
             )}
           </Section>
         </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-4 sm:p-5">
+        <EvidencePanel reference={a.id} />
       </div>
     </div>
   )

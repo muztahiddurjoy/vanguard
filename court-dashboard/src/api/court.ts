@@ -1,4 +1,4 @@
-import { apiFetch, type Method } from "@/api/client"
+import { apiFetch, apiFetchBlob, type Method } from "@/api/client"
 import type { CourtBackend } from "@/data/backend"
 import type {
   ApplicationDraft,
@@ -9,8 +9,10 @@ import type {
   CourtCaseSummary,
   CourtStaff,
   EkycResult,
+  EvidenceList,
   LegalAidStatus,
   SignatureDraft,
+  UploadResult,
 } from "@/data/types"
 
 /** The member of court staff with this ID, or an ApiError (401) if they are not on the roster. */
@@ -151,5 +153,19 @@ export function createLiveBackend(staffId: string): CourtBackend {
       call<LegalAidStatus>(`/court/applications/${enc(ref)}/ekyc`, "POST", { check_id: checkId }),
     addSignature: (ref, s) =>
       call<LegalAidStatus>(`/court/applications/${enc(ref)}/signature`, "POST", signatureBody(s)),
+
+    listEvidence: (ref) => call<EvidenceList>(`/court/applications/${enc(ref)}/documents`),
+    addEvidence: (ref, draft) => {
+      const form = new FormData()
+      form.append("file", draft.file, draft.file.name)
+      form.append("kind", draft.kind)
+      return apiFetch<UploadResult>(`/court/applications/${enc(ref)}/documents`, {
+        staffId,
+        method: "POST",
+        body: form,
+      })
+    },
+    openEvidence: (ref, documentId) =>
+      apiFetchBlob(`/court/applications/${enc(ref)}/documents/${documentId}/file`, { staffId }),
   }
 }

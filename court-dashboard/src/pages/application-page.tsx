@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router"
 import { toast } from "sonner"
 
 import { EkycForm } from "@/components/applications/ekyc-form"
+import { EvidencePanel } from "@/components/applications/evidence-panel"
 import { SignatureCapture } from "@/components/applications/signature-capture"
 import { StageBadge } from "@/components/applications/stage-badge"
 import { TrackingNumber } from "@/components/applications/tracking-number"
@@ -326,6 +327,10 @@ function ApplicationView({
             )}
           </Panel>
         </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-4 sm:p-5">
+        <EvidencePanel reference={a.id} />
       </div>
 
       <VerifyDialog

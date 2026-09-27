@@ -2,8 +2,9 @@ import { useCallback, useId, useState } from "react"
 import { ExternalLink, Files, Lock, Plus } from "lucide-react"
 import { toast } from "sonner"
 
-import { KindSelect } from "@/components/applications/kind-select"
+import { refusal } from "@/api/client"
 import { FileIcon } from "@/components/applications/file-icon"
+import { KindSelect } from "@/components/applications/kind-select"
 import { SyncStatus } from "@/components/layout/sync-status"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -11,10 +12,9 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import type { ChecklistItem, DocumentKind, EvidenceDocument } from "@/data/types"
-import { useResource } from "@/hooks/use-resource"
+import { useLoad } from "@/hooks/use-load"
 import { useI18n } from "@/i18n/use-i18n"
 import { useActorName } from "@/lib/actor"
-import { problemText } from "@/lib/errors"
 import { EVIDENCE_ACCEPT, fileProblem, guessKind } from "@/lib/evidence"
 import { useBackend } from "@/state/use-backend"
 
@@ -145,12 +145,12 @@ function AddPaper({ onAdd }: { onAdd: (file: File, kind: DocumentKind) => Promis
 }
 
 /**
- * The papers on a filed application: what is there, and a way to add another. A person
- * often comes back a week later with the paper they could not find, so this is not only
- * part of filing.
+ * The papers on an application the jail submitted: what is there, and a way to add
+ * another. A prisoner's papers are in the jail's own file rather than in their hands, so
+ * the legal aid desk attaches them from here after the application goes.
  *
- * A file is fetched rather than linked to, because the request has to name the centre
- * asking; the bytes then open in a new tab as a blob.
+ * A file is fetched rather than linked to, because the request has to name the member of
+ * staff asking; the bytes then open in a new tab as a blob.
  */
 export function EvidencePanel({
   reference,
@@ -166,20 +166,20 @@ export function EvidencePanel({
   const [opening, setOpening] = useState<number | null>(null)
   const [missing, setMissing] = useState<ChecklistItem[]>([])
 
-  const load = useCallback(() => backend.listEvidence(reference), [backend, reference])
-  const resource = useResource(load)
+  const load = useCallback(() => backend.evidence(reference), [backend, reference])
+  const listed = useLoad(load)
 
   const add = async (file: File, kind: DocumentKind) => {
     try {
       const result = await backend.addEvidence(reference, { file, kind })
       toast.success(t.evidence.added(file.name))
       setMissing(result.checklist.filter((i) => i.required && i.status === "missing"))
-      const listed = await backend.listEvidence(reference)
-      if (resource.status === "ready") resource.replace(listed)
-      onCountChanged?.(listed.documents.length)
+      const after = await backend.evidence(reference)
+      listed.replace(after)
+      onCountChanged?.(after.documents.length)
       return true
     } catch (error) {
-      toast.error(problemText(error, t.evidence.errors.server))
+      toast.error(refusal(error) ?? t.evidence.errors.server)
       return false
     }
   }
@@ -193,13 +193,13 @@ export function EvidencePanel({
       // The tab has the bytes now; the handle would otherwise be held until a reload.
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {
-      toast.error(problemText(error, t.evidence.errors.open))
+      toast.error(refusal(error) ?? t.evidence.errors.open)
     } finally {
       setOpening(null)
     }
   }
 
-  const documents = resource.status === "ready" ? resource.data.documents : null
+  const documents = listed.status === "ready" ? listed.data.documents : null
 
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-4">
@@ -211,7 +211,7 @@ export function EvidencePanel({
       </div>
 
       {!documents ? (
-        <SyncStatus resource={resource} />
+        <SyncStatus state={listed} retry={listed.retry} />
       ) : documents.length === 0 ? (
         <p className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
           <Files aria-hidden className="size-4 shrink-0" />

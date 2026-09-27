@@ -145,12 +145,12 @@ function AddPaper({ onAdd }: { onAdd: (file: File, kind: DocumentKind) => Promis
 }
 
 /**
- * The papers on a filed application: what is there, and a way to add another. A person
- * often comes back a week later with the paper they could not find, so this is not only
- * part of filing.
+ * The papers on an application the court submitted: what is there, and a way to add
+ * another. A court has the papers on its own file rather than in the applicant's hands,
+ * so they are attached from here after the application goes, not during the wizard.
  *
- * A file is fetched rather than linked to, because the request has to name the centre
- * asking; the bytes then open in a new tab as a blob.
+ * A file is fetched rather than linked to, because the request has to name the member of
+ * staff asking; the bytes then open in a new tab as a blob.
  */
 export function EvidencePanel({
   reference,

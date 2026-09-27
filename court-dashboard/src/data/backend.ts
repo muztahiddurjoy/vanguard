@@ -9,10 +9,13 @@ import type {
   CourtCaseSummary,
   EkycDraft,
   EkycResult,
+  EvidenceDraft,
+  EvidenceList,
   LawyerDraft,
   LegalAidStatus,
   ProceedingDraft,
   SignatureDraft,
+  UploadResult,
 } from "@/data/types"
 
 /**
@@ -44,4 +47,13 @@ export interface CourtBackend {
   /** Applies a later verified check to an application's applicant. */
   applyEkyc(ref: string, checkId: string): Promise<LegalAidStatus>
   addSignature(ref: string, signature: SignatureDraft): Promise<LegalAidStatus>
+
+  /** The papers attached to an application, and what the server will accept. */
+  listEvidence(ref: string): Promise<EvidenceList>
+  addEvidence(ref: string, draft: EvidenceDraft): Promise<UploadResult>
+  /**
+   * The file itself, for the browser to show. It is fetched rather than linked to,
+   * because the request has to name the member of staff asking for it.
+   */
+  openEvidence(ref: string, documentId: number): Promise<Blob>
 }
