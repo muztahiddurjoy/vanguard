@@ -29,8 +29,8 @@ the case to court and reports back, and every step is audited.
 | [`server/`](server/README.md) | The backend: AI hotline intake by phone (live speech-to-text), triage, SMS notices, the AI query helpline, and the officer API | FastAPI, SQLAlchemy 2, LangGraph, SQLite (Postgres in production) | 8000 |
 | [`nid-server/`](nid-server/README.md) | A National ID registry with fictional citizens, parent links and registered SIMs | FastAPI, rapidfuzz, read-only in-memory data | 8100 |
 | [`dlao-dashboard/`](dlao-dashboard/README.md) | The District Legal Aid Officer's dashboard (English and বাংলা) | React 19, TypeScript, Vite, Tailwind v4, shadcn/ui | 5173 |
-| [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, updates from court, and each case's court record (English and বাংলা) | same as above | 5174 |
-| [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, and legal aid applications for people before the court, with e-KYC and e-signature (English and বাংলা) | same as above | 5175 |
+| [`lawyer-dashboard/`](lawyer-dashboard/README.md) | The panel lawyers' dashboard: their cases and hearings, updates from court, each case's court record, and the bill for a case that has closed (English and বাংলা) | same as above | 5174 |
+| [`court-dashboard/`](court-dashboard/README.md) | The courts' dashboard: the court's register and cause lists, legal aid applications for people before the court with e-KYC and e-signature, and panel lawyers' bills to check and release (English and বাংলা) | same as above | 5175 |
 | [`prison-dashboard/`](prison-dashboard/README.md) | The jails' dashboard: prisoners and the court cases they are held on, the production list, and legal aid applications for prisoners, with e-KYC and e-signature (English and বাংলা) | same as above | 5176 |
 | [`udc-dashboard/`](udc-dashboard/README.md) | The Union Digital Centres' dashboard: filing an application for a neighbour who cannot use the forms, the papers they brought, and mediation dates to pass on in person (English and বাংলা) | same as above | 5177 |
 | [`portal/`](portal/README.md) | The front page: the hotline number, and a button for each app with the address it opens (English and বাংলা) | one static HTML file | any static server |
@@ -53,8 +53,8 @@ Who uses which dashboard, and how each one signs in to the backend:
 | Person | Dashboard | API prefix | Identity header |
 | --- | --- | --- | --- |
 | District Legal Aid Officer | `dlao-dashboard` | `/dlao/*`, `/mediation/*`, `/duplicates`, `/referrals`, `/incidents` | `X-Officer-Id` |
-| Panel lawyer | `lawyer-dashboard` | `/lawyer/*` | `X-Lawyer-Id` |
-| Court staff (bench assistant, sheristadar) | `court-dashboard` | `/court/*` | `X-Court-Staff-Id` |
+| Panel lawyer | `lawyer-dashboard` | `/lawyer/*`, `/lawyer/bills/*` | `X-Lawyer-Id` |
+| Court staff (bench assistant, sheristadar) | `court-dashboard` | `/court/*`, `/court/bills/*` | `X-Court-Staff-Id` |
 | Jail staff (legal aid desk, deputy jailer) | `prison-dashboard` | `/prison/*` | `X-Prison-Staff-Id` |
 | Union Digital Centre entrepreneur | `udc-dashboard` | `/udc/*` | `X-Udc-Id` |
 | Caller | the phone (or `/intake/*` and `/helpline/*` on the web) | `/telephony/*` | none (Twilio signature) |
@@ -726,6 +726,16 @@ the power button is pressed once first.
    three days of each hearing. The officer sees each report at once; a lawyer who stops
    reporting is flagged, and one who stops across several cases raises a pattern alert, from
    which the officer can move their cases to another lawyer.
+10. **The lawyer is paid what the case cost.** Once the officer closes the case, its panel
+    lawyer itemises what it cost them — appearances, drafting, court fees, the vakalatnama,
+    certified copies, process fees, affidavits, clerical work, travel, mediation sittings —
+    each line against the district committee's ceiling for that head, with a receipt
+    reference where one is needed. The bill goes to the court that heard the case. The court
+    allows or cuts each line, giving a reason for anything it cuts, and then releases the bill
+    against a voucher number for the accounts branch. The lawyer reads the cut and its reason
+    on their own dashboard. On paper this is NLASO's এল.এ. ফরম-১১ (বিল ফরম) and
+    এল.এ. ফরম-১৮ (আইনজীবীর ফি প্রদান রেজিস্টার); every step is timestamped in the audit
+    ledger, so a bill cannot quietly sit on a desk.
 
 ## Case lifecycle diagrams
 
@@ -809,6 +819,38 @@ stateDiagram-v2
 
 The same flow for a court, a jail and a Union Digital Centre: they differ only in what they
 are filing about, and in whether the applicant can be sent an SMS.
+### A panel lawyer's bill, from a closed case to a voucher
+
+The lawyer itemises, the court taxes it line by line. A bill is not accepted or refused whole:
+the court sets what it allows on each line and must say why whenever that is less than was
+claimed.
+
+```mermaid
+stateDiagram-v2
+  [*] --> draft: the officer closed the case; its lawyer starts a bill
+  draft --> draft: lines added or taken off, priced against the schedule
+  draft --> submitted: sent to the court that heard the case
+  submitted --> verified: court allows or cuts each line (a cut needs a reason)
+  submitted --> returned: court sends it back for correction (20+ character reason)
+  submitted --> rejected: court refuses it (20+ character reason)
+  returned --> draft: the lawyer corrects it
+  verified --> released: released against a voucher number
+  released --> [*]
+  rejected --> [*]
+  note right of submitted
+    Only a closed case can be billed,
+    and only once. Another court's bill
+    and an unsent draft are both "not found".
+  end note
+```
+
+Each line is claimed under one head, and each head has its own ceiling, whether it needs a
+receipt reference, and whether it can appear more than once on a bill (an appearance per
+hearing; one vakalatnama). The ceilings are the district committee's, in
+`server/app/services/gazette.py`, and a bill records the schedule version it was checked
+against, so an old bill still reads against the ceilings that applied to it.
+
+### A court or jail application, end to end
 
 ```mermaid
 sequenceDiagram
@@ -982,6 +1024,7 @@ cd nid-server && uv venv --python 3.12 .venv && uv pip install -r requirements-d
 cd ../server && uv venv --python 3.12 .venv && uv pip install -r requirements-dev.txt --python .venv/bin/python
 cp .env.example .env    # NID_SERVER_URL=http://localhost:8100 is already set
 .venv/bin/python -m scripts.seed_records    # demo court cases, cause lists and prisoners
+.venv/bin/python -m scripts.seed_cases      # and the DLAO dashboard's demo cases
 .venv/bin/uvicorn app.main:app --port 8000 &
 
 # 3. Dashboard, showing the backend's cases
@@ -1118,7 +1161,7 @@ vanguard/
   server/                  FastAPI backend
     app/                   main.py, config.py, database.py
       models/  agents/  routers/  services/
-    scripts/               seed_records, simulate_call, dashboard_fixture
+    scripts/               seed_records, seed_cases, simulate_call, dashboard_fixture
     tests/
   nid-server/              National ID registry
     app/                   main.py, registry.py, schemas.py, data/citizens.json

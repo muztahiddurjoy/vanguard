@@ -337,6 +337,133 @@ export interface EkycResult {
   person: EkycPerson | null
 }
 
+/**
+ * A panel lawyer's bill for a closed legal aid case (এল.এ. ফরম-১১), as the court
+ * taxes it: allowed line by line, then released for payment against a voucher
+ * number in the fee register (এল.এ. ফরম-১৮).
+ */
+export const BILL_STATUSES = [
+  "draft",
+  "submitted",
+  "returned",
+  "verified",
+  "released",
+  "rejected",
+] as const
+export type BillStatus = (typeof BILL_STATUSES)[number]
+
+/** The heads of cost a bill is itemised under; each has a gazetted ceiling. */
+export const BILL_HEADS = [
+  "appearance",
+  "drafting",
+  "courtFee",
+  "vakalatnama",
+  "certifiedCopy",
+  "processFee",
+  "affidavit",
+  "clerical",
+  "conveyance",
+  "mediation",
+  "other",
+] as const
+export type BillHead = (typeof BILL_HEADS)[number]
+
+/** What the legal aid case was about (the same list as the legal aid office keeps). */
+export const LEGAL_AID_CATEGORIES = [
+  "domesticViolence",
+  "cyberHarassment",
+  "landDispute",
+  "familyMaintenance",
+  "dowryHarassment",
+  "labourDispute",
+  "childCustody",
+  "criminalDefence",
+  "other",
+] as const
+export type LegalAidCategory = (typeof LEGAL_AID_CATEGORIES)[number]
+
+/** How the case ended before it was closed and billed. */
+export const CASE_OUTCOMES = ["resolved", "settled", "withdrawn", "referred"] as const
+export type CaseOutcome = (typeof CASE_OUTCOMES)[number]
+
+/** One itemised cost. Money is whole taka: never a float, never paisa. */
+export interface BillLine {
+  id: number
+  head: BillHead
+  description: string
+  /** The day the cost was incurred. */
+  incurredOn: string
+  claimedTaka: number
+  /** What the court allowed; null until the court has taxed the bill. */
+  allowedTaka: number | null
+  /** Why the court allowed less than was claimed. */
+  disallowedReason: string | null
+  /** The lawyer's receipt or challan reference, where there is one. */
+  voucherRef: string | null
+  /** The gazetted ceiling for this head. */
+  ceilingTaka: number
+  /** Claimed above the ceiling: the court cannot allow it in full. */
+  overCeiling: boolean
+}
+
+export interface BillCase {
+  /** The legal aid case, e.g. "DLAS-2026-0181". */
+  ref: string
+  category: LegalAidCategory
+  outcome: CaseOutcome
+  closedAt: string
+  client: { name: string; nameBn: string | null }
+}
+
+export interface BillLawyer {
+  id: string
+  name: string
+  nameBn: string | null
+  /** Bangladesh Bar Council enrolment. */
+  enrolment: string
+}
+
+export interface Bill {
+  number: string
+  status: BillStatus
+  case: BillCase
+  lawyer: BillLawyer
+  court: { id: string; name: string; nameBn: string }
+  lines: BillLine[]
+  claimedTotal: number
+  /** Null until the court has taxed the bill. */
+  allowedTotal: number | null
+  /** What the lawyer wrote with the bill. */
+  note: string | null
+  /** Null while the lawyer is still drafting: the court never sees such a bill. */
+  submittedAt: string | null
+  decidedAt: string | null
+  /** The court's own words: its note, or why it returned or refused the bill. */
+  decisionNote: string | null
+  voucherNumber: string | null
+  releasedAt: string | null
+  /** The fee schedule the ceilings came from. */
+  scheduleVersion: string
+}
+
+/** The court's running figures over the bills it has been sent, in taka. */
+export interface BillTotals {
+  /** Claimed on every bill in the queue. */
+  claimed: number
+  /** Allowed on the bills the court has taxed. */
+  allowed: number
+  /** Allowed on the bills already released for payment. */
+  released: number
+  /** Claimed on the bills still waiting for this court's decision. */
+  awaitingCourt: number
+}
+
+export interface BillQueue {
+  /** Oldest submitted first. */
+  bills: Bill[]
+  totals: BillTotals
+}
+
 // What the forms send. The live client turns these into the server's snake_case bodies.
 
 export interface PartyDraft {
@@ -418,4 +545,18 @@ export interface ApplicationDraft {
   courtCaseId?: number
   inCustody?: boolean
   signature?: SignatureDraft
+}
+
+/** What the court allows on one line, and why it allowed less. */
+export interface BillLineDecision {
+  id: number
+  allowedTaka: number
+  /** Required whenever less than the claimed amount is allowed. */
+  disallowedReason?: string
+}
+
+export interface BillVerifyDraft {
+  /** Every line of the bill, exactly once. */
+  lines: BillLineDecision[]
+  note?: string
 }

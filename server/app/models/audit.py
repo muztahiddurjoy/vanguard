@@ -69,6 +69,13 @@ class AuditAction(StrEnum):
     UDC_NOTIFIED = "udc.notified"
     UDC_NOTICE_RELEASED = "udc.released"
     UDC_INFORMED = "udc.informed"
+    # A panel lawyer's bill for a closed case, and the court's decision on it.
+    BILL_DRAFTED = "bill.drafted"
+    BILL_SUBMITTED = "bill.submitted"
+    BILL_RETURNED = "bill.returned"
+    BILL_VERIFIED = "bill.verified"
+    BILL_REJECTED = "bill.rejected"
+    BILL_RELEASED = "bill.released"
 
 
 class ImmutableRecordError(RuntimeError):

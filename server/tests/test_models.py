@@ -1,9 +1,15 @@
+from datetime import date
+
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.models import (
     AuditAction,
     AuditEntry,
+    Bill,
+    BillHead,
+    BillLine,
+    BillStatus,
     Case,
     CaseParty,
     IntakeChannel,
@@ -22,6 +28,50 @@ def test_references_count_up_per_prefix_and_year(db):
     assert next_reference(db, "APP", 2026) == "APP-2026-002"
     assert next_reference(db, "DLAS", 2026) == "DLAS-2026-001"
     assert next_reference(db, "APP", 2027) == "APP-2027-001"
+
+
+def test_a_bill_carries_its_lines_and_is_one_per_case(db):
+    case = Case(
+        application_id="APP-2026-001", channel=IntakeChannel.WALK_IN, current_office="Rangpur"
+    )
+    bill = Bill(
+        bill_number="BILL-2026-001",
+        case=case,
+        lawyer_id="LAW-21",
+        court_id="RNG-CJM",
+        schedule_version="2026.1",
+        lines=[
+            BillLine(head=BillHead.APPEARANCE, description="Two hearings",
+                     incurred_on=date(2026, 6, 14), claimed_taka=600),
+            BillLine(head=BillHead.COURT_FEE, description="Court fee stamps",
+                     incurred_on=date(2026, 3, 2), claimed_taka=1200, voucher_ref="CF-114"),
+        ],
+    )  # fmt: skip
+    db.add(bill)
+    db.flush()
+    assert bill.status == BillStatus.DRAFT
+    assert [line.claimed_taka for line in bill.lines] == [600, 1200]
+    # Whole taka, never a float, and nothing is allowed until the court decides.
+    assert all(isinstance(line.claimed_taka, int) for line in bill.lines)
+    assert [line.allowed_taka for line in bill.lines] == [None, None]
+    # Saving a bill replaces its lines, so the ones it drops go with it.
+    bill.lines = []
+    db.flush()
+    assert db.scalars(select(BillLine)).all() == []
+
+
+def test_bill_statuses_and_heads_are_the_ones_the_dashboards_know(db):
+    assert [str(s) for s in BillStatus] == [
+        "draft", "submitted", "returned", "verified", "released", "rejected",
+    ]  # fmt: skip
+    assert [str(h) for h in BillHead] == [
+        "appearance", "drafting", "courtFee", "vakalatnama", "certifiedCopy", "processFee",
+        "affidavit", "clerical", "conveyance", "mediation", "other",
+    ]  # fmt: skip
+    assert [a for a in AuditAction if a.startswith("bill.")] == [
+        "bill.drafted", "bill.submitted", "bill.returned",
+        "bill.verified", "bill.rejected", "bill.released",
+    ]  # fmt: skip
 
 
 def test_nid_is_stored_only_as_keyed_hash_and_last_four(db):
